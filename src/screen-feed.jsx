@@ -1,0 +1,205 @@
+// screen-feed.jsx — home feed + discovery mechanics (list / swipe / chain)
+import React from 'react';
+import { LOTS, MATCHES, MY_LOT, lot, U, CAT } from './data.js';
+import { Icon } from './icons.jsx';
+import { AIBadge, Photo, Credit, LotCard, Sheet, Avatar } from './ui.jsx';
+
+// ---------- shared: category filter row ----------
+export function CatRow({ active, setActive }) {
+  const cats = [['all', 'Всё'], ['gadget', 'Техника'], ['digital', 'Услуги'], ['eco', 'Вещи и эко']];
+  return (
+    <div className="row gap8" style={{ overflowX: 'auto', padding: '2px 18px 4px', scrollbarWidth: 'none' }}>
+      {cats.map(([id, label]) => (
+        <div key={id} className={'chip chip-berry' + (active === id ? ' is-on' : '')} onClick={() => setActive(id)}>{label}</div>
+      ))}
+    </div>
+  );
+}
+
+// ---------- "ready matches" carousel ----------
+function MatchStrip({ onOpen, onChains }) {
+  return (
+    <div className="col gap10" style={{ padding: '4px 0 2px' }}>
+      <div className="px row" style={{ justifyContent: 'space-between' }}>
+        <span className="row gap6"><AIBadge>Умный мэтчинг</AIBadge></span>
+        <span className="cap" onClick={onChains} style={{ color: 'var(--berry)', cursor: 'pointer' }}>Цепочки →</span>
+      </div>
+      <div className="row gap12" style={{ overflowX: 'auto', padding: '0 18px 4px', scrollbarWidth: 'none' }}>
+        {MATCHES.map(m => {
+          const L = lot(m.lot);
+          return (
+            <div key={m.id} className="card" style={{ width: 230, flex: 'none', overflow: 'hidden', cursor: 'pointer' }} onClick={() => onOpen(L.id)}>
+              <div className="row" style={{ alignItems: 'stretch', height: 96 }}>
+                <Photo label={MY_LOT.photo} url={MY_LOT.photoUrl} cat={MY_LOT.cat} style={{ flex: 1 }} />
+                <div className="col" style={{ justifyContent: 'center', alignItems: 'center', width: 34, background: 'var(--berry-50)' }}>
+                  <Icon name="swap" size={18} color="var(--berry)" />
+                </div>
+                <Photo label={L.photo} url={L.photoUrl} cat={L.cat} style={{ flex: 1 }} />
+              </div>
+              <div className="col gap6" style={{ padding: '10px 12px 12px' }}>
+                <div className="row" style={{ justifyContent: 'space-between' }}>
+                  <span className="tag" style={{ background: 'var(--berry)', color: '#fff' }}>{m.score}% совпадение</span>
+                  <span className="title clamp2" style={{ fontSize: 13 }} />
+                </div>
+                <div className="sub clamp2" style={{ minHeight: 36 }}>{m.why}</div>
+                <div className="row gap6" style={{ justifyContent: 'space-between' }}>
+                  <span className="cap">{m.dir === 'you-pay' ? 'Ваша доплата' : 'Вам доплатят'}</span>
+                  <Credit n={m.topup} size={13} coin={13} color={m.dir === 'you-pay' ? 'var(--ink)' : 'var(--ok)'} />
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ===========================================================
+// VARIANT A — LIST / FEED
+// ===========================================================
+export function FeedList({ cat, onOpen, onChains, hints = true, limit }) {
+  let items = LOTS.filter(l => cat === 'all' || l.cat === cat);
+  if (limit) items = items.slice(0, limit);
+  return (
+    <div className="col gap16" style={{ paddingBottom: 20 }}>
+      {hints && <MatchStrip onOpen={onOpen} onChains={onChains} />}
+      <div className="px col gap10">
+        <div className="row" style={{ justifyContent: 'space-between' }}>
+          <span className="h3">Рядом с вами</span>
+          <span className="cap row gap4"><Icon name="map" size={14} color="var(--ink-3)" />Москва</span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          {items.map(l => <LotCard key={l.id} lot={l} compact onClick={() => onOpen(l.id)} />)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===========================================================
+// VARIANT B — SWIPE
+// ===========================================================
+export function FeedSwipe({ cat, onOpen }) {
+  const deck = React.useMemo(() => LOTS.filter(l => cat === 'all' || l.cat === cat), [cat]);
+  const [idx, setIdx] = React.useState(0);
+  const [drag, setDrag] = React.useState(0);
+  const [liked, setLiked] = React.useState(null);
+  const start = React.useRef(null);
+
+  React.useEffect(() => { setIdx(0); }, [cat]);
+
+  const top = deck[idx];
+  const next = deck[idx + 1];
+
+  const decide = (dir) => {
+    if (dir === 'right') { setLiked(top); return; }
+    setDrag(0); setIdx(i => i + 1);
+  };
+  const onDown = (e) => { start.current = (e.touches ? e.touches[0] : e).clientX; };
+  const onMove = (e) => { if (start.current == null) return; setDrag((e.touches ? e.touches[0] : e).clientX - start.current); };
+  const onUp = () => {
+    if (start.current == null) return;
+    if (drag > 90) decide('right');
+    else if (drag < -90) decide('left');
+    else setDrag(0);
+    start.current = null;
+  };
+
+  if (!top) {
+    return (
+      <div className="col gap14" style={{ alignItems: 'center', justifyContent: 'center', padding: '60px 30px', textAlign: 'center' }}>
+        <div className="avatar" style={{ width: 64, height: 64, background: 'var(--berry-50)' }}><Icon name="check" size={30} color="var(--berry)" /></div>
+        <span className="h3">Вы пролистали всё рядом</span>
+        <span className="sub">Загляните позже или расширьте радиус поиска — новые лоты появляются каждый час.</span>
+        <button className="btn btn-ghost" onClick={() => setIdx(0)}>Начать сначала</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="col" style={{ padding: '4px 18px 18px', height: '100%' }}>
+      <div className="sub px" style={{ padding: '0 0 10px', textAlign: 'center' }}>
+        Свайп вправо — <b style={{ color: 'var(--berry)' }}>хочу обменять</b>, влево — мимо
+      </div>
+      <div className="grow" style={{ position: 'relative', minHeight: 420 }}>
+        {next && <SwipeCard lot={next} style={{ transform: 'scale(0.94) translateY(14px)', filter: 'brightness(0.99)' }} />}
+        <SwipeCard
+          lot={top}
+          drag={drag}
+          onDown={onDown} onMove={onMove} onUp={onUp}
+          onTap={() => onOpen(top.id)}
+        />
+      </div>
+      <div className="row gap16" style={{ justifyContent: 'center', padding: '16px 0 2px' }}>
+        <button onClick={() => decide('left')} style={swipeBtn('#fff', 'var(--line)')}><Icon name="close" size={26} color="var(--ink-2)" /></button>
+        <button onClick={() => onOpen(top.id)} style={{ ...swipeBtn('#fff', 'var(--line)'), width: 52, height: 52 }}><Icon name="info" size={22} color="var(--info)" /></button>
+        <button onClick={() => decide('right')} style={swipeBtn('var(--berry)', 'var(--berry)')}><Icon name="swap" size={26} color="#fff" /></button>
+      </div>
+
+      <Sheet open={!!liked} onClose={() => { setLiked(null); setDrag(0); setIdx(i => i + 1); }} title="Это мэтч ✨">
+        {liked && <div className="px col gap14" style={{ paddingBottom: 8 }}>
+          <div className="row gap12" style={{ alignItems: 'center' }}>
+            <Photo label={MY_LOT.photo} url={MY_LOT.photoUrl} cat={MY_LOT.cat} style={{ width: 70, height: 70, borderRadius: 14 }} />
+            <Icon name="swap" size={22} color="var(--berry)" />
+            <Photo label={liked.photo} url={liked.photoUrl} cat={liked.cat} style={{ width: 70, height: 70, borderRadius: 14 }} />
+          </div>
+          <span className="body">Похоже, {U[liked.owner].name.split(' ')[0]} ищет именно то, что вы отдаёте. Откройте лот и предложите обмен — AI уже посчитал справедливую доплату.</span>
+          <button className="btn btn-primary btn-block btn-lg" onClick={() => { onOpen(liked.id); setLiked(null); }}>Предложить обмен</button>
+        </div>}
+      </Sheet>
+    </div>
+  );
+}
+const swipeBtn = (bg, bd) => ({ width: 62, height: 62, borderRadius: 999, background: bg, border: `1px solid ${bd}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: 'var(--sh-2)' });
+
+function SwipeCard({ lot, drag = 0, onDown, onMove, onUp, onTap, style }) {
+  const interactive = !!onDown;
+  const rot = drag / 22;
+  const owner = U[lot.owner];
+  return (
+    <div
+      className="card"
+      style={{
+        position: 'absolute', inset: 0, overflow: 'hidden', cursor: 'grab',
+        transform: interactive ? `translateX(${drag}px) rotate(${rot}deg)` : style?.transform,
+        transition: interactive && drag === 0 ? 'transform .3s cubic-bezier(.2,.8,.2,1)' : 'none',
+        boxShadow: 'var(--sh-3)', touchAction: 'pan-y', ...(!interactive ? style : null),
+      }}
+      onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}
+      onTouchStart={onDown} onTouchMove={onMove} onTouchEnd={onUp}
+      onClick={() => { if (Math.abs(drag) < 6 && onTap) onTap(); }}
+    >
+      <Photo label={lot.photo} url={lot.photoUrl} cat={lot.cat} style={{ position: 'absolute', inset: 0 }} />
+      {interactive && (
+        <>
+          <Stamp text="ОБМЕН" color="var(--berry)" show={drag > 40} side="left" rot={-14} />
+          <Stamp text="МИМО" color="var(--ink-2)" show={drag < -40} side="right" rot={14} />
+        </>
+      )}
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '40px 16px 16px', background: 'linear-gradient(to top, rgba(20,8,12,0.82), transparent)' }}>
+        <div className="row gap6" style={{ marginBottom: 8 }}>
+          <span className="tag" style={{ background: 'rgba(255,255,255,0.2)', color: '#fff', backdropFilter: 'blur(6px)' }}>{CAT[lot.cat].label}</span>
+          <span className="tag" style={{ background: 'rgba(255,255,255,0.2)', color: '#fff', backdropFilter: 'blur(6px)' }}>{lot.condition}</span>
+        </div>
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-end', gap: 10 }}>
+          <div className="col" style={{ gap: 5, minWidth: 0 }}>
+            <span className="h3" style={{ color: '#fff' }}>{lot.title}</span>
+            <span className="row gap6" style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13 }}><Icon name="map" size={13} color="rgba(255,255,255,0.8)" />{owner.city} · {lot.posted}</span>
+          </div>
+          <span className="row gap4" style={{ background: 'rgba(255,255,255,0.95)', borderRadius: 11, padding: '7px 10px' }}><Credit n={lot.value} size={15} coin={14} /></span>
+        </div>
+        <div className="row gap6" style={{ marginTop: 10, background: 'rgba(255,255,255,0.14)', backdropFilter: 'blur(8px)', borderRadius: 11, padding: '8px 11px' }}>
+          <Icon name="swap" size={15} color="#fff" />
+          <span style={{ color: '#fff', fontSize: 12.5, fontWeight: 600 }} className="ellipsis">Хочет: {lot.wants}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Stamp({ text, color, show, side, rot }) {
+  return (
+    <div style={{ position: 'absolute', top: 24, [side]: 20, padding: '6px 14px', border: `3px solid ${color}`, borderRadius: 10, color, fontWeight: 800, fontSize: 22, letterSpacing: '0.05em', transform: `rotate(${rot}deg)`, opacity: show ? 1 : 0, transition: 'opacity .12s', background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(2px)' }}>{text}</div>
+  );
+}

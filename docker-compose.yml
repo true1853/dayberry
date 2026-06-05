@@ -1,0 +1,14 @@
+services:
+  dayberry:
+    build: .
+    container_name: dayberry
+    restart: unless-stopped
+    ports:
+      - "3010:80"
+    networks:
+      - npm_network
+
+networks:
+  npm_network:
+    external: true
+    name: npm_default
