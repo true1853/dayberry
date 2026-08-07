@@ -1,7 +1,8 @@
+'use client';
 // App.jsx — root: navigation, phone frame scaling, tweaks
 import React from 'react';
-import { lot, MY_LOT, LOTS, ME } from './data.js';
-import { getCurrentUser, setSession, clearSession, getMyLots, addLot } from './store.js';
+import { lot, MY_LOT, ME } from './data.js';
+import { sessionAction, listLots, logoutAction, createLotAction, getMyLots } from './server/actions.js';
 import { FeedList, FeedSwipe, CatRow } from './screen-feed.jsx';
 import { FeedChain, ChainDetail } from './screen-chain.jsx';
 import { LotDetail, OfferSheet } from './screen-lot.jsx';
@@ -45,8 +46,9 @@ function applyAccent(hex) {
 
 export default function App() {
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
-  const [currentUser, setCurrentUser] = React.useState(getCurrentUser);
-  const [authed, setAuthed] = React.useState(!!currentUser);
+  const [currentUser, setCurrentUser] = React.useState(null);
+  const [authed, setAuthed] = React.useState(false);
+  const [booting, setBooting] = React.useState(true);
   const [onboarded, setOnboarded] = React.useState(!t.showOnboarding);
   const [tab, setTabRaw] = React.useState('home');
   const [stack, setStack] = React.useState([]);
@@ -54,8 +56,8 @@ export default function App() {
   const [deal, setDeal] = React.useState(null);
   const [creating, setCreating] = React.useState(false);
   const [infoOpen, setInfoOpen] = React.useState(false);
-  const [myLots, setMyLots] = React.useState(getMyLots);
-  const allLots = React.useMemo(() => [...myLots, ...LOTS], [myLots]);
+  const [lots, setLots] = React.useState([]);
+  const [myLots, setMyLots] = React.useState([]);
 
   const syncMe = (user) => {
     ME.name = user.name;
@@ -63,26 +65,42 @@ export default function App() {
     ME.city = user.city || 'Москва';
   };
 
-  React.useEffect(() => { if (currentUser) syncMe(currentUser); }, []); // restore "me" after reload
   React.useEffect(() => { applyAccent(t.accent); }, [t.accent]);
   React.useEffect(() => { if (t.showOnboarding) setOnboarded(false); }, [t.showOnboarding]);
 
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const [u, ls, ml] = await Promise.all([sessionAction(), listLots(), getMyLots()]);
+        if (u) { setCurrentUser(u); setAuthed(true); syncMe(u); }
+        setLots(ls);
+        setMyLots(ml);
+      } catch (e) {
+        console.error('bootstrap failed', e);
+      } finally {
+        setBooting(false);
+      }
+    })();
+  }, []);
+
   const handleAuth = (user) => {
-    setSession(user.email);
     setCurrentUser(user);
     syncMe(user);
     setAuthed(true);
   };
 
   const handleLogout = () => {
-    clearSession();
+    logoutAction();
     setCurrentUser(null);
     setAuthed(false);
   };
 
-  const publishLot = (lotData) => {
-    addLot(lotData);
-    setMyLots(getMyLots());
+  const publishLot = async (lotData) => {
+    const res = await createLotAction(lotData);
+    if (res.ok) {
+      setLots(ls => [res.lot, ...ls]);
+      setMyLots(ms => [res.lot, ...ms]);
+    }
     setCreating(false);
     resetTo('home');
   };
@@ -104,9 +122,9 @@ export default function App() {
 
   const tabRoot = () => {
     if (tab === 'home') {
-      return <HomeTab t={t} go={go} tab={tab} setTab={setTab} onCreate={() => setCreating(true)} lots={allLots} />;
+      return <HomeTab t={t} go={go} tab={tab} setTab={setTab} onCreate={() => setCreating(true)} lots={lots} />;
     }
-    if (tab === 'search') return <SearchScreen go={go} tab={tab} setTab={setTab} onCreate={() => setCreating(true)} lots={allLots} />;
+    if (tab === 'search') return <SearchScreen go={go} tab={tab} setTab={setTab} onCreate={() => setCreating(true)} lots={lots} />;
     if (tab === 'deals') return (
       <div className="app"><div className="safe-top" />
         <DealsList onOpen={(id) => go('chat', { id })} onOpenDeal={openDeal} />
@@ -128,7 +146,7 @@ export default function App() {
     if (!top) return null;
     if (top.name === 'lot') return (
       <div className="app"><div className="safe-top" />
-        <LotDetail lots={allLots} lotId={top.params.lotId} onBack={back} onOffer={(L) => setOfferLot(L)} onOwnerChat={() => go('chat', { id: 'c1' })} />
+        <LotDetail lots={lots} lotId={top.params.lotId} onBack={back} onOffer={(L) => setOfferLot(L)} onOwnerChat={() => go('chat', { id: 'c1' })} />
       </div>
     );
     if (top.name === 'chainfeed') return (
@@ -151,6 +169,14 @@ export default function App() {
       <ChatThread chatId={top.params.id} onBack={back} onOpenDeal={openDeal} />
     );
   };
+
+  if (booting) {
+    return (
+      <div className="app-root col" style={{ alignItems: 'center', justifyContent: 'center' }}>
+        <div className="coin pop" style={{ width: 56, height: 56, fontSize: 30 }}>Б</div>
+      </div>
+    );
+  }
 
   if (!authed) {
     return (

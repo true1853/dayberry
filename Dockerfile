@@ -1,12 +1,20 @@
-FROM node:20-alpine AS builder
+FROM node:22-alpine
+
 WORKDIR /app
+
+ENV NEXT_TELEMETRY_DISABLED=1
+
 COPY package*.json ./
-RUN npm ci
+RUN npm ci --ignore-scripts
+
 COPY . .
+
+RUN npx prisma generate
 RUN npm run build
 
-FROM nginx:alpine
-COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+ENV NODE_ENV=production
+
+EXPOSE 3000
+
+# db push (idempotent) + start server
+CMD ["sh", "-c", "npx prisma db push --skip-generate && node node_modules/next/dist/bin/next start -p 3000"]

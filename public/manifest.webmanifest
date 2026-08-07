@@ -1,0 +1,24 @@
+{
+  "name": "Дай бери",
+  "short_name": "Дай бери",
+  "description": "Обмен без денег — бартер-кредиты, эскроу и честные обмены",
+  "theme_color": "#c1124f",
+  "background_color": "#faf7f8",
+  "display": "standalone",
+  "orientation": "portrait",
+  "scope": "/",
+  "start_url": "/",
+  "icons": [
+    {
+      "src": "pwa-192x192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "favicon.svg",
+      "sizes": "32x32",
+      "type": "image/svg+xml"
+    }
+  ]
+}

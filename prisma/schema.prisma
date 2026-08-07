@@ -1,0 +1,46 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  phone        String?
+  city         String   @default("Москва")
+  passwordHash String
+  rating       Float    @default(4.9)
+  dealsCount   Int      @default(0)
+  balance      Int      @default(38000)
+  createdAt    DateTime @default(now())
+  lots         Lot[]
+}
+
+model Lot {
+  id        String   @id @default(cuid())
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerKey  String   @default("me")
+  kind      String   @default("item")
+  cat       String
+  title     String
+  desc      String   @default("")
+  wants     String   @default("")
+  value     Int
+  aiLow     Int
+  aiHigh    Int
+  condition String   @default("Новое или Б/У")
+  photo     String   @default("")
+  photoUrl  String?  @default("")
+  views     Int      @default(0)
+  hot       Boolean  @default(false)
+  posted    String   @default("только что")
+  status    String   @default("active")
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+}

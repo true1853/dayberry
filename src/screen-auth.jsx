@@ -1,7 +1,7 @@
 // screen-auth.jsx — login + registration
 import React from 'react';
 import { Icon } from './icons.jsx';
-import { loginUser, registerUser, guestUser } from './store.js';
+import { loginAction, registerAction, guestAction } from './server/actions.js';
 
 function Field({ label, type = 'text', value, onChange, placeholder, autoComplete }) {
   const [show, setShow] = React.useState(false);
@@ -88,22 +88,28 @@ export function AuthScreen({ onDone }) {
     return null;
   };
 
-  const submit = () => {
+  const submit = async () => {
     const err = validate();
     if (err) { setError(err); return; }
     setError('');
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    try {
       const res = isLogin
-        ? loginUser(email, password)
-        : registerUser({ name, email, phone, password, city });
+        ? await loginAction({ email, password })
+        : await registerAction({ name, email, phone, password, city });
+      setLoading(false);
       if (!res.ok) { setError(res.error); return; }
       onDone(res.user);
-    }, 500);
+    } catch (e) {
+      setLoading(false);
+      setError('Ошибка сети — попробуйте ещё раз');
+    }
   };
 
-  const socialAuth = () => onDone(guestUser());
+  const socialAuth = async () => {
+    const res = await guestAction();
+    if (res.ok) onDone(res.user);
+  };
 
   return (
     <div className="app" style={{ background: 'var(--bg)' }}>

@@ -4,9 +4,17 @@ services:
     container_name: dayberry
     restart: unless-stopped
     ports:
-      - "3010:80"
+      - "3010:3000"
+    environment:
+      DATABASE_URL: file:/app/data/dayberry.db
+      AUTH_SECRET: ${AUTH_SECRET:-dev-secret-change-me-in-prod}
+    volumes:
+      - dayberry-data:/app/data
     networks:
       - npm_network
+
+volumes:
+  dayberry-data:
 
 networks:
   npm_network:
