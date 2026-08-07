@@ -1,6 +1,6 @@
 // screen-deal.jsx — escrow deal status + confirm-receipt
 import React from 'react';
-import { U, MY_LOT } from './data.js';
+import { U, MY_LOT, ME } from './data.js';
 import { Icon } from './icons.jsx';
 import { fmt, Credit, Photo, Avatar, Stars, AppBar, IconBtn, Sheet } from './ui.jsx';
 
@@ -38,7 +38,7 @@ function Stepper({ active }) {
 
 export function DealStatus({ deal, onBack, onConfirm, onChat, onDone }) {
   const { L, credits, stage } = deal;
-  const owner = U[L.owner];
+  const owner = U[L.owner] || ME;
   const [confirming, setConfirming] = React.useState(false);
 
   if (stage === 'done') return <DealDone deal={deal} onDone={onDone} />;

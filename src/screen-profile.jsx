@@ -1,10 +1,8 @@
 // screen-profile.jsx — user profile screen
 import React from 'react';
-import { ME, LOTS, WALLET } from './data.js';
+import { ME, WALLET } from './data.js';
 import { Icon } from './icons.jsx';
 import { Avatar, Credit, Stars, AppBar, IconBtn, TabBar, Photo } from './ui.jsx';
-
-const MY_LOTS = LOTS.filter(l => l.owner === 'kirill' || l.owner === 'dasha').slice(0, 3).map(l => ({ ...l, owner: 'me' }));
 
 function StatBox({ value, label }) {
   return (
@@ -57,8 +55,12 @@ function GroupCard({ children }) {
   );
 }
 
-export function ProfileScreen({ tab, setTab, onCreate, onLogout }) {
+export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, myLots = [] }) {
   const [activeTab, setActiveTab] = React.useState('lots'); // 'lots' | 'reviews'
+
+  const name = (user && user.name) || ME.name;
+  const city = (user && user.city) || ME.city;
+  const initial = (name || '?').trim().charAt(0).toUpperCase();
 
   const reviews = [
     { from: 'Кирилл М.', rating: 5, text: 'Отличный обмен, всё честно и быстро. Рекомендую!', date: '12 мая' },
@@ -85,7 +87,7 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout }) {
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: 36, fontWeight: 800, color: '#fff',
               boxShadow: '0 6px 20px rgba(193,18,79,0.35)',
-            }}>А</div>
+            }}>{initial}</div>
             <button style={{
               position: 'absolute', bottom: 0, right: 0, width: 28, height: 28, borderRadius: 999,
               background: 'var(--berry)', border: '2.5px solid var(--bg)', display: 'flex',
@@ -96,10 +98,10 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout }) {
           </div>
 
           <div className="col" style={{ alignItems: 'center', gap: 4 }}>
-            <span className="h2">{ME.name}</span>
+            <span className="h2">{name}</span>
             <div className="row gap6" style={{ alignItems: 'center' }}>
               <Icon name="map" size={13} color="var(--ink-3)" />
-              <span className="sub">{ME.city}</span>
+              <span className="sub">{city}</span>
             </div>
             <div className="row gap4" style={{ marginTop: 2 }}>
               {[1,2,3,4,5].map(i => (
@@ -113,7 +115,7 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout }) {
           <div className="card row" style={{ width: '100%', padding: '16px 8px', marginTop: 4 }}>
             <StatBox value={ME.deals} label="сделок" />
             <div style={{ width: 1, background: 'var(--line)', alignSelf: 'stretch' }} />
-            <StatBox value="23" label="объявлений" />
+            <StatBox value={myLots.length} label="объявлений" />
             <div style={{ width: 1, background: 'var(--line)', alignSelf: 'stretch' }} />
             <StatBox value={<span style={{ display:'flex', alignItems:'center', gap:3 }}><Credit n={WALLET.balance} size={18} coin={16} /></span>} label="баллов" />
           </div>
@@ -141,7 +143,7 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout }) {
 
         {activeTab === 'lots' && (
           <div style={{ padding: '0 16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, paddingBottom: 16 }}>
-            {MY_LOTS.map(l => (
+            {myLots.map(l => (
               <div key={l.id} className="card" style={{ overflow: 'hidden', cursor: 'pointer' }}>
                 <Photo label={l.photo} url={l.photoUrl} cat={l.cat} style={{ aspectRatio: '1/1' }} />
                 <div className="col" style={{ padding: '10px 12px 12px', gap: 4 }}>
@@ -159,6 +161,12 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout }) {
               <Icon name="plusCircle" size={28} color="var(--berry-200)" />
               <span style={{ fontSize: 13, color: 'var(--ink-3)', fontWeight: 600 }}>Добавить</span>
             </div>
+            {!myLots.length && (
+              <div className="col gap8" style={{ gridColumn: '1 / -1', alignItems: 'center', padding: '30px 20px', textAlign: 'center' }}>
+                <Icon name="tag" size={30} color="var(--ink-3)" />
+                <span className="sub">Здесь появятся ваши товары и услуги. Нажмите «Добавить» и опубликуйте первое объявление.</span>
+              </div>
+            )}
           </div>
         )}
 
@@ -193,7 +201,7 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout }) {
           <Divider />
           <SettingsRow icon="shield" label="Безопасность" sub="Пароль, двухфакторная" />
           <Divider />
-          <SettingsRow icon="map" label="Город и доставка" sub={ME.city} />
+          <SettingsRow icon="map" label="Город и доставка" sub={city} />
         </GroupCard>
 
         <SectionHeader title="Приложение" />

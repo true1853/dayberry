@@ -1,8 +1,7 @@
-// screen-onboarding.jsx — onboarding + create listing (with AI assist)
+// screen-onboarding.jsx — onboarding + create listing
 import React from 'react';
-import { MY_LOT } from './data.js';
 import { Icon } from './icons.jsx';
-import { fmt, Photo, CatTag, Credit, AIBadge, IconBtn } from './ui.jsx';
+import { fmt, Photo, IconBtn, Coin } from './ui.jsx';
 
 const SLIDES = [
   {
@@ -91,11 +90,78 @@ export function Onboarding({ onDone }) {
   );
 }
 
-export function CreateListing({ onClose, onPublish }) {
-  const [step, setStep] = React.useState('photo');
-  const [analyzing, setAnalyzing] = React.useState(false);
+const KIND_OPTIONS = [
+  { id: 'item',    label: 'Товар',  icon: 'tag' },
+  { id: 'service', label: 'Услуга', icon: 'spark' },
+];
 
-  const runAI = () => { setAnalyzing(true); setStep('ai'); setTimeout(() => { setAnalyzing(false); setStep('review'); }, 1800); };
+const CATS = {
+  item: [
+    ['gadget', 'Техника'],
+    ['eco', 'Вещи и эко'],
+  ],
+  service: [
+    ['digital', 'Услуги и цифра'],
+  ],
+};
+
+const inputStyle = {
+  width: '100%', padding: '13px 16px', border: '1.5px solid var(--line)', borderRadius: 14, fontSize: 15,
+  fontFamily: 'var(--font)', background: '#fff', color: 'var(--ink)', outline: 'none', boxSizing: 'border-box',
+  transition: 'border-color .15s',
+};
+
+export function CreateListing({ onClose, onPublish }) {
+  const [kind, setKind] = React.useState('item'); // 'item' | 'service'
+  const [cat, setCat] = React.useState('gadget');
+  const [title, setTitle] = React.useState('');
+  const [value, setValue] = React.useState('');
+  const [wants, setWants] = React.useState('');
+  const [desc, setDesc] = React.useState('');
+  const [photo, setPhoto] = React.useState('');
+  const [photoName, setPhotoName] = React.useState('');
+  const [error, setError] = React.useState('');
+
+  const chooseKind = (k) => { setKind(k); setCat(k === 'service' ? 'digital' : 'gadget'); };
+
+  const valueNum = Number(value);
+  const aiLow = valueNum > 0 ? Math.round(valueNum * 0.92) : 0;
+  const aiHigh = valueNum > 0 ? Math.round(valueNum * 1.08) : 0;
+
+  const onFile = (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => { setPhoto(reader.result); setPhotoName(f.name); };
+    reader.readAsDataURL(f);
+  };
+
+  const submit = () => {
+    if (!title.trim()) return setError('Введите название');
+    if (!valueNum || valueNum <= 0) return setError('Укажите оценку в баллах');
+    if (!wants.trim()) return setError('Укажите, на что хотите обменять');
+    setError('');
+    const placeholder = kind === 'service' ? 'УСЛУГА' : (cat === 'gadget' ? 'ТЕХНИКА' : 'ВЕЩЬ');
+    const lot = {
+      title: title.trim(),
+      cat,
+      value: valueNum,
+      aiLow, aiHigh,
+      photo: photoName || placeholder,
+      photoUrl: photo || undefined,
+      photos: 1,
+      condition: kind === 'service' ? 'Услуга' : 'Новое или Б/У',
+      posted: 'только что',
+      owner: 'me',
+      wants: wants.trim(),
+      desc: desc.trim() || (kind === 'service'
+        ? 'Готов(а) оказать услугу на условиях бартера. Обсудим детали в чате.'
+        : 'Готов(а) обменять вещь на условиях бартера. Обсудим детали в чате.'),
+      views: 0,
+      hot: false,
+    };
+    onPublish(lot);
+  };
 
   return (
     <div className="app" style={{ position: 'absolute' }}>
@@ -107,63 +173,118 @@ export function CreateListing({ onClose, onPublish }) {
 
       <div className="app-scroll px col gap16" style={{ paddingBottom: 20 }}>
         <div className="col gap8">
-          <span className="over">Фото</span>
-          <div className="row gap10" style={{ overflowX: 'auto' }}>
-            <div className="col gap6" style={{ width: 92, height: 92, flex: 'none', borderRadius: 16, border: '2px dashed var(--berry-200)', background: 'var(--berry-50)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-              <Icon name="camera" size={24} color="var(--berry)" /><span className="cap" style={{ color: 'var(--berry)' }}>Добавить</span>
-            </div>
-            {step !== 'photo' && [1, 2, 3].map(n => <Photo key={n} label={MY_LOT.photo} cat={MY_LOT.cat} style={{ width: 92, height: 92, flex: 'none', borderRadius: 16 }} />)}
+          <span className="over">Что вы добавляете?</span>
+          <div className="row gap8">
+            {KIND_OPTIONS.map(k => (
+              <button key={k.id} onClick={() => chooseKind(k.id)} style={{
+                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                padding: '13px 10px', borderRadius: 14, cursor: 'pointer', fontFamily: 'var(--font)',
+                fontSize: 14.5, fontWeight: 700, border: '1.5px solid', transition: 'all .15s',
+                background: kind === k.id ? 'var(--berry)' : '#fff',
+                borderColor: kind === k.id ? 'var(--berry)' : 'var(--line)',
+                color: kind === k.id ? '#fff' : 'var(--ink-2)',
+              }}>
+                <Icon name={k.icon} size={18} color={kind === k.id ? '#fff' : 'var(--ink-3)'} />
+                {k.label}
+              </button>
+            ))}
           </div>
         </div>
 
-        {step === 'photo' && (
-          <div className="card" style={{ padding: 16, textAlign: 'center' }}>
-            <div className="avatar" style={{ width: 54, height: 54, background: 'var(--berry-50)', margin: '0 auto 12px' }}><Icon name="sparkLine" size={26} color="var(--berry)" /></div>
-            <span className="h3" style={{ display: 'block', marginBottom: 6 }}>AI заполнит за вас</span>
-            <span className="sub" style={{ display: 'block', marginBottom: 14 }}>Загрузите фото — алгоритм определит категорию, напишет описание и подскажет честную цену в баллах.</span>
-            <button className="btn btn-primary btn-block" onClick={runAI}><Icon name="spark" size={18} color="#fff" />Распознать по фото</button>
-          </div>
-        )}
-
-        {step === 'ai' && analyzing && (
-          <div className="card" style={{ padding: 26, textAlign: 'center' }}>
-            <div className="avatar pop" style={{ width: 60, height: 60, background: 'var(--berry-50)', margin: '0 auto 14px' }}><Icon name="spark" size={28} color="var(--berry)" /></div>
-            <span className="h3" style={{ display: 'block' }}>Анализирую…</span>
-            <span className="sub" style={{ display: 'block', marginTop: 6 }}>Сверяю с 1 240 объявлениями на внешних площадках</span>
-            <div className="escrow-track" style={{ marginTop: 16 }}><div className="escrow-fill" style={{ width: '100%', transition: 'width 1.6s ease' }} /></div>
-          </div>
-        )}
-
-        {step === 'review' && (
-          <div className="col gap14 fade-in">
-            <Field label="Название" ai><div className="title">{MY_LOT.title}</div></Field>
-            <Field label="Категория" ai><CatTag cat={MY_LOT.cat} /></Field>
-            <Field label="Описание" ai><span className="body" style={{ color: 'var(--ink-2)' }}>{MY_LOT.desc}</span></Field>
-            <Field label="Оценка стоимости" ai>
-              <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-                <Credit n={MY_LOT.value} size={22} coin={18} />
-                <span className="cap">диапазон ₽{fmt(MY_LOT.aiLow)}–{fmt(MY_LOT.aiHigh)}</span>
+        <div className="col gap8">
+          <span className="over">Фото</span>
+          <div className="row gap10" style={{ overflowX: 'auto' }}>
+            {photo ? (
+              <div className="photo" style={{ width: 96, height: 96, flex: 'none', borderRadius: 16, position: 'relative' }}>
+                <img src={photo} alt="фото" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                <button onClick={() => setPhoto('')} style={{ position: 'absolute', top: 6, right: 6, width: 24, height: 24, borderRadius: 999, border: 'none', background: 'rgba(28,12,18,0.6)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                  <Icon name="close" size={13} color="#fff" />
+                </button>
               </div>
-            </Field>
-            <Field label="Готов(а) обменять на"><span className="body">{MY_LOT.wants}</span></Field>
+            ) : (
+              <label className="col gap6" style={{ width: 96, height: 96, flex: 'none', borderRadius: 16, border: '2px dashed var(--berry-200)', background: 'var(--berry-50)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                <Icon name="camera" size={24} color="var(--berry)" />
+                <span className="cap" style={{ color: 'var(--berry)' }}>Добавить</span>
+                <input type="file" accept="image/*" onChange={onFile} style={{ display: 'none' }} />
+              </label>
+            )}
+            <Photo label={photoName || (kind === 'service' ? 'УСЛУГА' : (cat === 'gadget' ? 'ТЕХНИКА' : 'ВЕЩЬ'))} cat={cat} style={{ width: 96, height: 96, flex: 'none', borderRadius: 16 }} />
+          </div>
+          <span className="cap">Можно без фото — подставится заглушка категории.</span>
+        </div>
+
+        <div className="col gap8">
+          <span className="over">Категория</span>
+          <div className="row gap8" style={{ flexWrap: 'wrap' }}>
+            {CATS[kind].map(([id, label]) => (
+              <div key={id} className={'chip chip-berry' + (cat === id ? ' is-on' : '')} onClick={() => setCat(id)}>{label}</div>
+            ))}
+          </div>
+        </div>
+
+        <div className="col gap6">
+          <span className="over">{kind === 'service' ? 'Название услуги' : 'Название товара'}</span>
+          <input
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+            placeholder={kind === 'service' ? 'Например: Лендинг под ключ' : 'Например: PlayStation 5 Slim'}
+            style={inputStyle}
+          />
+        </div>
+
+        <div className="col gap6">
+          <span className="over">Оценка в баллах (Б)</span>
+          <div style={{ display: 'flex', alignItems: 'center', border: '1.5px solid var(--line)', borderRadius: 14, overflow: 'hidden', background: '#fff' }}>
+            <input
+              type="number" inputMode="numeric" min="0" step="500"
+              value={value}
+              onChange={e => setValue(e.target.value)}
+              placeholder="Например: 45000"
+              style={{ flex: 1, padding: '13px 16px', border: 'none', outline: 'none', fontSize: 15, fontFamily: 'var(--font)', background: 'transparent' }}
+            />
+            <Coin size={26} />
+            <span style={{ paddingRight: 12 }} />
+          </div>
+          {valueNum > 0 && (
+            <span className="cap row gap6" style={{ color: 'var(--berry)' }}>
+              <Icon name="spark" size={13} color="var(--berry)" />AI-диапазон: {fmt(aiLow)}–{fmt(aiHigh)} Б
+            </span>
+          )}
+        </div>
+
+        <div className="col gap6">
+          <span className="over">Готов(а) обменять на</span>
+          <input
+            value={wants}
+            onChange={e => setWants(e.target.value)}
+            placeholder="Например: техника Apple, фотоаппарат, реклама"
+            style={inputStyle}
+          />
+        </div>
+
+        <div className="col gap6">
+          <span className="over">Описание</span>
+          <textarea
+            value={desc}
+            onChange={e => setDesc(e.target.value)}
+            placeholder="Состояние, комплект, сроки и детали…"
+            rows={4}
+            style={{ ...inputStyle, resize: 'none', lineHeight: 1.5 }}
+          />
+        </div>
+
+        {error && (
+          <div style={{ padding: '10px 14px', borderRadius: 12, background: '#fff0f3', border: '1px solid var(--berry-200)', color: 'var(--berry-700)', fontSize: 13.5, fontWeight: 500 }}>
+            {error}
           </div>
         )}
       </div>
 
       <div className="px" style={{ padding: '12px 18px calc(12px + env(safe-area-inset-bottom))', borderTop: '1px solid var(--line)', background: '#fff' }}>
-        <button className="btn btn-primary btn-block btn-lg" disabled={step !== 'review'} onClick={onPublish}>
-          {step === 'review' ? 'Опубликовать' : 'Сначала добавьте фото'}
+        <button className="btn btn-primary btn-block btn-lg" onClick={submit}>
+          <Icon name="check" size={18} color="#fff" />Опубликовать
         </button>
       </div>
-    </div>
-  );
-}
-
-function Field({ label, ai, children }) {
-  return (
-    <div className="col gap6">
-      <div className="row gap8"><span className="over">{label}</span>{ai && <AIBadge>заполнено AI</AIBadge>}</div>
-      <div className="card" style={{ padding: 13 }}>{children}</div>
     </div>
   );
 }

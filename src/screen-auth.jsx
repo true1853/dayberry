@@ -1,6 +1,7 @@
 // screen-auth.jsx — login + registration
 import React from 'react';
 import { Icon } from './icons.jsx';
+import { loginUser, registerUser, guestUser } from './store.js';
 
 function Field({ label, type = 'text', value, onChange, placeholder, autoComplete }) {
   const [show, setShow] = React.useState(false);
@@ -92,8 +93,17 @@ export function AuthScreen({ onDone }) {
     if (err) { setError(err); return; }
     setError('');
     setLoading(true);
-    setTimeout(() => { setLoading(false); onDone(); }, 900);
+    setTimeout(() => {
+      setLoading(false);
+      const res = isLogin
+        ? loginUser(email, password)
+        : registerUser({ name, email, phone, password, city });
+      if (!res.ok) { setError(res.error); return; }
+      onDone(res.user);
+    }, 500);
   };
+
+  const socialAuth = () => onDone(guestUser());
 
   return (
     <div className="app" style={{ background: 'var(--bg)' }}>
@@ -167,8 +177,8 @@ export function AuthScreen({ onDone }) {
           </div>
 
           <div className="row gap10">
-            <SocialBtn icon={<GoogleIcon />} label="Google" onClick={onDone} />
-            <SocialBtn icon={<AppleIcon />} label="Apple" onClick={onDone} />
+            <SocialBtn icon={<GoogleIcon />} label="Google" onClick={socialAuth} />
+            <SocialBtn icon={<AppleIcon />} label="Apple" onClick={socialAuth} />
           </div>
 
           {!isLogin && (

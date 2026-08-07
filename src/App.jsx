@@ -1,6 +1,7 @@
 // App.jsx — root: navigation, phone frame scaling, tweaks
 import React from 'react';
-import { lot, MY_LOT, U, LOTS } from './data.js';
+import { lot, MY_LOT, LOTS, ME } from './data.js';
+import { getCurrentUser, setSession, clearSession, getMyLots, addLot } from './store.js';
 import { FeedList, FeedSwipe, CatRow } from './screen-feed.jsx';
 import { FeedChain, ChainDetail } from './screen-chain.jsx';
 import { LotDetail, OfferSheet } from './screen-lot.jsx';
@@ -44,7 +45,8 @@ function applyAccent(hex) {
 
 export default function App() {
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
-  const [authed, setAuthed] = React.useState(false);
+  const [currentUser, setCurrentUser] = React.useState(getCurrentUser);
+  const [authed, setAuthed] = React.useState(!!currentUser);
   const [onboarded, setOnboarded] = React.useState(!t.showOnboarding);
   const [tab, setTabRaw] = React.useState('home');
   const [stack, setStack] = React.useState([]);
@@ -52,9 +54,38 @@ export default function App() {
   const [deal, setDeal] = React.useState(null);
   const [creating, setCreating] = React.useState(false);
   const [infoOpen, setInfoOpen] = React.useState(false);
+  const [myLots, setMyLots] = React.useState(getMyLots);
+  const allLots = React.useMemo(() => [...myLots, ...LOTS], [myLots]);
 
+  const syncMe = (user) => {
+    ME.name = user.name;
+    ME.initials = (user.name || '?').trim().charAt(0).toUpperCase() || '?';
+    ME.city = user.city || 'Москва';
+  };
+
+  React.useEffect(() => { if (currentUser) syncMe(currentUser); }, []); // restore "me" after reload
   React.useEffect(() => { applyAccent(t.accent); }, [t.accent]);
   React.useEffect(() => { if (t.showOnboarding) setOnboarded(false); }, [t.showOnboarding]);
+
+  const handleAuth = (user) => {
+    setSession(user.email);
+    setCurrentUser(user);
+    syncMe(user);
+    setAuthed(true);
+  };
+
+  const handleLogout = () => {
+    clearSession();
+    setCurrentUser(null);
+    setAuthed(false);
+  };
+
+  const publishLot = (lotData) => {
+    addLot(lotData);
+    setMyLots(getMyLots());
+    setCreating(false);
+    resetTo('home');
+  };
 
   const top = stack[stack.length - 1];
   const go = (name, params = {}) => setStack(s => [...s, { name, params }]);
@@ -73,9 +104,9 @@ export default function App() {
 
   const tabRoot = () => {
     if (tab === 'home') {
-      return <HomeTab t={t} go={go} tab={tab} setTab={setTab} onCreate={() => setCreating(true)} />;
+      return <HomeTab t={t} go={go} tab={tab} setTab={setTab} onCreate={() => setCreating(true)} lots={allLots} />;
     }
-    if (tab === 'search') return <SearchScreen go={go} tab={tab} setTab={setTab} onCreate={() => setCreating(true)} />;
+    if (tab === 'search') return <SearchScreen go={go} tab={tab} setTab={setTab} onCreate={() => setCreating(true)} lots={allLots} />;
     if (tab === 'deals') return (
       <div className="app"><div className="safe-top" />
         <DealsList onOpen={(id) => go('chat', { id })} onOpenDeal={openDeal} />
@@ -89,7 +120,7 @@ export default function App() {
       </div>
     );
     if (tab === 'profile') return (
-      <ProfileScreen tab={tab} setTab={setTab} onCreate={() => setCreating(true)} onLogout={() => setAuthed(false)} />
+      <ProfileScreen tab={tab} setTab={setTab} onCreate={() => setCreating(true)} onLogout={handleLogout} user={currentUser} myLots={myLots} />
     );
   };
 
@@ -97,7 +128,7 @@ export default function App() {
     if (!top) return null;
     if (top.name === 'lot') return (
       <div className="app"><div className="safe-top" />
-        <LotDetail lotId={top.params.lotId} onBack={back} onOffer={(L) => setOfferLot(L)} onOwnerChat={() => go('chat', { id: 'c1' })} />
+        <LotDetail lots={allLots} lotId={top.params.lotId} onBack={back} onOffer={(L) => setOfferLot(L)} onOwnerChat={() => go('chat', { id: 'c1' })} />
       </div>
     );
     if (top.name === 'chainfeed') return (
@@ -124,7 +155,7 @@ export default function App() {
   if (!authed) {
     return (
       <div className="app-root">
-        <AuthScreen onDone={() => setAuthed(true)} />
+        <AuthScreen onDone={handleAuth} />
       </div>
     );
   }
@@ -141,7 +172,7 @@ export default function App() {
     <div className="app-root">
       {tabRoot()}
       {top && <div className="overlay-layer">{overlay()}</div>}
-      {creating && <div className="overlay-layer"><CreateListing onClose={() => setCreating(false)} onPublish={() => { setCreating(false); resetTo('home'); }} /></div>}
+      {creating && <div className="overlay-layer"><CreateListing onClose={() => setCreating(false)} onPublish={publishLot} /></div>}
       <OfferSheet L={offerLot} open={!!offerLot} onClose={() => setOfferLot(null)} onConfirm={(L, credits) => { setOfferLot(null); setDeal({ L, credits, stage: 'created' }); go('deal'); }} />
       <CreditsInfo open={infoOpen} onClose={() => setInfoOpen(false)} />
     </div>
@@ -154,7 +185,7 @@ const VIEW_MODES = [
   { id: 'chain', label: 'Цепочки' },
 ];
 
-function HomeTab({ t, go, tab, setTab, onCreate }) {
+function HomeTab({ t, go, tab, setTab, onCreate, lots }) {
   const [cat, setCat] = React.useState('all');
   const [view, setView] = React.useState(t.mechanic || 'list');
 
@@ -179,8 +210,8 @@ function HomeTab({ t, go, tab, setTab, onCreate }) {
       </div>
       {view !== 'chain' && <CatRow active={cat} setActive={setCat} />}
       <div className="app-scroll">
-        {view === 'list' && <FeedList cat={cat} hints={t.matchHints} onOpen={(id) => go('lot', { lotId: id })} onChains={() => setView('chain')} />}
-        {view === 'swipe' && <FeedSwipe cat={cat} onOpen={(id) => go('lot', { lotId: id })} />}
+        {view === 'list' && <FeedList cat={cat} lots={lots} hints={t.matchHints} onOpen={(id) => go('lot', { lotId: id })} onChains={() => setView('chain')} />}
+        {view === 'swipe' && <FeedSwipe cat={cat} lots={lots} onOpen={(id) => go('lot', { lotId: id })} />}
         {view === 'chain' && <FeedChain onOpenChain={(id) => go('chain', { id })} />}
       </div>
       <TabBar tab={tab} setTab={setTab} onCreate={onCreate} unread={2} />
@@ -188,10 +219,10 @@ function HomeTab({ t, go, tab, setTab, onCreate }) {
   );
 }
 
-function SearchScreen({ go, tab, setTab, onCreate }) {
+function SearchScreen({ go, tab, setTab, onCreate, lots }) {
   const [q, setQ] = React.useState('');
   const [cat, setCat] = React.useState('all');
-  const items = LOTS.filter(l => (cat === 'all' || l.cat === cat) && (!q || l.title.toLowerCase().includes(q.toLowerCase())));
+  const items = lots.filter(l => (cat === 'all' || l.cat === cat) && (!q || l.title.toLowerCase().includes(q.toLowerCase())));
   return (
     <div className="app"><div className="safe-top" />
       <div className="appbar" style={{ paddingBottom: 8 }}>

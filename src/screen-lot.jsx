@@ -1,6 +1,6 @@
 // screen-lot.jsx — lot detail + AI valuation + make-offer flow
 import React from 'react';
-import { lot, U, MY_LOT, CAT, WALLET } from './data.js';
+import { lot, U, MY_LOT, CAT, WALLET, ME } from './data.js';
 import { Icon } from './icons.jsx';
 import { fmt, Credit, Photo, Avatar, Stars, CatTag, AIBadge, IconBtn, Sheet } from './ui.jsx';
 
@@ -30,11 +30,11 @@ function AIValuation({ L }) {
   );
 }
 
-export function LotDetail({ lotId, onBack, onOffer, onOwnerChat }) {
-  const L = lot(lotId);
+export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, lots }) {
+  const L = (lots || []).find(l => l.id === lotId) || lot(lotId);
   const [g, setG] = React.useState(0);
   if (!L) return null;
-  const owner = U[L.owner];
+  const owner = L.owner === 'me' ? ME : (U[L.owner] || ME);
 
   return (
     <div className="app-scroll">

@@ -1,6 +1,6 @@
 // screen-feed.jsx — home feed + discovery mechanics (list / swipe / chain)
 import React from 'react';
-import { LOTS, MATCHES, MY_LOT, lot, U, CAT } from './data.js';
+import { LOTS, MATCHES, MY_LOT, lot, U, CAT, ME } from './data.js';
 import { Icon } from './icons.jsx';
 import { AIBadge, Photo, Credit, LotCard, Sheet, Avatar } from './ui.jsx';
 
@@ -58,8 +58,8 @@ function MatchStrip({ onOpen, onChains }) {
 // ===========================================================
 // VARIANT A — LIST / FEED
 // ===========================================================
-export function FeedList({ cat, onOpen, onChains, hints = true, limit }) {
-  let items = LOTS.filter(l => cat === 'all' || l.cat === cat);
+export function FeedList({ cat, onOpen, onChains, hints = true, limit, lots = LOTS }) {
+  let items = lots.filter(l => cat === 'all' || l.cat === cat);
   if (limit) items = items.slice(0, limit);
   return (
     <div className="col gap16" style={{ paddingBottom: 20 }}>
@@ -80,8 +80,8 @@ export function FeedList({ cat, onOpen, onChains, hints = true, limit }) {
 // ===========================================================
 // VARIANT B — SWIPE
 // ===========================================================
-export function FeedSwipe({ cat, onOpen }) {
-  const deck = React.useMemo(() => LOTS.filter(l => cat === 'all' || l.cat === cat), [cat]);
+export function FeedSwipe({ cat, onOpen, lots = LOTS }) {
+  const deck = React.useMemo(() => lots.filter(l => cat === 'all' || l.cat === cat), [lots, cat]);
   const [idx, setIdx] = React.useState(0);
   const [drag, setDrag] = React.useState(0);
   const [liked, setLiked] = React.useState(null);
@@ -144,7 +144,7 @@ export function FeedSwipe({ cat, onOpen }) {
             <Icon name="swap" size={22} color="var(--berry)" />
             <Photo label={liked.photo} url={liked.photoUrl} cat={liked.cat} style={{ width: 70, height: 70, borderRadius: 14 }} />
           </div>
-          <span className="body">Похоже, {U[liked.owner].name.split(' ')[0]} ищет именно то, что вы отдаёте. Откройте лот и предложите обмен — AI уже посчитал справедливую доплату.</span>
+          <span className="body">Похоже, {(U[liked.owner] || ME).name.split(' ')[0]} ищет именно то, что вы отдаёте. Откройте лот и предложите обмен — AI уже посчитал справедливую доплату.</span>
           <button className="btn btn-primary btn-block btn-lg" onClick={() => { onOpen(liked.id); setLiked(null); }}>Предложить обмен</button>
         </div>}
       </Sheet>
@@ -156,7 +156,7 @@ const swipeBtn = (bg, bd) => ({ width: 62, height: 62, borderRadius: 999, backgr
 function SwipeCard({ lot, drag = 0, onDown, onMove, onUp, onTap, style }) {
   const interactive = !!onDown;
   const rot = drag / 22;
-  const owner = U[lot.owner];
+  const owner = lot.owner === 'me' ? ME : (U[lot.owner] || ME);
   return (
     <div
       className="card"
