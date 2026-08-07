@@ -17,4 +17,4 @@ ENV NODE_ENV=production
 EXPOSE 3000
 
 # db push (idempotent) + start server
-CMD ["sh", "-c", "npx prisma db push --skip-generate && node node_modules/next/dist/bin/next start -p 3000"]
+CMD ["sh", "-c", "npx prisma db push --skip-generate && node node_modules/next/dist/bin/next start -p 80"]
