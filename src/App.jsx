@@ -175,13 +175,13 @@ export default function App() {
     if (tab === 'deals') return (
       <div className="app"><div className="safe-top" />
         <DealsList chats={chats} deals={deals} onOpen={(id) => go('chat', { id })} onOpenDeal={(id) => openDeal(id)} />
-        <TabBar tab={tab} setTab={setTab} onCreate={() => setCreating(true)} unread={2} />
+        <TabBar tab={tab} setTab={setTab} onCreate={() => setCreating(true)} unread={0} />
       </div>
     );
     if (tab === 'wallet') return (
       <div className="app"><div className="safe-top" />
         <Wallet wallet={wallet} onInfo={() => setInfoOpen(true)} />
-        <TabBar tab={tab} setTab={setTab} onCreate={() => setCreating(true)} unread={2} />
+        <TabBar tab={tab} setTab={setTab} onCreate={() => setCreating(true)} unread={0} />
       </div>
     );
     if (tab === 'profile') return (
@@ -328,7 +328,7 @@ function HomeTab({ t, go, tab, setTab, onCreate, lots, matches, chains, myLots }
       <AppBar
         big sub="Обмен без денег" title="Дай бери"
         left={<div className="logo" style={{ width: 38, height: 38, fontSize: 17 }}>ДБ</div>}
-        right={<IconBtn name="bell" badge={2} />}
+        right={<IconBtn name="bell" badge={0} />}
       />
       {/* view switcher */}
       <div className="row gap6" style={{ padding: '0 18px 10px', overflowX: 'auto', scrollbarWidth: 'none', flexShrink: 0 }}>
@@ -347,7 +347,7 @@ function HomeTab({ t, go, tab, setTab, onCreate, lots, matches, chains, myLots }
         {view === 'swipe' && <FeedSwipe cat={cat} lots={lots} onOpen={(id) => go('lot', { lotId: id })} />}
         {view === 'chain' && <FeedChain chains={chains} onOpenChain={(id) => go('chain', { id })} />}
       </div>
-      <TabBar tab={tab} setTab={setTab} onCreate={onCreate} unread={2} />
+      <TabBar tab={tab} setTab={setTab} onCreate={onCreate} unread={0} />
     </div>
   );
 }
@@ -374,7 +374,7 @@ function SearchScreen({ go, tab, setTab, onCreate, lots }) {
         </div>
         {!items.length && <div className="col gap8" style={{ alignItems: 'center', padding: '50px 20px', textAlign: 'center' }}><Icon name="search" size={32} color="var(--ink-3)" /><span className="sub">Ничего не нашлось — попробуйте другой запрос</span></div>}
       </div>
-      <TabBar tab={tab} setTab={setTab} onCreate={onCreate} unread={2} />
+      <TabBar tab={tab} setTab={setTab} onCreate={onCreate} unread={0} />
     </div>
   );
 }

@@ -10,13 +10,13 @@ function AIValuation({ L }) {
     <div className="card" style={{ padding: 15, border: '1px solid var(--berry-100)' }}>
       <div className="row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
         <span className="row gap6"><AIBadge>AI-оценка</AIBadge></span>
-        <span className="cap row gap4"><Icon name="checkCircle" size={13} color="var(--ok)" />честная цена</span>
+        <span className="cap row gap4"><Icon name="checkCircle" size={13} color="var(--ok)" />ориентир</span>
       </div>
       <div className="row" style={{ alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
         <Credit n={L.value} size={26} coin={22} />
         <span className="sub">≈ ₽{fmt(L.value)}</span>
       </div>
-      <span className="sub">Алгоритм сверил {L.title.split(' ')[0]} с 1 240 объявлениями на Авито, Юле и фриланс-биржах.</span>
+      <span className="sub">Ориентир по похожим объявлениям — точную стоимость согласуйте в чате.</span>
       <div className="col gap6" style={{ marginTop: 14 }}>
         <div style={{ position: 'relative', height: 8, borderRadius: 999, background: 'linear-gradient(90deg, var(--berry-100), var(--berry-200), var(--berry))' }}>
           <div style={{ position: 'absolute', top: -4, left: `${pct}%`, transform: 'translateX(-50%)', width: 16, height: 16, borderRadius: 999, background: '#fff', border: '3px solid var(--berry)', boxShadow: 'var(--sh-1)' }} />
@@ -121,7 +121,7 @@ export function OfferSheet({ L, myLot, balance = 0, open, onClose, onConfirm }) 
         </div>
 
         <div className="card" style={{ padding: 13, background: 'var(--berry-50)' }}>
-          <div className="row gap8" style={{ marginBottom: 8 }}><AIBadge>AI предлагает</AIBadge><span className="grow" /><span className="sub">для честного обмена</span></div>
+          <div className="row gap8" style={{ marginBottom: 8 }}><AIBadge>AI предлагает</AIBadge><span className="grow" /><span className="sub">расчёт доплаты баллами</span></div>
           <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
             <span className="title">Доплата баллами</span>
             <div className="row gap8" style={{ alignItems: 'center' }}>

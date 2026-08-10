@@ -79,10 +79,10 @@ async function main() {
   const findLot = (title) => lotByTitle[title] || lotRows[0];
 
   const reviews = [
-    { author: 'kirill', rating: 5, text: 'Отличный обмен, всё честно и быстро. Рекомендую!' },
-    { author: 'dasha',  rating: 5, text: 'Приятно иметь дело, вещи точно как на фото.' },
-    { author: 'marina', rating: 4, text: 'Всё хорошо, немного задержалась с передачей.' },
-    { author: 'lena',   rating: 5, text: 'Быстрая встреча, договорились за один день.' },
+    { author: 'kirill', rating: 5, text: 'Отдал PS5 за Apple Watch и 10 000 Б — всё сошлось за один день.' },
+    { author: 'dasha',  rating: 5, text: 'Обменяли лендинг на технику. По делу, без воды.' },
+    { author: 'marina', rating: 4, text: 'Вещи как на фото, договорились быстро. Чуть задержалась с передачей.' },
+    { author: 'lena',   rating: 5, text: 'Встретились у метро, обмен прошёл гладко.' },
   ];
   for (const r of reviews) {
     const author = users[r.author];

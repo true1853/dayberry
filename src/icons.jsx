@@ -3,7 +3,7 @@ import {
   Home, Search, Plus, MessageSquare, User, Heart, ChevronLeft, ChevronRight,
   ChevronDown, X, Sparkles, ShieldCheck, ArrowLeftRight, Link2, Wallet,
   Check, CheckCircle, Lock, Clock, Star, Map, SlidersHorizontal, Bell,
-  Camera, ArrowRight, Send, PlusCircle, Flame, Eye, EyeOff, Tag, Gift, Info, Mail,
+  Camera, ArrowRight, Send, PlusCircle, Flame, Eye, EyeOff, Tag, Gift, Info, Mail, Bot,
 } from 'lucide-react';
 
 const MAP = {
@@ -19,6 +19,7 @@ const MAP = {
   close:       X,
   spark:       Sparkles,
   sparkLine:   Sparkles,
+  ai:          Bot,
   shield:      ShieldCheck,
   swap:        ArrowLeftRight,
   chain:       Link2,

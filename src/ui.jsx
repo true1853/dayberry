@@ -86,7 +86,7 @@ export function AIBadge({ children = 'AI', tone = 'berry' }) {
   const s = map[tone];
   return (
     <span className="tag" style={{ background: s.bg, color: s.fg }}>
-      <Icon name="spark" size={12} color={s.fg} />{children}
+      <Icon name="ai" size={12} color={s.fg} />{children}
     </span>
   );
 }

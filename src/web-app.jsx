@@ -258,7 +258,7 @@ function Valuation({ L }) {
         <Credit n={L.value} size={28} coin={24} />
         <span className="sub">≈ ₽{fmt(L.value)}</span>
       </div>
-      <span className="sub">Алгоритм сверил {L.title.split(' ')[0]} с 1 240 объявлениями на Авито, Юле и фриланс-биржах.</span>
+      <span className="sub">Ориентир по похожим объявлениям — точную стоимость согласуйте в чате.</span>
       <div style={{ position: 'relative', height: 8, borderRadius: 999, background: 'linear-gradient(90deg, var(--berry-100), var(--berry-200), var(--berry))', marginTop: 14 }}>
         <div style={{ position: 'absolute', top: -4, left: `${pct}%`, transform: 'translateX(-50%)', width: 16, height: 16, borderRadius: 999, background: '#fff', border: '3px solid var(--berry)' }} />
       </div>

@@ -128,6 +128,7 @@ export function CreateListing({ onClose, onPublish, initialWants = '' }) {
   const [aiNote, setAiNote] = React.useState('');
   const [aiError, setAiError] = React.useState('');
   const [wantsHints, setWantsHints] = React.useState([]);
+  const [aiRange, setAiRange] = React.useState(null);
   const [publishing, setPublishing] = React.useState(false);
   const publishingRef = React.useRef(false);
 
@@ -157,6 +158,7 @@ export function CreateListing({ onClose, onPublish, initialWants = '' }) {
       if (!res.ok) { setAiError(res.error || 'Не удалось получить ответ ИИ'); return; }
       const d = res.draft || {};
       setWantsHints((d.wants || '').split(',').map(s => s.trim()).filter(Boolean));
+      if (d.aiLow > 0 && d.aiHigh > d.aiLow) setAiRange({ low: d.aiLow, high: d.aiHigh });
       if (mode === 'price') {
         if (d.value > 0) setValue(String(d.value));
         setAiNote(`AI-оценка: ${fmt(d.value)} Б · диапазон ${fmt(d.aiLow)}–${fmt(d.aiHigh)} Б. ${d.reasoning || ''}`);
@@ -273,7 +275,7 @@ export function CreateListing({ onClose, onPublish, initialWants = '' }) {
 
         <div className="card" style={{ padding: 12, background: 'var(--berry-50)', border: '1px dashed var(--berry-200)' }}>
           <div className="row gap10" style={{ alignItems: 'center' }}>
-            <Icon name="spark" size={20} color="var(--berry)" />
+            <Icon name="ai" size={20} color="var(--berry)" />
             <div className="grow col" style={{ gap: 2 }}>
               <span className="title" style={{ fontSize: 13.5 }}>AI-помощник</span>
               <span className="cap">Добавьте фото или название — заполним категорию, цену и описание.</span>
@@ -282,7 +284,7 @@ export function CreateListing({ onClose, onPublish, initialWants = '' }) {
               {aiBusy ? 'Думаю…' : 'Заполнить'}
             </button>
           </div>
-          {aiNote && <span className="cap row gap6" style={{ color: 'var(--berry)', marginTop: 8 }}><Icon name="spark" size={13} color="var(--berry)" />{aiNote}</span>}
+          {aiNote && <span className="cap row gap6" style={{ color: 'var(--berry)', marginTop: 8 }}><Icon name="ai" size={13} color="var(--berry)" />{aiNote}</span>}
           {aiError && <span className="cap" style={{ color: 'var(--warn)', marginTop: 6 }}>{aiError}</span>}
         </div>
 
@@ -326,13 +328,13 @@ export function CreateListing({ onClose, onPublish, initialWants = '' }) {
               placeholder="Например: 45000"
               style={{ flex: 1, padding: '13px 16px', border: 'none', outline: 'none', fontSize: 15, fontFamily: 'var(--font)', background: 'transparent' }}
             />
-            <button onClick={() => runAI('price')} disabled={aiBusy} title="Подобрать цену с помощью ИИ" style={{ background: 'var(--berry-50)', border: 'none', color: 'var(--berry)', padding: '0 10px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}><Icon name="spark" size={18} /></button>
+            <button onClick={() => runAI('price')} disabled={aiBusy} title="Подобрать цену с помощью ИИ" style={{ background: 'var(--berry-50)', border: 'none', color: 'var(--berry)', padding: '0 10px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}><Icon name="ai" size={18} /></button>
             <Coin size={26} />
             <span style={{ paddingRight: 12 }} />
           </div>
-          {valueNum > 0 && (
+          {aiRange && (
             <span className="cap row gap6" style={{ color: 'var(--berry)' }}>
-              <Icon name="spark" size={13} color="var(--berry)" />AI-диапазон: {fmt(aiLow)}–{fmt(aiHigh)} Б
+              <Icon name="ai" size={13} color="var(--berry)" />AI-диапазон: {fmt(aiRange.low)}–{fmt(aiRange.high)} Б
             </span>
           )}
         </div>
@@ -347,7 +349,7 @@ export function CreateListing({ onClose, onPublish, initialWants = '' }) {
           />
           {wantsHints.length > 0 && (
             <div className="row gap6" style={{ flexWrap: 'wrap', marginTop: 4 }}>
-              <span className="cap row gap4" style={{ color: 'var(--ink-3)' }}><Icon name="spark" size={12} color="var(--berry)" />AI подобрал:</span>
+              <span className="cap row gap4" style={{ color: 'var(--ink-3)' }}><Icon name="ai" size={12} color="var(--berry)" />AI подобрал:</span>
               {wantsHints.map((h, i) => (
                 <div key={i} className="chip chip-berry" onClick={() => setWants(h)}>{h}</div>
               ))}

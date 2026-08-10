@@ -367,7 +367,7 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, 
           {/* wants */}
           <div className="card" style={{ width: '100%', padding: '12px 14px', gap: 6 }}>
             <div className="row gap6" style={{ alignItems: 'center' }}>
-              <Icon name="spark" size={15} color="var(--berry)" />
+              <Icon name="ai" size={15} color="var(--berry)" />
               <span className="over" style={{ color: 'var(--berry)' }}>Хочу получить</span>
             </div>
             <span style={{ fontSize: 14, color: 'var(--ink-2)', lineHeight: 1.5 }}>
@@ -474,7 +474,7 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, 
             onClick={() => setTab('wallet')}
           />
           <Divider />
-          <SettingsRow icon="gift" label="Пригласить друга" sub={shareNote || '+1 000 Б за каждого'} onClick={shareInvite} />
+          <SettingsRow icon="gift" label="Пригласить друга" sub={shareNote || 'Поделиться ссылкой на сервис'} onClick={shareInvite} />
           <Divider />
           <SettingsRow icon="info" label="О приложении" sub="Версия 1.0.0" onClick={() => setAboutOpen(true)} />
         </GroupCard>
@@ -487,7 +487,7 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, 
         <div style={{ height: 32 }} />
       </div>
 
-      <TabBar tab={tab} setTab={setTab} onCreate={onCreate} unread={2} />
+      <TabBar tab={tab} setTab={setTab} onCreate={onCreate} unread={0} />
       <EditProfileSheet user={profile || user} open={editing} onClose={() => setEditing(false)} onSaved={onProfileSaved} />
       <ChangePasswordSheet open={passwordOpen} onClose={() => setPasswordOpen(false)} />
       <AboutSheet open={aboutOpen} onClose={() => setAboutOpen(false)} />
