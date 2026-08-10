@@ -138,7 +138,11 @@ function WebLotCard({ L, onOpen, onOffer, onEdit }) {
       </div>
       <div className="web-lot-meta">
         <span className="web-lot-title">{L.title}</span>
-        <span className="web-lot-sub">{L.condition} · {(U[L.owner] || ME).city}</span>
+        <span className="web-lot-sub">{L.condition}</span>
+        <span className="web-lot-sub row gap6" style={{ alignItems: 'center' }}>
+          <Avatar user={L.owner} url={L.ownerAvatar} size={16} />
+          <span className="ellipsis">{L.ownerCity || (U[L.owner] || ME).city}</span>
+        </span>
         <span className="web-lot-sub">{L.posted}</span>
         <div className="web-lot-price"><Credit n={L.value} size={17} coin={16} /><span style={{ fontSize: 13, color: 'var(--ink-3)' }}>за обмен</span></div>
       </div>
@@ -304,7 +308,13 @@ function ReservationRail({ L, onOffer }) {
 const stepBtn = { width: 30, height: 30, borderRadius: 999, border: '1px solid var(--line)', background: '#fff', color: 'var(--ink)', fontSize: 18, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 };
 
 function LotView({ L, onBack, onOffer }) {
-  const owner = L.owner === 'me' ? ME : (U[L.owner] || ME);
+  const base = L.owner === 'me' ? ME : (U[L.owner] || ME);
+  const owner = {
+    ...base,
+    name: L.ownerName || base.name,
+    city: L.ownerCity || base.city,
+    avatar: L.ownerAvatar || base.avatar || '',
+  };
   const amenities = [
     ['Смартфон', 'Apple Watch, iPhone, Samsung'],
     ['Ноутбуки', 'MacBook, Lenovo, Dell'],
@@ -356,7 +366,7 @@ function LotView({ L, onBack, onOffer }) {
           </div>
 
           <div className="card row" style={{ padding: 16, cursor: 'pointer', gap: 14 }}>
-            <Avatar user={L.owner} size={52} />
+            <Avatar user={L.owner} url={owner.avatar} size={52} />
             <div className="grow col" style={{ gap: 3 }}>
               <span style={{ fontSize: 15, fontWeight: 600 }}>{owner.name}</span>
               <span className="row gap6"><Stars value={owner.rating} /><span className="cap">{owner.rating} · {owner.deals} сделок</span></span>

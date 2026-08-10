@@ -51,13 +51,20 @@ export function Photo({ label, url, cat = 'gadget', style, rounded = 0, badge, c
 }
 
 // ---- avatar ----
-export function Avatar({ user, size = 40 }) {
+export function Avatar({ user, size = 40, url = '' }) {
   const u = user === 'me' ? ME : (U[user] || {});
+  const img = url || u.avatar || '';
   const initials = u.initials
     || (user ? user.split(' ').map(w => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() : '?');
   return (
     <div style={{ position: 'relative', width: size, height: size, flex: 'none' }}>
-      <div className="avatar" style={{ width: size, height: size, fontSize: size * 0.42 }}>{initials}</div>
+      {img ? (
+        <div className="avatar" style={{ width: size, height: size, overflow: 'hidden' }}>
+          <img src={img} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+        </div>
+      ) : (
+        <div className="avatar" style={{ width: size, height: size, fontSize: size * 0.42 }}>{initials}</div>
+      )}
       {u.online && <span style={{ position: 'absolute', right: -1, bottom: -1, width: size * 0.26, height: size * 0.26, minWidth: 9, minHeight: 9, borderRadius: 999, background: 'var(--ok)', border: '2px solid #fff' }} />}
       {u.pro && <span style={{ position: 'absolute', left: -3, top: -3, fontSize: 9, fontWeight: 800, color: '#fff', background: 'var(--berry)', borderRadius: 999, padding: '1px 5px', border: '2px solid #fff' }}>PRO</span>}
     </div>
@@ -116,8 +123,8 @@ export function LotCard({ lot, onClick, compact }) {
         <div className="title clamp2" style={{ minHeight: 38 }}>{lot.title}</div>
         <div className="row gap6" style={{ justifyContent: 'space-between' }}>
           <div className="row gap6" style={{ minWidth: 0 }}>
-            <Avatar user={lot.owner} size={20} />
-            <span className="cap ellipsis">{owner.city}</span>
+            <Avatar user={lot.owner} url={lot.ownerAvatar} size={20} />
+            <span className="cap ellipsis">{lot.ownerCity || owner.city}</span>
           </div>
           <span className="cap">{lot.posted}</span>
         </div>

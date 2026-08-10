@@ -35,7 +35,13 @@ export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, lots }) {
   const L = (lots || []).find(l => l.id === lotId) || lot(lotId);
   const [g, setG] = React.useState(0);
   if (!L) return null;
-  const owner = L.owner === 'me' ? ME : (U[L.owner] || ME);
+  const base = L.owner === 'me' ? ME : (U[L.owner] || ME);
+  const owner = {
+    ...base,
+    name: L.ownerName || base.name,
+    city: L.ownerCity || base.city,
+    avatar: L.ownerAvatar || base.avatar || '',
+  };
 
   return (
     <div className="app-scroll">
@@ -77,7 +83,7 @@ export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, lots }) {
 
         <div className="card" style={{ padding: 14 }} onClick={onOwnerChat}>
           <div className="row gap12">
-            <Avatar user={L.owner} size={46} />
+            <Avatar user={L.owner} url={owner.avatar} size={46} />
             <div className="grow col" style={{ gap: 3 }}>
               <span className="title">{owner.name}</span>
               <span className="row gap6"><Stars value={owner.rating} /><span className="cap">{owner.rating} · {owner.deals} сделок</span></span>
