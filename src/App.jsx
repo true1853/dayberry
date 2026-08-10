@@ -33,9 +33,10 @@ const useMediaQuery = (query) => {
 const TWEAK_DEFAULTS = {
   mechanic: 'list',
   accent: '#ff385c',
-  showOnboarding: true,
   matchHints: true,
 };
+
+const ONBOARDED_KEY = 'dayberry_onboarded';
 
 const ACCENTS = {
   '#ff385c': { berry900: '#a90a33', berry700: '#e00b41', berry: '#ff385c', berry500: '#ff5c77', b200: '#ffd1da', b100: '#ffe6eb', b50: '#fff0f3' },
@@ -58,11 +59,14 @@ function applyAccent(hex) {
 
 
 export default function App() {
-  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const [t] = useTweaks(TWEAK_DEFAULTS);
   const [currentUser, setCurrentUser] = React.useState(null);
   const [authed, setAuthed] = React.useState(false);
   const [booting, setBooting] = React.useState(true);
-  const [onboarded, setOnboarded] = React.useState(!t.showOnboarding);
+  const [onboarded, setOnboarded] = React.useState(() => {
+    if (typeof window === 'undefined') return false;
+    try { return window.localStorage.getItem(ONBOARDED_KEY) === '1'; } catch { return false; }
+  });
   const [tab, setTabRaw] = React.useState('home');
   const [stack, setStack] = React.useState([]);
   const [offerLot, setOfferLot] = React.useState(null);
@@ -86,7 +90,6 @@ export default function App() {
   };
 
   React.useEffect(() => { applyAccent(t.accent); }, [t.accent]);
-  React.useEffect(() => { if (t.showOnboarding) setOnboarded(false); }, [t.showOnboarding]);
 
   React.useEffect(() => {
     (async () => {
@@ -250,7 +253,10 @@ export default function App() {
   if (!onboarded) {
     return (
       <div className="app-root">
-        <Onboarding onDone={() => { setOnboarded(true); setTweak('showOnboarding', false); }} />
+        <Onboarding onDone={() => {
+          setOnboarded(true);
+          try { window.localStorage.setItem(ONBOARDED_KEY, '1'); } catch {}
+        }} />
       </div>
     );
   }
