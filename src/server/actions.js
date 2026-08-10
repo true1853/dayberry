@@ -2,6 +2,7 @@
 
 import { prisma } from '../../lib/prisma';
 import { analyzeListing, computeMatches } from '../../lib/ai';
+import { getOAuthUrl } from '../../lib/oauth';
 import {
   createSession,
   destroySession,
@@ -521,6 +522,16 @@ export async function joinChainAction(chainId) {
     });
   }
   return { ok: true, dealId: deal.id };
+}
+
+// ---------- OAuth (Yandex ID / VK ID) ----------
+
+export async function getOAuthUrlAction(provider) {
+  const res = getOAuthUrl(provider);
+  if (!res) {
+    return { ok: false, error: provider === 'vk' ? 'OAuth VK не настроен — добавьте ключи в .env' : 'OAuth Яндекса не настроен — добавьте ключи в .env' };
+  }
+  return { ok: true, url: res.url };
 }
 
 // ---------- AI listing analysis ----------

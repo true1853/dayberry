@@ -1,7 +1,8 @@
 // screen-auth.jsx — login + registration
 import React from 'react';
 import { Icon } from './icons.jsx';
-import { loginAction, registerAction, guestAction } from './server/actions.js';
+import { loginAction, registerAction, getOAuthUrlAction } from './server/actions.js';
+import { PhoneField, CityField } from './fields.jsx';
 
 function Field({ label, type = 'text', value, onChange, placeholder, autoComplete }) {
   const [show, setShow] = React.useState(false);
@@ -105,9 +106,17 @@ export function AuthScreen({ onDone }) {
     }
   };
 
-  const socialAuth = async () => {
-    const res = await guestAction();
-    if (res.ok) onDone(res.user);
+  const socialAuth = async (provider) => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await getOAuthUrlAction(provider);
+      if (!res.ok) { setError(res.error); setLoading(false); return; }
+      window.location.href = res.url;
+    } catch (e) {
+      setLoading(false);
+      setError('Ошибка — попробуйте ещё раз');
+    }
   };
 
   return (
@@ -147,11 +156,11 @@ export function AuthScreen({ onDone }) {
           )}
           <Field label="Email" type="email" value={email} onChange={setEmail} placeholder="you@example.com" autoComplete="email" />
           {!isLogin && (
-            <Field label="Телефон" type="tel" value={phone} onChange={setPhone} placeholder="+7 (___) ___-__-__" autoComplete="tel" />
+            <PhoneField value={phone} onChange={setPhone} />
           )}
           <Field label="Пароль" type="password" value={password} onChange={setPassword} placeholder={isLogin ? 'Ваш пароль' : 'Минимум 6 символов'} autoComplete={isLogin ? 'current-password' : 'new-password'} />
           {!isLogin && (
-            <Field label="Город" value={city} onChange={setCity} placeholder="Москва" autoComplete="address-level2" />
+            <CityField value={city} onChange={setCity} />
           )}
 
           {error && (
@@ -182,8 +191,8 @@ export function AuthScreen({ onDone }) {
           </div>
 
           <div className="row gap10">
-            <SocialBtn icon={<VkIcon />} label="VK" onClick={socialAuth} />
-            <SocialBtn icon={<YandexIcon />} label="Яндекс" onClick={socialAuth} />
+            <SocialBtn icon={<VkIcon />} label="VK ID" onClick={() => socialAuth('vk')} />
+            <SocialBtn icon={<YandexIcon />} label="Яндекс ID" onClick={() => socialAuth('yandex')} />
           </div>
 
           {!isLogin && (

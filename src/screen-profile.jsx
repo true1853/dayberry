@@ -4,6 +4,7 @@ import { ME } from './data.js';
 import { Icon } from './icons.jsx';
 import { Credit, AppBar, IconBtn, TabBar, Photo, Sheet } from './ui.jsx';
 import { updateProfileAction, updateAvatarAction, changePasswordAction, updateSettingsAction } from './server/actions.js';
+import { PhoneField, CityField } from './fields.jsx';
 
 function StatBox({ value, label }) {
   return (
@@ -125,14 +126,8 @@ export function EditProfileSheet({ user, open, onClose, onSaved }) {
           <label className="cap">Имя</label>
           <input value={name} onChange={e => setName(e.target.value)} placeholder="Как вас зовут?" style={fieldStyle} />
         </div>
-        <div className="col gap6">
-          <label className="cap">Город</label>
-          <input value={city} onChange={e => setCity(e.target.value)} placeholder="Москва" style={fieldStyle} />
-        </div>
-        <div className="col gap6">
-          <label className="cap">Телефон</label>
-          <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="+7 999 000-00-00" style={fieldStyle} />
-        </div>
+        <CityField value={city} onChange={setCity} />
+        <PhoneField value={phone} onChange={setPhone} />
         <div className="col gap6">
           <label className="cap">О себе</label>
           <textarea value={bio} onChange={e => setBio(e.target.value)} placeholder="Чем меняетесь, где, как любите договариваться…" rows={4} style={{ ...fieldStyle, resize: 'none', lineHeight: 1.5 }} />
