@@ -1,10 +1,9 @@
 // screen-chain.jsx — chain-first discovery + multi-party chain detail
 import React from 'react';
-import { CHAIN, MY_LOT, U, ME } from './data.js';
 import { Icon } from './icons.jsx';
 import { AIBadge, Photo, Credit, Avatar, AppBar, IconBtn } from './ui.jsx';
 
-const who = (id) => (id === 'me' ? { ...ME, initials: 'А', name: 'Вы' } : U[id]);
+const who = (id) => (id === 'me' ? { name: 'Вы', initials: 'В' } : { name: id, initials: String(id || '?').charAt(0).toUpperCase() });
 
 function ChainNode({ step, isMe, last }) {
   const u = who(step.who);
@@ -12,7 +11,7 @@ function ChainNode({ step, isMe, last }) {
     <div className="col gap10">
       <div className="row gap12" style={{ alignItems: 'center' }}>
         <div style={{ position: 'relative' }}>
-          <Avatar user={step.who} size={46} />
+          <Avatar user={u.name} size={46} />
           {isMe && <span style={{ position: 'absolute', bottom: -4, left: '50%', transform: 'translateX(-50%)', fontSize: 9, fontWeight: 800, color: '#fff', background: 'var(--berry)', borderRadius: 999, padding: '1px 6px' }}>ВЫ</span>}
         </div>
         <div className="grow col" style={{ gap: 2 }}>
@@ -47,8 +46,8 @@ export function ChainCard({ chain, onOpen, mini }) {
         {chain.steps.map((s, i) => (
           <React.Fragment key={i}>
             <div className="col gap4" style={{ alignItems: 'center', width: 0, flex: 1, minWidth: 0 }}>
-              <Avatar user={s.who} size={34} />
-              <span className="cap ellipsis" style={{ maxWidth: '100%', fontSize: 10 }}>{who(s.who).name === 'Вы' ? 'Вы' : who(s.who).name.split(' ')[0]}</span>
+              <Avatar user={who(s.who).name} size={34} />
+              <span className="cap ellipsis" style={{ maxWidth: '100%', fontSize: 10 }}>{who(s.who).name.split(' ')[0]}</span>
             </div>
             {i < chain.steps.length - 1 && <Icon name="chevR" size={15} color="var(--berry-200)" />}
             {i === chain.steps.length - 1 && <><Icon name="arrowR" size={15} color="var(--berry-200)" /><div className="col gap4" style={{ alignItems: 'center', width: 30, flex: 'none' }}><div className="avatar" style={{ width: 34, height: 34, background: 'var(--berry-50)' }}><Icon name="check" size={16} color="var(--berry)" /></div></div></>}
@@ -78,7 +77,7 @@ export function FeedChain({ onOpenChain, chains = [] }) {
       </div>
       <div className="row" style={{ justifyContent: 'space-between' }}>
         <span className="row gap6"><AIBadge>Подобрано для вас</AIBadge></span>
-        <span className="cap">по лоту «{MY_LOT.title.split(',')[0]}»</span>
+        <span className="cap">по вашим хотелкам</span>
       </div>
       <div className="col gap12">
         {chains.map(c => <ChainCard key={c.id} chain={c} mini onOpen={() => onOpenChain(c.id)} />)}
@@ -88,8 +87,9 @@ export function FeedChain({ onOpenChain, chains = [] }) {
 }
 
 export function ChainDetail({ chainId, onBack, onJoin, chains = [] }) {
-  const chain = chains.find(c => c.id === chainId) || CHAIN;
-  const myStep = chain.steps.find(s => s.who === 'me');
+  const chain = chains.find(c => c.id === chainId) || null;
+  if (!chain) return null;
+  const myStep = chain.steps.find(s => s.who === 'me') || chain.steps[0];
   const iGet = chain.steps[chain.steps.length - 1].gives;
   const total = chain.steps.reduce((a, s) => a + s.value, 0);
   const topup = Math.max(0, (chain.steps[chain.steps.length - 1].value) - myStep.value);
@@ -104,7 +104,7 @@ export function ChainDetail({ chainId, onBack, onJoin, chains = [] }) {
       <div className="px col gap16" style={{ paddingBottom: 30 }}>
         <div className="card" style={{ padding: 16 }}>
           <div className="row gap12">
-            <Photo label={MY_LOT.photo} url={MY_LOT.photoUrl} cat={MY_LOT.cat} style={{ width: 60, height: 60, borderRadius: 14 }} />
+            <Photo label={myStep.gives} url={myStep.photoUrl} cat="gadget" style={{ width: 60, height: 60, borderRadius: 14 }} />
             <div className="col" style={{ justifyContent: 'center', gap: 2, flex: 1 }}>
               <span className="cap">Вы отдаёте</span>
               <span className="title">{myStep.gives}</span>

@@ -1,6 +1,5 @@
 // screen-lot.jsx — lot detail + AI valuation + make-offer flow
 import React from 'react';
-import { lot, U, MY_LOT, ME } from './data.js';
 import { Icon } from './icons.jsx';
 import { fmt, Credit, Photo, Avatar, Stars, CatTag, AIBadge, IconBtn, Sheet } from './ui.jsx';
 
@@ -32,17 +31,15 @@ function AIValuation({ L }) {
 }
 
 export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, lots }) {
-  const L = (lots || []).find(l => l.id === lotId) || lot(lotId);
+  const L = (lots || []).find(l => l.id === lotId) || null;
   const [g, setG] = React.useState(0);
   if (!L) return null;
-  const base = L.owner === 'me' ? ME : (U[L.owner] || ME);
   const owner = {
-    ...base,
-    name: L.ownerName || base.name,
-    city: L.ownerCity || base.city,
-    avatar: L.ownerAvatar || base.avatar || '',
-    rating: L.ownerRating ?? base.rating ?? 0,
-    deals: L.ownerDeals ?? base.deals ?? 0,
+    name: L.ownerName || '',
+    city: L.ownerCity || '',
+    avatar: L.ownerAvatar || '',
+    rating: L.ownerRating ?? 0,
+    deals: L.ownerDeals ?? 0,
   };
 
   return (
@@ -85,7 +82,7 @@ export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, lots }) {
 
         <div className="card" style={{ padding: 14 }} onClick={onOwnerChat}>
           <div className="row gap12">
-            <Avatar user={L.owner} url={owner.avatar} size={46} />
+            <Avatar user={owner.name} url={owner.avatar} size={46} />
             <div className="grow col" style={{ gap: 3 }}>
               <span className="title">{owner.name}</span>
               <span className="row gap6"><Stars value={owner.rating} /><span className="cap">{owner.rating} · {owner.deals} сделок</span></span>
@@ -104,7 +101,7 @@ export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, lots }) {
 }
 
 export function OfferSheet({ L, myLot, balance = 0, open, onClose, onConfirm }) {
-  const MY = myLot || MY_LOT;
+  const MY = myLot || { value: 0, title: '', photo: '', photoUrl: '', cat: 'gadget' };
   const diff = L ? L.value - MY.value : 0;
   const [credits, setCredits] = React.useState(0);
   React.useEffect(() => { if (L) setCredits(Math.max(0, diff)); }, [L]);

@@ -1,6 +1,6 @@
 // screen-feed.jsx — home feed + discovery mechanics (list / swipe / chain)
 import React from 'react';
-import { LOTS, MY_LOT, U, CAT, ME } from './data.js';
+import { CAT } from './data.js';
 import { Icon } from './icons.jsx';
 import { AIBadge, Photo, Credit, LotCard, Sheet } from './ui.jsx';
 
@@ -17,7 +17,7 @@ export function CatRow({ active, setActive }) {
 }
 
 // ---------- "ready matches" carousel ----------
-function MatchStrip({ onOpen, onChains, matches = [], lots = [], myLot = MY_LOT }) {
+function MatchStrip({ onOpen, onChains, matches = [], lots = [], myLot = null }) {
   return (
     <div className="col gap10" style={{ padding: '4px 0 2px' }}>
       <div className="px row" style={{ justifyContent: 'space-between' }}>
@@ -28,11 +28,15 @@ function MatchStrip({ onOpen, onChains, matches = [], lots = [], myLot = MY_LOT 
         {matches.map(m => {
           const L = lots.find(x => x.id === m.lot);
           if (!L) return null;
-          const mine = myLot || MY_LOT;
+          const mine = myLot;
           return (
             <div key={m.id} className="card" style={{ width: 230, flex: 'none', overflow: 'hidden', cursor: 'pointer' }} onClick={() => onOpen(L.id)}>
               <div className="row" style={{ alignItems: 'stretch', height: 96 }}>
-                <Photo label={mine.photo} url={mine.photoUrl} cat={mine.cat} style={{ flex: 1 }} />
+                {mine ? (
+                  <Photo label={mine.photo} url={mine.photoUrl} cat={mine.cat} style={{ flex: 1 }} />
+                ) : (
+                  <div className="col" style={{ flex: 1, background: 'var(--berry-50)', alignItems: 'center', justifyContent: 'center' }}><Icon name="swap" size={22} color="var(--berry)" /></div>
+                )}
                 <div className="col" style={{ justifyContent: 'center', alignItems: 'center', width: 34, background: 'var(--berry-50)' }}>
                   <Icon name="swap" size={18} color="var(--berry)" />
                 </div>
@@ -60,7 +64,7 @@ function MatchStrip({ onOpen, onChains, matches = [], lots = [], myLot = MY_LOT 
 // ===========================================================
 // VARIANT A — LIST / FEED
 // ===========================================================
-export function FeedList({ cat, onOpen, onChains, hints = true, limit, lots = LOTS, matches = [], myLot = MY_LOT }) {
+export function FeedList({ cat, onOpen, onChains, hints = true, limit, lots = [], matches = [], myLot = null }) {
   let items = lots.filter(l => cat === 'all' || l.cat === cat);
   if (limit) items = items.slice(0, limit);
   return (
@@ -82,7 +86,7 @@ export function FeedList({ cat, onOpen, onChains, hints = true, limit, lots = LO
 // ===========================================================
 // VARIANT B — SWIPE
 // ===========================================================
-export function FeedSwipe({ cat, onOpen, lots = LOTS }) {
+export function FeedSwipe({ cat, onOpen, lots = [], myLot = null }) {
   const deck = React.useMemo(() => lots.filter(l => cat === 'all' || l.cat === cat), [lots, cat]);
   const [idx, setIdx] = React.useState(0);
   const [drag, setDrag] = React.useState(0);
@@ -142,11 +146,15 @@ export function FeedSwipe({ cat, onOpen, lots = LOTS }) {
       <Sheet open={!!liked} onClose={() => { setLiked(null); setDrag(0); setIdx(i => i + 1); }} title="Это мэтч ✨">
         {liked && <div className="px col gap14" style={{ paddingBottom: 8 }}>
           <div className="row gap12" style={{ alignItems: 'center' }}>
-            <Photo label={MY_LOT.photo} url={MY_LOT.photoUrl} cat={MY_LOT.cat} style={{ width: 70, height: 70, borderRadius: 14 }} />
+            {myLot ? (
+              <Photo label={myLot.photo} url={myLot.photoUrl} cat={myLot.cat} style={{ width: 70, height: 70, borderRadius: 14 }} />
+            ) : (
+              <div className="avatar" style={{ width: 70, height: 70, background: 'var(--berry-50)' }}><Icon name="swap" size={30} color="var(--berry)" /></div>
+            )}
             <Icon name="swap" size={22} color="var(--berry)" />
             <Photo label={liked.photo} url={liked.photoUrl} cat={liked.cat} style={{ width: 70, height: 70, borderRadius: 14 }} />
           </div>
-          <span className="body">Похоже, {(U[liked.owner] || ME).name.split(' ')[0]} ищет именно то, что вы отдаёте. Откройте лот и предложите обмен — AI уже посчитал справедливую доплату.</span>
+          <span className="body">Похоже, {(liked.ownerName || 'Владелец').split(' ')[0]} ищет именно то, что вы готовы отдать. Откройте лот и предложите обмен — AI уже посчитал справедливую доплату.</span>
           <button className="btn btn-primary btn-block btn-lg" onClick={() => { onOpen(liked.id); setLiked(null); }}>Предложить обмен</button>
         </div>}
       </Sheet>
@@ -158,7 +166,6 @@ const swipeBtn = (bg, bd) => ({ width: 62, height: 62, borderRadius: 999, backgr
 function SwipeCard({ lot, drag = 0, onDown, onMove, onUp, onTap, style }) {
   const interactive = !!onDown;
   const rot = drag / 22;
-  const owner = lot.owner === 'me' ? ME : (U[lot.owner] || ME);
   return (
     <div
       className="card"
@@ -187,7 +194,7 @@ function SwipeCard({ lot, drag = 0, onDown, onMove, onUp, onTap, style }) {
         <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-end', gap: 10 }}>
           <div className="col" style={{ gap: 5, minWidth: 0 }}>
             <span className="h3" style={{ color: '#fff' }}>{lot.title}</span>
-            <span className="row gap6" style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13 }}><Icon name="map" size={13} color="rgba(255,255,255,0.8)" />{owner.city} · {lot.posted}</span>
+            <span className="row gap6" style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13 }}><Icon name="map" size={13} color="rgba(255,255,255,0.8)" />{lot.ownerCity || ''} · {lot.posted}</span>
           </div>
           <span className="row gap4" style={{ background: 'rgba(255,255,255,0.95)', borderRadius: 11, padding: '7px 10px' }}><Credit n={lot.value} size={15} coin={14} /></span>
         </div>

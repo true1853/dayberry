@@ -1,6 +1,5 @@
 // screen-profile.jsx — user profile screen
 import React from 'react';
-import { ME } from './data.js';
 import { Icon } from './icons.jsx';
 import { Credit, AppBar, IconBtn, TabBar, Photo, Sheet } from './ui.jsx';
 import { updateProfileAction, updateAvatarAction, changePasswordAction, updateSettingsAction } from './server/actions.js';
@@ -237,11 +236,11 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, 
   const [shareNote, setShareNote] = React.useState('');
   const avatarRef = React.useRef(null);
 
-  const name = (user && user.name) || ME.name;
+  const name = (user && user.name) || '';
   const email = (user && user.email) || '';
-  const city = (user && user.city) || ME.city;
-  const rating = user ? (user.rating ?? 0) : ME.rating;
-  const deals = user ? (user.dealsCount ?? 0) : ME.deals;
+  const city = (user && user.city) || '';
+  const rating = user ? (user.rating ?? 0) : 0;
+  const deals = user ? (user.dealsCount ?? 0) : 0;
   const balance = (user && user.balance) || 0;
   const bio = (profile && profile.bio) || (user && user.bio) || '';
   const wants = (profile && profile.wants) || (user && user.wants) || '';

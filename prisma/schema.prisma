@@ -20,9 +20,9 @@ model User {
   notifyEmail  Boolean       @default(true)
   notifyDeals  Boolean       @default(true)
   passwordHash String
-  rating       Float         @default(4.9)
+  rating       Float         @default(0)
   dealsCount   Int           @default(0)
-  balance      Int           @default(38000)
+  balance      Int           @default(0)
   createdAt    DateTime      @default(now())
   lots         Lot[]
   reviewsGiven Review[]      @relation("reviewAuthor")

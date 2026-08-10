@@ -1,6 +1,5 @@
 // screen-deal.jsx — escrow deal status + confirm-receipt
 import React from 'react';
-import { U, MY_LOT, ME } from './data.js';
 import { Icon } from './icons.jsx';
 import { fmt, Credit, Photo, Avatar, Stars, AppBar, IconBtn, Sheet } from './ui.jsx';
 
@@ -40,12 +39,12 @@ export function DealStatus({ deal, onBack, onConfirm, onChat, onDone }) {
   if (!deal) return null;
   const L = deal.lot || {};
   const { credits, stage } = deal;
-  const owner = L.owner ? (U[L.owner] || ME) : ME;
+  const owner = { name: deal.ownerName || '' };
   const [confirming, setConfirming] = React.useState(false);
 
   if (stage === 'done') return <DealDone deal={deal} onDone={onDone} />;
 
-  const my = deal.myLot || MY_LOT;
+  const my = deal.myLot || { title: '', photo: '', photoUrl: '', cat: 'gadget' };
   return (
     <div className="app-scroll">
       <AppBar sub="Сделка · эскроу" title="Обмен в работе" left={<IconBtn name="back" onClick={onBack} />} right={<IconBtn name="chat" onClick={onChat} />} />
@@ -71,7 +70,7 @@ export function DealStatus({ deal, onBack, onConfirm, onChat, onDone }) {
           </div>
           <Credit n={credits} size={30} coin={24} color="#fff" />
           <span style={{ display: 'block', marginTop: 8, fontSize: 13, color: 'rgba(255,255,255,0.78)', lineHeight: 1.5 }}>
-            {owner.name.split(' ')[0]} получит баллы только после вашего подтверждения. Если вещь не та — деньги вернутся вам.
+            {(owner.name || 'Партнёр').split(' ')[0]} получит баллы только после вашего подтверждения. Если вещь не та — деньги вернутся вам.
           </span>
         </div>
 

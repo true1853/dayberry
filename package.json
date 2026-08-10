@@ -9,8 +9,7 @@
     "start": "next start",
     "lint": "next lint",
     "postinstall": "prisma generate",
-    "db:push": "prisma db push",
-    "db:seed": "node prisma/seed.js"
+    "db:push": "prisma db push"
   },
   "dependencies": {
     "@prisma/client": "^6.2.1",
@@ -23,8 +22,5 @@
   },
   "devDependencies": {
     "prisma": "^6.2.1"
-  },
-  "prisma": {
-    "seed": "node prisma/seed.js"
   }
 }

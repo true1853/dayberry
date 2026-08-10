@@ -1,7 +1,6 @@
 'use client';
 // App.jsx — root: navigation, phone frame scaling, tweaks
 import React from 'react';
-import { lot, MY_LOT, ME, U } from './data.js';
 import { sessionAction, listLots, logoutAction, createLotAction, updateLotAction, getMyLots, getProfileAction, listDealsAction, getWalletAction, listChatsAction, listChainsAction, getMatchesAction, createDealAction, confirmReceiptAction, joinChainAction } from './server/actions.js';
 import { FeedList, FeedSwipe, CatRow } from './screen-feed.jsx';
 import { FeedChain, ChainDetail } from './screen-chain.jsx';
@@ -85,12 +84,6 @@ export default function App() {
   const [matches, setMatches] = React.useState([]);
   const isDesktop = useMediaQuery('(min-width: 1128px)');
 
-  const syncMe = (user) => {
-    ME.name = user.name;
-    ME.initials = (user.name || '?').trim().charAt(0).toUpperCase() || '?';
-    ME.city = user.city || 'Москва';
-  };
-
   React.useEffect(() => { applyAccent(t.accent); }, [t.accent]);
 
   React.useEffect(() => {
@@ -100,7 +93,7 @@ export default function App() {
           sessionAction(), listLots(), getMyLots(), getProfileAction(),
           listDealsAction(), getWalletAction(), listChatsAction(), listChainsAction(), getMatchesAction(),
         ]);
-        if (u) { setCurrentUser(u); setAuthed(true); syncMe(u); }
+        if (u) { setCurrentUser(u); setAuthed(true); }
         setLots(ls);
         setMyLots(ml);
         setProfile(pf);
@@ -218,7 +211,7 @@ export default function App() {
       <div className="app"><div className="safe-top" />
         <LotDetail lots={lots} myLots={myLots} lotId={top.params.lotId} onBack={back} onOffer={(L) => setOfferLot(L)} onOwnerChat={() => {
           const L = lots.find(x => x.id === top.params.lotId);
-          const ownerName = L ? (U[L.owner]?.name || '') : '';
+          const ownerName = L ? (L.ownerName || '') : '';
           const ch = chats.find(c => c.partner.name === ownerName);
           if (ch) go('chat', { id: ch.id });
         }} />
@@ -297,6 +290,7 @@ export default function App() {
           onEditLot={(L) => setEditingLot(L)}
           matches={matches}
           chats={chats}
+          chains={chains}
         />
       ) : (
         <>
@@ -305,7 +299,7 @@ export default function App() {
         </>
       )}
       {(creating || editingLot) && <div className="overlay-layer"><CreateListing onClose={() => { setCreating(false); setEditingLot(null); }} onPublish={publishLot} initialWants={currentUser && currentUser.wants} editLot={editingLot} /></div>}
-      <OfferSheet L={offerLot} myLot={(myLots && myLots[0]) || MY_LOT} balance={wallet ? wallet.balance : 0} open={!!offerLot} onClose={() => setOfferLot(null)} onConfirm={async (L, credits) => {
+      <OfferSheet L={offerLot} myLot={(myLots && myLots[0]) || null} balance={wallet ? wallet.balance : 0} open={!!offerLot} onClose={() => setOfferLot(null)} onConfirm={async (L, credits) => {
         setOfferLot(null);
         const res = await createDealAction({ lotId: L.id, credits });
         if (res.ok) {
@@ -357,7 +351,7 @@ function HomeTab({ t, go, tab, setTab, onCreate, lots, matches, chains, myLots }
       {view !== 'chain' && <CatRow active={cat} setActive={setCat} />}
       <div className="app-scroll">
         {view === 'list' && <FeedList cat={cat} lots={lots} matches={matches} hints={t.matchHints} myLot={myLots && myLots[0]} onOpen={(id) => go('lot', { lotId: id })} onChains={() => setView('chain')} />}
-        {view === 'swipe' && <FeedSwipe cat={cat} lots={lots} onOpen={(id) => go('lot', { lotId: id })} />}
+        {view === 'swipe' && <FeedSwipe cat={cat} lots={lots} myLot={myLots && myLots[0]} onOpen={(id) => go('lot', { lotId: id })} />}
         {view === 'chain' && <FeedChain chains={chains} onOpenChain={(id) => go('chain', { id })} />}
       </div>
       <TabBar tab={tab} setTab={setTab} onCreate={onCreate} unread={0} />

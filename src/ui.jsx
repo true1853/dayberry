@@ -1,6 +1,6 @@
 // ui.jsx — shared presentational components
 import React from 'react';
-import { CAT, U, ME } from './data.js';
+import { CAT } from './data.js';
 import { Icon } from './icons.jsx';
 
 export const fmt = (n) => Math.round(n).toLocaleString('ru-RU').replace(/,/g, ' ');
@@ -52,21 +52,16 @@ export function Photo({ label, url, cat = 'gadget', style, rounded = 0, badge, c
 
 // ---- avatar ----
 export function Avatar({ user, size = 40, url = '' }) {
-  const u = user === 'me' ? ME : (U[user] || {});
-  const img = url || u.avatar || '';
-  const initials = u.initials
-    || (user ? user.split(' ').map(w => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() : '?');
+  const initials = (user || '?').split(' ').map(w => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || '?';
   return (
     <div style={{ position: 'relative', width: size, height: size, flex: 'none' }}>
-      {img ? (
+      {url ? (
         <div className="avatar" style={{ width: size, height: size, overflow: 'hidden' }}>
-          <img src={img} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+          <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
         </div>
       ) : (
         <div className="avatar" style={{ width: size, height: size, fontSize: size * 0.42 }}>{initials}</div>
       )}
-      {u.online && <span style={{ position: 'absolute', right: -1, bottom: -1, width: size * 0.26, height: size * 0.26, minWidth: 9, minHeight: 9, borderRadius: 999, background: 'var(--ok)', border: '2px solid #fff' }} />}
-      {u.pro && <span style={{ position: 'absolute', left: -3, top: -3, fontSize: 9, fontWeight: 800, color: '#fff', background: 'var(--berry)', borderRadius: 999, padding: '1px 5px', border: '2px solid #fff' }}>PRO</span>}
     </div>
   );
 }
@@ -100,7 +95,7 @@ export function AIBadge({ children = 'AI', tone = 'berry' }) {
 
 // ---- lot card (feed) ----
 export function LotCard({ lot, onClick, compact }) {
-  const owner = U[lot.owner] || ME;
+  const ownerCity = lot.ownerCity || '';
   return (
     <div className="card" style={{ overflow: 'hidden', cursor: 'pointer' }} onClick={onClick}>
       <div style={{ position: 'relative' }}>
@@ -123,8 +118,8 @@ export function LotCard({ lot, onClick, compact }) {
         <div className="title clamp2" style={{ minHeight: 38 }}>{lot.title}</div>
         <div className="row gap6" style={{ justifyContent: 'space-between' }}>
           <div className="row gap6" style={{ minWidth: 0 }}>
-            <Avatar user={lot.owner} url={lot.ownerAvatar} size={20} />
-            <span className="cap ellipsis">{lot.ownerCity || owner.city}</span>
+            <Avatar user={lot.ownerName} url={lot.ownerAvatar} size={20} />
+            <span className="cap ellipsis">{lot.ownerCity || ''}</span>
           </div>
           <span className="cap">{lot.posted}</span>
         </div>

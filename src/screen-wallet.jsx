@@ -1,6 +1,5 @@
 // screen-wallet.jsx — barter-credit wallet
 import React from 'react';
-import { WALLET, ME } from './data.js';
 import { Icon } from './icons.jsx';
 import { fmt, Coin, Credit, Avatar, AppBar, IconBtn, Sheet } from './ui.jsx';
 
@@ -12,10 +11,10 @@ const TX_ICON = {
 };
 
 export function Wallet({ wallet, onInfo }) {
-  const w = wallet || WALLET;
+  const w = wallet || { balance: 0, escrow: 0, delta30: 0, demurrageInDays: 0, tx: [] };
   return (
     <div className="app-scroll">
-      <AppBar title="Кошелёк" big sub={ME.name + ' · ' + ME.city} right={<IconBtn name="info" onClick={onInfo} />} />
+      <AppBar title="Кошелёк" big sub="Бартер-кредиты · 1 Б = 1 ₽" right={<IconBtn name="info" onClick={onInfo} />} />
       <div className="px col gap16" style={{ paddingBottom: 24 }}>
         <div className="card" style={{ padding: 18, background: 'linear-gradient(140deg, var(--berry), var(--berry-900))', color: '#fff', position: 'relative', overflow: 'hidden' }}>
           <div style={{ position: 'absolute', right: -30, top: -30, width: 140, height: 140, borderRadius: 999, background: 'rgba(255,255,255,0.08)' }} />
