@@ -40,16 +40,17 @@ function Field({ label, type = 'text', value, onChange, placeholder, autoComplet
   );
 }
 
-function SocialBtn({ icon, label, onClick }) {
+function SocialBtn({ icon, label, onClick, soon }) {
   return (
-    <button onClick={onClick} style={{
+    <button onClick={soon ? undefined : onClick} disabled={soon} style={{
       flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
       padding: '12px 10px', border: '1.5px solid var(--line)', borderRadius: 14,
-      background: '#fff', cursor: 'pointer', fontFamily: 'var(--font)', fontSize: 14, fontWeight: 600, color: 'var(--ink)',
-      boxShadow: 'var(--sh-1)',
+      background: '#fff', cursor: soon ? 'default' : 'pointer', fontFamily: 'var(--font)', fontSize: 14, fontWeight: 600, color: 'var(--ink)',
+      boxShadow: 'var(--sh-1)', opacity: soon ? 0.65 : 1, position: 'relative',
     }}>
       {icon}
       <span>{label}</span>
+      {soon && <span style={{ position: 'absolute', top: 6, right: 8, fontSize: 9.5, fontWeight: 800, color: 'var(--berry)', background: 'var(--berry-50)', borderRadius: 999, padding: '2px 7px' }}>СКОРО</span>}
     </button>
   );
 }
@@ -192,7 +193,7 @@ export function AuthScreen({ onDone }) {
 
           <div className="row gap10">
             <SocialBtn icon={<VkIcon />} label="VK ID" onClick={() => socialAuth('vk')} />
-            <SocialBtn icon={<YandexIcon />} label="Яндекс ID" onClick={() => socialAuth('yandex')} />
+            <SocialBtn icon={<YandexIcon />} label="Яндекс ID" soon />
           </div>
 
           {!isLogin && (

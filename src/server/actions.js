@@ -2,7 +2,8 @@
 
 import { prisma } from '../../lib/prisma';
 import { analyzeListing, computeMatches } from '../../lib/ai';
-import { getOAuthUrl } from '../../lib/oauth';
+import { vkAuthStart, yandexAuthStart } from '../../lib/oauth';
+import { cookies } from 'next/headers';
 import {
   createSession,
   destroySession,
@@ -527,11 +528,25 @@ export async function joinChainAction(chainId) {
 // ---------- OAuth (Yandex ID / VK ID) ----------
 
 export async function getOAuthUrlAction(provider) {
-  const res = getOAuthUrl(provider);
-  if (!res) {
-    return { ok: false, error: provider === 'vk' ? 'OAuth VK не настроен — добавьте ключи в .env' : 'OAuth Яндекса не настроен — добавьте ключи в .env' };
+  const c = await cookies();
+  if (provider === 'vk') {
+    const r = vkAuthStart();
+    if (!r) return { ok: false, error: 'OAuth VK не настроен — добавьте ключи в .env' };
+    c.set('vk_oauth', JSON.stringify({ state: r.state, verifier: r.codeVerifier }), {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 600,
+      path: '/',
+    });
+    return { ok: true, url: r.url };
   }
-  return { ok: true, url: res.url };
+  if (provider === 'yandex') {
+    const r = yandexAuthStart();
+    if (!r) return { ok: false, error: 'OAuth Яндекса не настроен — добавьте ключи в .env' };
+    return { ok: true, url: r.url };
+  }
+  return { ok: false, error: 'Неизвестный провайдер' };
 }
 
 // ---------- AI listing analysis ----------

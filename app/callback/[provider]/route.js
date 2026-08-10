@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
+import { cookies } from 'next/headers';
 import { prisma } from '../../../lib/prisma';
 import { createSession, hashPassword } from '../../../lib/auth';
-import { exchangeYandex, exchangeVk, parseState, APP_URL } from '../../../lib/oauth';
+import { exchangeYandex, exchangeVk, APP_URL } from '../../../lib/oauth';
 
 async function upsertUser(profile) {
   const email = (profile.email || '').toLowerCase().trim() || `${profile.provider}_${profile.externalId}@dayberry.app`;
@@ -28,17 +29,36 @@ export async function GET(req, { params }) {
   const fail = (msg) => NextResponse.redirect(`${base}/?oauth=error${msg ? '&m=' + encodeURIComponent(msg) : ''}`);
 
   try {
-    if (provider !== 'yandex' && provider !== 'vk') return fail('bad provider');
-    const code = url.searchParams.get('code');
-    if (!code) return fail('no code');
+    if (provider === 'vk') {
+      const code = url.searchParams.get('code');
+      const deviceId = url.searchParams.get('device_id');
+      const state = url.searchParams.get('state');
+      if (!code || !deviceId) return fail('no code');
 
-    const profile = provider === 'yandex'
-      ? await exchangeYandex(code)
-      : await exchangeVk(code, parseState(url.searchParams.get('state')).deviceId);
+      const c = await cookies();
+      const stored = c.get('vk_oauth')?.value;
+      c.delete('vk_oauth');
+      if (!stored) return fail('oauth state');
+      let parsed;
+      try { parsed = JSON.parse(stored); } catch { parsed = null; }
+      if (!parsed || parsed.state !== state || !parsed.verifier) return fail('state mismatch');
 
-    const user = await upsertUser(profile);
-    await createSession(user.id);
-    return NextResponse.redirect(`${base}/`);
+      const profile = await exchangeVk(code, deviceId, parsed.verifier, state);
+      const user = await upsertUser(profile);
+      await createSession(user.id);
+      return NextResponse.redirect(`${base}/`);
+    }
+
+    if (provider === 'yandex') {
+      const code = url.searchParams.get('code');
+      if (!code) return fail('no code');
+      const profile = await exchangeYandex(code);
+      const user = await upsertUser(profile);
+      await createSession(user.id);
+      return NextResponse.redirect(`${base}/`);
+    }
+
+    return fail('bad provider');
   } catch (e) {
     console.error('[oauth]', provider, e);
     return fail('oauth failed');
