@@ -39,6 +39,7 @@ async function main() {
       passwordHash: await bcrypt.hash('demo12345', 10),
       city: ME.city,
       bio: 'Меняю технику, книги и вещи. Обмен в Москве или по договорённости.',
+      wants: ME.wants,
       rating: ME.rating,
       dealsCount: ME.deals,
       balance: WALLET.balance,

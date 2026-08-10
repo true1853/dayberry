@@ -100,7 +100,7 @@ export async function updateProfileAction(input) {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: 'Требуется вход' };
 
-  const { name, city, bio } = input || {};
+  const { name, city, bio, wants } = input || {};
   if (!name || !name.trim()) return { ok: false, error: 'Введите имя' };
 
   const updated = await prisma.user.update({
@@ -109,6 +109,7 @@ export async function updateProfileAction(input) {
       name: name.trim(),
       city: (city || '').trim() || 'Москва',
       bio: (bio || '').trim(),
+      wants: (wants || '').trim(),
     },
   });
   return { ok: true, user: serializeUser(updated) };
@@ -491,7 +492,7 @@ export async function getMatchesAction() {
   const myLots = user ? lots.filter(l => l.ownerId === user.id) : [];
   const others = lots.filter(l => !user || l.ownerId !== user.id);
 
-  const matches = await computeMatches({ myLots, others });
+  const matches = await computeMatches({ myLots, others, myWants: user?.wants || '' });
   return matches.map((m, i) => ({
     id: `m-${i}-${m.lot.id}`,
     lot: m.lot.id,

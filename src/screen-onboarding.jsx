@@ -112,13 +112,13 @@ const inputStyle = {
   transition: 'border-color .15s',
 };
 
-export function CreateListing({ onClose, onPublish }) {
+export function CreateListing({ onClose, onPublish, initialWants = '' }) {
   const [kind, setKind] = React.useState('item'); // 'item' | 'service'
   const [cat, setCat] = React.useState('gadget');
   const [condition, setCondition] = React.useState('Новое или Б/У');
   const [title, setTitle] = React.useState('');
   const [value, setValue] = React.useState('');
-  const [wants, setWants] = React.useState('');
+  const [wants, setWants] = React.useState(initialWants || '');
   const [desc, setDesc] = React.useState('');
   const [photo, setPhoto] = React.useState('');
   const [photoName, setPhotoName] = React.useState('');

@@ -14,6 +14,7 @@ model User {
   phone        String?
   city         String        @default("Москва")
   bio          String        @default("")
+  wants        String        @default("")
   avatar       String?       @default("")
   passwordHash String
   rating       Float         @default(4.9)

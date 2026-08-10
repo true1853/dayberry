@@ -67,6 +67,7 @@ export function EditProfileSheet({ user, open, onClose, onSaved }) {
   const [name, setName] = React.useState(user?.name || '');
   const [city, setCity] = React.useState(user?.city || '');
   const [bio, setBio] = React.useState(user?.bio || '');
+  const [wants, setWants] = React.useState(user?.wants || '');
   const [error, setError] = React.useState('');
   const [saving, setSaving] = React.useState(false);
 
@@ -75,6 +76,7 @@ export function EditProfileSheet({ user, open, onClose, onSaved }) {
       setName(user?.name || '');
       setCity(user?.city || '');
       setBio(user?.bio || '');
+      setWants(user?.wants || '');
       setError('');
     }
   }, [open, user]);
@@ -83,7 +85,7 @@ export function EditProfileSheet({ user, open, onClose, onSaved }) {
     if (!name.trim()) return setError('Введите имя');
     setSaving(true);
     setError('');
-    const res = await updateProfileAction({ name, city, bio });
+    const res = await updateProfileAction({ name, city, bio, wants });
     setSaving(false);
     if (!res.ok) return setError(res.error || 'Ошибка сохранения');
     onSaved(res.user);
@@ -107,6 +109,11 @@ export function EditProfileSheet({ user, open, onClose, onSaved }) {
           <label className="cap">О себе</label>
           <textarea value={bio} onChange={e => setBio(e.target.value)} placeholder="Чем меняетесь, где, как любите договариваться…" rows={4} style={{ ...field, resize: 'none', lineHeight: 1.5 }} />
         </div>
+        <div className="col gap6">
+          <label className="cap">Хочу получить</label>
+          <input value={wants} onChange={e => setWants(e.target.value)} placeholder="Например: ноутбук, клининг, услуги дизайна" style={field} />
+          <span className="cap">Эти хотелки используют умный мэтчинг и AI при создании объявлений.</span>
+        </div>
         {error && (
           <div style={{ padding: '10px 14px', borderRadius: 12, background: 'var(--berry-50)', border: '1px solid var(--berry-200)', color: 'var(--berry-700)', fontSize: 13.5, fontWeight: 500 }}>{error}</div>
         )}
@@ -129,6 +136,7 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, 
   const deals = (user && user.dealsCount) || ME.deals;
   const balance = (user && user.balance) || 0;
   const bio = (profile && profile.bio) || (user && user.bio) || '';
+  const wants = (profile && profile.wants) || (user && user.wants) || '';
   const avatar = (profile && profile.avatar) || (user && user.avatar) || '';
   const reviews = (profile && profile.reviews) || [];
   const initial = (name || '?').trim().charAt(0).toUpperCase();
@@ -215,6 +223,17 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, 
           <div style={{ width: '100%', padding: '12px 14px', background: 'var(--berry-50)', borderRadius: 14, border: '1px solid var(--berry-100)' }}>
             <span style={{ fontSize: 13.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>
               {bio || 'Пока ничего о себе не написано.'}
+            </span>
+          </div>
+
+          {/* wants */}
+          <div className="card" style={{ width: '100%', padding: '12px 14px', gap: 6 }}>
+            <div className="row gap6" style={{ alignItems: 'center' }}>
+              <Icon name="spark" size={15} color="var(--berry)" />
+              <span className="over" style={{ color: 'var(--berry)' }}>Хочу получить</span>
+            </div>
+            <span style={{ fontSize: 14, color: 'var(--ink-2)', lineHeight: 1.5 }}>
+              {wants || 'Пока не указано. Добавьте хотелки — мэтчинг найдёт нужные лоты.'}
             </span>
           </div>
 

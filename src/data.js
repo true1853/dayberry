@@ -1,6 +1,6 @@
 // data.js — mock content for the Дай бери prototype (credits ≈ rubles)
 
-export const ME = { id: 'me', name: 'Аня', initials: 'А', rating: 4.9, deals: 23, city: 'Москва' };
+export const ME = { id: 'me', name: 'Аня', initials: 'А', rating: 4.9, deals: 23, city: 'Москва', wants: 'ноутбук, велосипед, услуги дизайна' };
 
 export const U = {
   kirill:  { name: 'Кирилл М.',   initials: 'К', rating: 4.8, deals: 41, city: 'Москва',          online: true },
