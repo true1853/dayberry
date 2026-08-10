@@ -1,6 +1,6 @@
 // web-app.jsx — desktop web layout (Airbnb-inspired)
 import React from 'react';
-import { lot, MY_LOT, U, CHAIN, CHATLIST, ME } from './data.js';
+import { lot, MY_LOT, U, CHAIN, ME } from './data.js';
 import { CITIES, REMOTE } from './cities.js';
 import { Icon } from './icons.jsx';
 import { fmt, Logo, Credit, Photo, Avatar, Stars, CatTag, AIBadge } from './ui.jsx';
@@ -462,30 +462,46 @@ function ChainDetailW({ chain, onBack, onJoin }) {
 }
 
 // ---------------- deals ----------------
-function DealsView({ onBack, onOpenLot }) {
+const fmtChatTime = (iso) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  const y = new Date(now); y.setDate(now.getDate() - 1);
+  if (d.toDateString() === y.toDateString()) return 'вчера';
+  return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+};
+
+function DealsView({ onBack, chats = [] }) {
+  const sorted = [...chats].sort((a, b) => (b.messages?.[b.messages.length - 1]?.t || b.createdAt || '') < (a.messages?.[a.messages.length - 1]?.t || a.createdAt || '') ? -1 : 1);
   return (
     <div className="web-container web-section">
       <button className="web-back" onClick={onBack}><Icon name="back" size={16} color="var(--ink-2)" />На главную</button>
       <div className="web-head" style={{ marginTop: 16 }}><h2>Сделки</h2></div>
-      <div className="card" style={{ overflow: 'hidden', maxWidth: 720 }}>
-        {CHATLIST.map((c, i) => {
-          const u = U[c.owner];
-          return (
-            <div key={c.id} className="row gap14" style={{ padding: '16px 20px', borderTop: i ? '1px solid var(--line-2)' : 'none', cursor: 'pointer' }}>
-              <Avatar user={c.owner} size={48} />
-              <div className="grow col" style={{ gap: 2 }}>
-                <div className="row" style={{ justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: 15, fontWeight: 600 }}>{u.name}</span>
-                  <span className="cap">{c.t}</span>
+      {sorted.length ? (
+        <div className="card" style={{ overflow: 'hidden', maxWidth: 720 }}>
+          {sorted.map((c, i) => {
+            const last = c.messages && c.messages[c.messages.length - 1];
+            const dealTitle = c.deal ? c.deal.title : null;
+            const credits = c.deal && c.deal.credits > 0 ? ` · ${c.deal.credits} Б` : '';
+            return (
+              <div key={c.id} className="row gap14" style={{ padding: '16px 20px', borderTop: i ? '1px solid var(--line-2)' : 'none' }}>
+                <Avatar user="them" url={c.partner.avatar} size={48} />
+                <div className="grow col" style={{ gap: 2 }}>
+                  <div className="row" style={{ justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 15, fontWeight: 600 }}>{c.partner.name}</span>
+                    <span className="cap">{fmtChatTime(last?.t || c.createdAt)}</span>
+                  </div>
+                  <span className="sub">{dealTitle ? `${dealTitle}${credits}` : 'Обсуждение обмена'}</span>
+                  {last && <span className="cap ellipsis" style={{ maxWidth: 500 }}>{last.text}</span>}
                 </div>
-                <span className="sub">{c.deal}</span>
-                <span className="cap ellipsis" style={{ maxWidth: 500 }}>{c.last}</span>
               </div>
-              {c.unread > 0 && <span style={{ width: 20, height: 20, borderRadius: 999, background: 'var(--berry)', color: '#fff', fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{c.unread}</span>}
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="web-empty"><Icon name="chat" size={36} color="var(--ink-3)" /><span>Сделок пока нет — предложите обмен на объявлении</span></div>
+      )}
     </div>
   );
 }
@@ -564,7 +580,7 @@ function ProfileView({ user, profile, myLots, onOpenLot, onLogout, onProfileSave
 }
 
 // ---------------- root ----------------
-export default function WebApp({ lots, myLots, user, profile, onLogout, onProfileSaved, onOffer, onCreate, onEditLot, matches = [] }) {
+export default function WebApp({ lots, myLots, user, profile, onLogout, onProfileSaved, onOffer, onCreate, onEditLot, matches = [], chats = [] }) {
   const [view, setView] = React.useState('home');
   const [cat, setCat] = React.useState('all');
   const [city, setCity] = React.useState('all');
@@ -582,7 +598,7 @@ export default function WebApp({ lots, myLots, user, profile, onLogout, onProfil
         {view === 'home' && <HomeView lots={lots} myLots={myLots} matches={matches} query={query} setQuery={setQuery} cat={cat} setCat={setCat} city={city} setCity={setCity} onOpen={(id) => { setSelLot(id); setView('lot'); }} onOffer={onOffer} onChains={() => setView('chains')} />}
         {view === 'lot' && selected && <LotView L={selected} onBack={goHome} onOffer={onOffer} />}
         {view === 'chains' && <ChainsView onBack={goHome} onJoin={() => { setView('deals'); }} />}
-        {view === 'deals' && <DealsView onBack={goHome} />}
+        {view === 'deals' && <DealsView onBack={goHome} chats={chats} />}
         {view === 'profile' && <ProfileView user={user} profile={profile} myLots={myLots} onOpenLot={(id) => { setSelLot(id); setView('lot'); }} onLogout={onLogout} onProfileSaved={onProfileSaved} onWallet={goHome} onEditLot={onEditLot} />}
       </div>
       <WebFooter />

@@ -296,6 +296,7 @@ export default function App() {
           onCreate={() => setCreating(true)}
           onEditLot={(L) => setEditingLot(L)}
           matches={matches}
+          chats={chats}
         />
       ) : (
         <>
