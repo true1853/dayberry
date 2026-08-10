@@ -16,6 +16,9 @@ model User {
   bio          String        @default("")
   wants        String        @default("")
   avatar       String?       @default("")
+  notifyPush   Boolean       @default(true)
+  notifyEmail  Boolean       @default(true)
+  notifyDeals  Boolean       @default(true)
   passwordHash String
   rating       Float         @default(4.9)
   dealsCount   Int           @default(0)

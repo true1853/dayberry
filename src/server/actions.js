@@ -100,7 +100,7 @@ export async function updateProfileAction(input) {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: 'Требуется вход' };
 
-  const { name, city, bio, wants } = input || {};
+  const { name, city, bio, wants, phone } = input || {};
   if (!name || !name.trim()) return { ok: false, error: 'Введите имя' };
 
   const updated = await prisma.user.update({
@@ -110,6 +110,39 @@ export async function updateProfileAction(input) {
       city: (city || '').trim() || 'Москва',
       bio: (bio || '').trim(),
       wants: (wants || '').trim(),
+      phone: (phone || '').trim(),
+    },
+  });
+  return { ok: true, user: serializeUser(updated) };
+}
+
+export async function changePasswordAction(input) {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: 'Требуется вход' };
+
+  const { currentPassword = '', newPassword = '' } = input || {};
+  if (!currentPassword) return { ok: false, error: 'Введите текущий пароль' };
+  if (!newPassword || newPassword.length < 6) return { ok: false, error: 'Новый пароль — минимум 6 символов' };
+
+  const u = await prisma.user.findUnique({ where: { id: user.id } });
+  const match = await verifyPassword(currentPassword, u.passwordHash);
+  if (!match) return { ok: false, error: 'Неверный текущий пароль' };
+
+  await prisma.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(newPassword) } });
+  return { ok: true };
+}
+
+export async function updateSettingsAction(input) {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: 'Требуется вход' };
+
+  const { notifyPush, notifyEmail, notifyDeals } = input || {};
+  const updated = await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      notifyPush: !!notifyPush,
+      notifyEmail: !!notifyEmail,
+      notifyDeals: !!notifyDeals,
     },
   });
   return { ok: true, user: serializeUser(updated) };

@@ -3,7 +3,7 @@ import React from 'react';
 import { ME } from './data.js';
 import { Icon } from './icons.jsx';
 import { Credit, AppBar, IconBtn, TabBar, Photo, Sheet } from './ui.jsx';
-import { updateProfileAction, updateAvatarAction } from './server/actions.js';
+import { updateProfileAction, updateAvatarAction, changePasswordAction, updateSettingsAction } from './server/actions.js';
 
 function StatBox({ value, label }) {
   return (
@@ -63,11 +63,36 @@ const fmtDate = (iso) => {
   return `${d} ${months[(m || 1) - 1]}`;
 };
 
+const fieldStyle = { width: '100%', padding: '12px 14px', border: '1.5px solid var(--line)', borderRadius: 10, fontSize: 15, fontFamily: 'var(--font)', background: '#fff', color: 'var(--ink)', outline: 'none', boxSizing: 'border-box' };
+
+function Switch({ on, onChange }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={!!on}
+      onClick={() => onChange(!on)}
+      style={{
+        position: 'relative', width: 42, height: 24, borderRadius: 999, border: 'none', cursor: 'pointer',
+        padding: 0, flex: 'none', transition: 'background .15s', background: on ? 'var(--berry)' : 'var(--line)',
+      }}
+    >
+      <i style={{
+        position: 'absolute', top: 3, left: 3, width: 18, height: 18, borderRadius: '50%', background: '#fff',
+        boxShadow: '0 1px 3px rgba(0,0,0,.25)', transition: 'transform .15s', transform: on ? 'translateX(18px)' : 'none',
+      }} />
+    </button>
+  );
+}
+
+const ERR_BOX = { padding: '10px 14px', borderRadius: 12, background: 'var(--berry-50)', border: '1px solid var(--berry-200)', color: 'var(--berry-700)', fontSize: 13.5, fontWeight: 500 };
+
 export function EditProfileSheet({ user, open, onClose, onSaved }) {
   const [name, setName] = React.useState(user?.name || '');
   const [city, setCity] = React.useState(user?.city || '');
   const [bio, setBio] = React.useState(user?.bio || '');
   const [wants, setWants] = React.useState(user?.wants || '');
+  const [phone, setPhone] = React.useState(user?.phone || '');
   const [error, setError] = React.useState('');
   const [saving, setSaving] = React.useState(false);
 
@@ -77,6 +102,7 @@ export function EditProfileSheet({ user, open, onClose, onSaved }) {
       setCity(user?.city || '');
       setBio(user?.bio || '');
       setWants(user?.wants || '');
+      setPhone(user?.phone || '');
       setError('');
     }
   }, [open, user]);
@@ -85,38 +111,38 @@ export function EditProfileSheet({ user, open, onClose, onSaved }) {
     if (!name.trim()) return setError('Введите имя');
     setSaving(true);
     setError('');
-    const res = await updateProfileAction({ name, city, bio, wants });
+    const res = await updateProfileAction({ name, city, bio, wants, phone });
     setSaving(false);
     if (!res.ok) return setError(res.error || 'Ошибка сохранения');
     onSaved(res.user);
     onClose();
   };
 
-  const field = { width: '100%', padding: '12px 14px', border: '1.5px solid var(--line)', borderRadius: 10, fontSize: 15, fontFamily: 'var(--font)', background: '#fff', color: 'var(--ink)', outline: 'none', boxSizing: 'border-box' };
-
   return (
     <Sheet open={open} onClose={onClose} title="Редактировать профиль">
       <div className="px col gap14" style={{ paddingBottom: 10 }}>
         <div className="col gap6">
           <label className="cap">Имя</label>
-          <input value={name} onChange={e => setName(e.target.value)} placeholder="Как вас зовут?" style={field} />
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="Как вас зовут?" style={fieldStyle} />
         </div>
         <div className="col gap6">
           <label className="cap">Город</label>
-          <input value={city} onChange={e => setCity(e.target.value)} placeholder="Москва" style={field} />
+          <input value={city} onChange={e => setCity(e.target.value)} placeholder="Москва" style={fieldStyle} />
+        </div>
+        <div className="col gap6">
+          <label className="cap">Телефон</label>
+          <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="+7 999 000-00-00" style={fieldStyle} />
         </div>
         <div className="col gap6">
           <label className="cap">О себе</label>
-          <textarea value={bio} onChange={e => setBio(e.target.value)} placeholder="Чем меняетесь, где, как любите договариваться…" rows={4} style={{ ...field, resize: 'none', lineHeight: 1.5 }} />
+          <textarea value={bio} onChange={e => setBio(e.target.value)} placeholder="Чем меняетесь, где, как любите договариваться…" rows={4} style={{ ...fieldStyle, resize: 'none', lineHeight: 1.5 }} />
         </div>
         <div className="col gap6">
           <label className="cap">Хочу получить</label>
-          <input value={wants} onChange={e => setWants(e.target.value)} placeholder="Например: ноутбук, клининг, услуги дизайна" style={field} />
+          <input value={wants} onChange={e => setWants(e.target.value)} placeholder="Например: ноутбук, клининг, услуги дизайна" style={fieldStyle} />
           <span className="cap">Эти хотелки используют умный мэтчинг и AI при создании объявлений.</span>
         </div>
-        {error && (
-          <div style={{ padding: '10px 14px', borderRadius: 12, background: 'var(--berry-50)', border: '1px solid var(--berry-200)', color: 'var(--berry-700)', fontSize: 13.5, fontWeight: 500 }}>{error}</div>
-        )}
+        {error && <div style={ERR_BOX}>{error}</div>}
         <button className="btn btn-primary btn-block btn-lg" onClick={save} disabled={saving} style={{ opacity: saving ? 0.7 : 1 }}>
           {saving ? 'Сохраняем…' : 'Сохранить'}
         </button>
@@ -125,12 +151,99 @@ export function EditProfileSheet({ user, open, onClose, onSaved }) {
   );
 }
 
+export function ChangePasswordSheet({ open, onClose }) {
+  const [current, setCurrent] = React.useState('');
+  const [next, setNext] = React.useState('');
+  const [repeat, setRepeat] = React.useState('');
+  const [error, setError] = React.useState('');
+  const [saving, setSaving] = React.useState(false);
+  const [done, setDone] = React.useState(false);
+
+  React.useEffect(() => {
+    if (open) { setCurrent(''); setNext(''); setRepeat(''); setError(''); setDone(false); }
+  }, [open]);
+
+  const save = async () => {
+    if (!current) return setError('Введите текущий пароль');
+    if (next.length < 6) return setError('Новый пароль — минимум 6 символов');
+    if (next !== repeat) return setError('Пароли не совпадают');
+    setSaving(true);
+    setError('');
+    const res = await changePasswordAction({ currentPassword: current, newPassword: next });
+    setSaving(false);
+    if (!res.ok) return setError(res.error || 'Ошибка');
+    setDone(true);
+  };
+
+  const passField = { ...fieldStyle, letterSpacing: '1px' };
+
+  return (
+    <Sheet open={open} onClose={onClose} title="Сменить пароль">
+      <div className="px col gap14" style={{ paddingBottom: 10 }}>
+        {done ? (
+          <div className="col gap14" style={{ alignItems: 'center', padding: '18px 0' }}>
+            <Icon name="checkCircle" size={42} color="var(--ok)" />
+            <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>Пароль изменён</span>
+            <button className="btn btn-primary btn-block btn-lg" onClick={onClose}>Готово</button>
+          </div>
+        ) : (
+          <>
+            <div className="col gap6">
+              <label className="cap">Текущий пароль</label>
+              <input type="password" value={current} onChange={e => setCurrent(e.target.value)} placeholder="••••••••" style={passField} />
+            </div>
+            <div className="col gap6">
+              <label className="cap">Новый пароль</label>
+              <input type="password" value={next} onChange={e => setNext(e.target.value)} placeholder="Минимум 6 символов" style={passField} />
+            </div>
+            <div className="col gap6">
+              <label className="cap">Повторите новый пароль</label>
+              <input type="password" value={repeat} onChange={e => setRepeat(e.target.value)} placeholder="••••••••" style={passField} />
+            </div>
+            {error && <div style={ERR_BOX}>{error}</div>}
+            <button className="btn btn-primary btn-block btn-lg" onClick={save} disabled={saving} style={{ opacity: saving ? 0.7 : 1 }}>
+              {saving ? 'Сохраняем…' : 'Сохранить'}
+            </button>
+          </>
+        )}
+      </div>
+    </Sheet>
+  );
+}
+
+export function AboutSheet({ open, onClose }) {
+  return (
+    <Sheet open={open} onClose={onClose} title="О приложении">
+      <div className="px col gap14" style={{ paddingBottom: 10 }}>
+        <div className="col" style={{ alignItems: 'center', gap: 6, padding: '10px 0 4px' }}>
+          <div className="logo" style={{ width: 58, height: 58, fontSize: 27 }}>ДБ</div>
+          <span className="h3">Дай бери</span>
+          <span className="cap">Обмен без денег · версия 1.0.0</span>
+        </div>
+        <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--ink-2)', margin: 0 }}>
+          Меняйтесь вещами и услугами без денег. Внутренние баллы (1 Б = 1 ₽) защищают сделку: доплата
+          уходит в эскроу и размораживается после подтверждения получения.
+        </p>
+        <div className="row gap8">
+          <div className="chip chip-berry" onClick={() => {}}><Icon name="shield" size={14} color="var(--berry)" />Правила сервиса</div>
+          <div className="chip chip-berry" onClick={() => {}}><Icon name="chat" size={14} color="var(--berry)" />Поддержка</div>
+        </div>
+        <span className="cap" style={{ textAlign: 'center', color: 'var(--ink-3)' }}>dayberry.prismatica.agency</span>
+      </div>
+    </Sheet>
+  );
+}
+
 export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, myLots = [], onProfileSaved }) {
   const [activeTab, setActiveTab] = React.useState('lots'); // 'lots' | 'reviews'
   const [editing, setEditing] = React.useState(false);
+  const [passwordOpen, setPasswordOpen] = React.useState(false);
+  const [aboutOpen, setAboutOpen] = React.useState(false);
+  const [shareNote, setShareNote] = React.useState('');
   const avatarRef = React.useRef(null);
 
   const name = (user && user.name) || ME.name;
+  const email = (user && user.email) || '';
   const city = (user && user.city) || ME.city;
   const rating = (user && user.rating) || ME.rating;
   const deals = (user && user.dealsCount) || ME.deals;
@@ -140,6 +253,31 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, 
   const avatar = (profile && profile.avatar) || (user && user.avatar) || '';
   const reviews = (profile && profile.reviews) || [];
   const initial = (name || '?').trim().charAt(0).toUpperCase();
+
+  const setting = (k) => !user || user[k] !== false;
+  const toggleSetting = async (k) => {
+    if (!user) return;
+    const next = {
+      notifyPush: setting('notifyPush'),
+      notifyEmail: setting('notifyEmail'),
+      notifyDeals: setting('notifyDeals'),
+      [k]: !setting(k),
+    };
+    const res = await updateSettingsAction(next);
+    if (res.ok && res.user && onProfileSaved) onProfileSaved(res.user);
+  };
+
+  const shareInvite = async () => {
+    const text = 'Дай бери — обмен без денег. Присоединяйся: https://dayberry.prismatica.agency';
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try { await navigator.share({ title: 'Дай бери', text }); return; } catch {}
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      setShareNote('Ссылка скопирована');
+      setTimeout(() => setShareNote(''), 2500);
+    } catch {}
+  };
 
   const onAvatarFile = async (e) => {
     const f = e.target.files && e.target.files[0];
@@ -313,13 +451,20 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, 
         )}
 
         {/* settings */}
-        <SectionHeader title="Настройки" />
+        <SectionHeader title="Аккаунт" />
         <GroupCard>
-          <SettingsRow icon="bell" label="Уведомления" sub="Push, email" />
+          <SettingsRow icon="user" label="Профиль" sub={email || 'Email'} onClick={() => setEditing(true)} />
           <Divider />
-          <SettingsRow icon="shield" label="Безопасность" sub="Пароль, двухфакторная" />
+          <SettingsRow icon="shield" label="Сменить пароль" onClick={() => setPasswordOpen(true)} />
+        </GroupCard>
+
+        <SectionHeader title="Уведомления" />
+        <GroupCard>
+          <SettingsRow icon="bell" label="Push-уведомления" right={<Switch on={setting('notifyPush')} onChange={() => toggleSetting('notifyPush')} />} />
           <Divider />
-          <SettingsRow icon="map" label="Город и доставка" sub={city} onClick={() => setEditing(true)} />
+          <SettingsRow icon="mail" label="Email-рассылка" right={<Switch on={setting('notifyEmail')} onChange={() => toggleSetting('notifyEmail')} />} />
+          <Divider />
+          <SettingsRow icon="chat" label="Сделки и чаты" right={<Switch on={setting('notifyDeals')} onChange={() => toggleSetting('notifyDeals')} />} />
         </GroupCard>
 
         <SectionHeader title="Приложение" />
@@ -329,9 +474,9 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, 
             onClick={() => setTab('wallet')}
           />
           <Divider />
-          <SettingsRow icon="gift" label="Пригласить друга" sub="+1 000 Б за каждого" />
+          <SettingsRow icon="gift" label="Пригласить друга" sub={shareNote || '+1 000 Б за каждого'} onClick={shareInvite} />
           <Divider />
-          <SettingsRow icon="info" label="О приложении" sub="Версия 1.0.0" />
+          <SettingsRow icon="info" label="О приложении" sub="Версия 1.0.0" onClick={() => setAboutOpen(true)} />
         </GroupCard>
 
         <SectionHeader title="" />
@@ -344,6 +489,8 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, 
 
       <TabBar tab={tab} setTab={setTab} onCreate={onCreate} unread={2} />
       <EditProfileSheet user={profile || user} open={editing} onClose={() => setEditing(false)} onSaved={onProfileSaved} />
+      <ChangePasswordSheet open={passwordOpen} onClose={() => setPasswordOpen(false)} />
+      <AboutSheet open={aboutOpen} onClose={() => setAboutOpen(false)} />
     </div>
   );
 }
