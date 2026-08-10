@@ -63,6 +63,7 @@ async function main() {
         value: L.value,
         aiLow: L.aiLow,
         aiHigh: L.aiHigh,
+        valuationSource: 'ai',
         condition: L.condition,
         photo: L.photo,
         photoUrl: L.photoUrl || '',

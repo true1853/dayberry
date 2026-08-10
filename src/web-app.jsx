@@ -248,17 +248,18 @@ function HomeView({ lots, query, setQuery, cat, setCat, city, setCity, onOpen, o
 // ---------------- lot detail ----------------
 function Valuation({ L }) {
   const pct = Math.max(6, Math.min(94, ((L.value - L.aiLow) / (L.aiHigh - L.aiLow)) * 100));
+  const isAi = L.valuationSource === 'ai';
   return (
     <div className="card" style={{ border: '1px solid var(--berry-100)' }}>
       <div className="row" style={{ justifyContent: 'space-between', marginBottom: 14 }}>
-        <span className="row gap6"><AIBadge>AI-оценка</AIBadge></span>
-        <span className="row gap4" style={{ fontSize: 13, color: 'var(--ok)' }}><Icon name="checkCircle" size={14} color="var(--ok)" />честная цена</span>
+        <span className="row gap6">{isAi ? <AIBadge>AI-оценка</AIBadge> : <span className="web-lot-badge">Оценка автора</span>}</span>
+        <span className="row gap4" style={{ fontSize: 13, color: 'var(--ok)' }}><Icon name="checkCircle" size={14} color="var(--ok)" />ориентир</span>
       </div>
       <div className="row" style={{ alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
         <Credit n={L.value} size={28} coin={24} />
         <span className="sub">≈ ₽{fmt(L.value)}</span>
       </div>
-      <span className="sub">Ориентир по похожим объявлениям — точную стоимость согласуйте в чате.</span>
+      <span className="sub">{isAi ? 'Ориентир по похожим объявлениям — точную стоимость согласуйте в чате.' : 'Цену назначил автор объявления. Обсудите доплату баллами в чате.'}</span>
       <div style={{ position: 'relative', height: 8, borderRadius: 999, background: 'linear-gradient(90deg, var(--berry-100), var(--berry-200), var(--berry))', marginTop: 14 }}>
         <div style={{ position: 'absolute', top: -4, left: `${pct}%`, transform: 'translateX(-50%)', width: 16, height: 16, borderRadius: 999, background: '#fff', border: '3px solid var(--berry)' }} />
       </div>

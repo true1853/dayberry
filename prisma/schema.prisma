@@ -66,6 +66,7 @@ model Lot {
   value     Int
   aiLow     Int
   aiHigh    Int
+  valuationSource String @default("manual") // 'ai' | 'manual'
   condition String   @default("Новое или Б/У")
   photo     String   @default("")
   photoUrl  String?  @default("")

@@ -191,7 +191,7 @@ export async function createLotAction(input) {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: 'Требуется вход' };
 
-  const { title, cat, value, aiLow, aiHigh, photo, photoUrl, wants, desc, kind, condition } = input || {};
+  const { title, cat, value, aiLow, aiHigh, photo, photoUrl, wants, desc, kind, condition, valuationSource } = input || {};
   if (!title || !title.trim()) return { ok: false, error: 'Введите название' };
   if (!value || value <= 0) return { ok: false, error: 'Укажите оценку в баллах' };
   if (!wants || !wants.trim()) return { ok: false, error: 'Укажите, на что хотите обменять' };
@@ -207,6 +207,7 @@ export async function createLotAction(input) {
       value: num,
       aiLow: aiLow || Math.round(num * 0.92),
       aiHigh: aiHigh || Math.round(num * 1.08),
+      valuationSource: valuationSource === 'ai' ? 'ai' : 'manual',
       photo: photo || '',
       photoUrl: photoUrl || '',
       wants: wants.trim(),

@@ -98,7 +98,7 @@ export const lot = (id) => LOTS.find(l => l.id === id);
 
 export const MY_LOT = {
   id: 'mine', title: 'Apple Watch Series 9, 45 мм', cat: 'gadget', value: 38000,
-  aiLow: 35000, aiHigh: 42000, photo: 'APPLE WATCH',
+  aiLow: 35000, aiHigh: 42000, valuationSource: 'ai', photo: 'APPLE WATCH',
   photoUrl: 'https://images.unsplash.com/photo-1551816230-ef5deaed4a26?w=800&q=80',
   photos: 5, condition: 'Отличное',
   owner: 'me', wants: 'PlayStation, лендинг, велосипед',
