@@ -69,6 +69,7 @@ export default function App() {
   });
   const [tab, setTabRaw] = React.useState('home');
   const [stack, setStack] = React.useState([]);
+  const publishingRef = React.useRef(false);
   const [offerLot, setOfferLot] = React.useState(null);
   const [deal, setDeal] = React.useState(null);
   const [creating, setCreating] = React.useState(false);
@@ -128,13 +129,19 @@ export default function App() {
   };
 
   const publishLot = async (lotData) => {
-    const res = await createLotAction(lotData);
-    if (res.ok) {
-      setLots(ls => [res.lot, ...ls]);
-      setMyLots(ms => [res.lot, ...ms]);
+    if (publishingRef.current) return;
+    publishingRef.current = true;
+    try {
+      const res = await createLotAction(lotData);
+      if (res.ok) {
+        setLots(ls => [res.lot, ...ls]);
+        setMyLots(ms => [res.lot, ...ms]);
+      }
+    } finally {
+      publishingRef.current = false;
+      setCreating(false);
+      resetTo('home');
     }
-    setCreating(false);
-    resetTo('home');
   };
 
   const top = stack[stack.length - 1];

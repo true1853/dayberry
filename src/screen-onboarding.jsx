@@ -124,9 +124,12 @@ export function CreateListing({ onClose, onPublish, initialWants = '' }) {
   const [photoName, setPhotoName] = React.useState('');
   const [error, setError] = React.useState('');
   const [aiBusy, setAiBusy] = React.useState(false);
+  const aiBusyRef = React.useRef(false);
   const [aiNote, setAiNote] = React.useState('');
   const [aiError, setAiError] = React.useState('');
   const [wantsHints, setWantsHints] = React.useState([]);
+  const [publishing, setPublishing] = React.useState(false);
+  const publishingRef = React.useRef(false);
 
   const chooseKind = (k) => {
     setKind(k);
@@ -139,7 +142,8 @@ export function CreateListing({ onClose, onPublish, initialWants = '' }) {
   const aiHigh = valueNum > 0 ? Math.round(valueNum * 1.08) : 0;
 
   const runAI = async (mode) => {
-    if (aiBusy) return;
+    if (aiBusyRef.current) return;
+    aiBusyRef.current = true;
     setAiBusy(true);
     setAiError('');
     try {
@@ -168,6 +172,7 @@ export function CreateListing({ onClose, onPublish, initialWants = '' }) {
     } catch (e) {
       setAiError('Не удалось получить ответ ИИ');
     } finally {
+      aiBusyRef.current = false;
       setAiBusy(false);
     }
   };
@@ -180,7 +185,8 @@ export function CreateListing({ onClose, onPublish, initialWants = '' }) {
     reader.readAsDataURL(f);
   };
 
-  const submit = () => {
+  const submit = async () => {
+    if (publishingRef.current) return;
     if (!title.trim()) return setError('Введите название');
     if (!valueNum || valueNum <= 0) return setError('Укажите оценку в баллах');
     if (!wants.trim()) return setError('Укажите, на что хотите обменять');
@@ -204,7 +210,15 @@ export function CreateListing({ onClose, onPublish, initialWants = '' }) {
       views: 0,
       hot: false,
     };
-    onPublish(lot);
+    publishingRef.current = true;
+    setPublishing(true);
+    try {
+      await onPublish(lot);
+    } catch (e) {
+      setError('Не удалось опубликовать — попробуйте ещё раз');
+      publishingRef.current = false;
+      setPublishing(false);
+    }
   };
 
   return (
@@ -360,8 +374,12 @@ export function CreateListing({ onClose, onPublish, initialWants = '' }) {
       </div>
 
       <div className="px" style={{ padding: '12px 18px calc(12px + env(safe-area-inset-bottom))', borderTop: '1px solid var(--line)', background: '#fff' }}>
-        <button className="btn btn-primary btn-block btn-lg" onClick={submit}>
-          <Icon name="check" size={18} color="#fff" />Опубликовать
+        <button className="btn btn-primary btn-block btn-lg" onClick={submit} disabled={publishing} style={{ opacity: publishing ? 0.8 : 1 }}>
+          {publishing ? (
+            <><span className="spin" />Публикуем…</>
+          ) : (
+            <><Icon name="check" size={18} color="#fff" />Опубликовать</>
+          )}
         </button>
       </div>
     </div>

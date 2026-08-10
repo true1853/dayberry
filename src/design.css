@@ -243,6 +243,10 @@
 .escrow-track { height: 6px; border-radius: 999px; background: var(--line); overflow: hidden; }
 .escrow-fill { height: 100%; background: var(--berry); border-radius: 999px; transition: width .5s cubic-bezier(.2,.8,.2,1); }
 
+/* spinner for async buttons */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { display: inline-block; width: 16px; height: 16px; flex: none; border: 2px solid rgba(255,255,255,.35); border-top-color: #fff; border-radius: 50%; animation: spin .8s linear infinite; }
+
 /* overlay layer (pushed screens sit above the tab root inside the device) */
 .overlay-layer { position: absolute; inset: 0; z-index: 50; animation: slide-in .26s cubic-bezier(.2,.8,.2,1) both; }
 @keyframes slide-in { from { transform: translateX(8%); opacity: 0.4; } to { transform: none; opacity: 1; } }
