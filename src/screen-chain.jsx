@@ -1,31 +1,8 @@
 // screen-chain.jsx — chain-first discovery + multi-party chain detail
 import React from 'react';
-import { CHAIN, MY_LOT, lot, U, ME } from './data.js';
+import { CHAIN, MY_LOT, U, ME } from './data.js';
 import { Icon } from './icons.jsx';
 import { AIBadge, Photo, Credit, Avatar, AppBar, IconBtn } from './ui.jsx';
-
-const CHAINS = [
-  CHAIN,
-  {
-    id: 'ch2', score: 88,
-    steps: [
-      { who: 'me',     gives: 'Apple Watch S9', photoUrl: 'https://images.unsplash.com/photo-1551816230-ef5deaed4a26?w=400&q=80', to: 'oleg',   value: 38000 },
-      { who: 'oleg',   gives: 'Велосипед Trek', photoUrl: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&q=80', to: 'marina', value: 41000 },
-      { who: 'marina', gives: '5 фотосессий',   photoUrl: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=400&q=80', to: 'me',     value: 35000 },
-    ],
-    note: 'Короткая цепочка из 3 участников. Доплата минимальна.',
-  },
-  {
-    id: 'ch3', score: 82,
-    steps: [
-      { who: 'me',     gives: 'Apple Watch S9',    photoUrl: 'https://images.unsplash.com/photo-1551816230-ef5deaed4a26?w=400&q=80', to: 'roma',  value: 38000 },
-      { who: 'roma',   gives: 'iPhone 14',         photoUrl: 'https://images.unsplash.com/photo-1678685888221-cda773a3dcdb?w=400&q=80', to: 'dasha', value: 54000 },
-      { who: 'dasha',  gives: 'Куртка St. Island', photoUrl: 'https://images.unsplash.com/photo-1551028719-00167b16eac5?w=400&q=80', to: 'lena',  value: 22000 },
-      { who: 'lena',   gives: 'Сет настолок',      photoUrl: 'https://images.unsplash.com/photo-1610890716171-6b1bb98ffd09?w=400&q=80', to: 'me',    value: 8000 },
-    ],
-    note: 'Цепочка из 4 участников — система нашла редкое совпадение.',
-  },
-];
 
 const who = (id) => (id === 'me' ? { ...ME, initials: 'А', name: 'Вы' } : U[id]);
 
@@ -87,7 +64,7 @@ export function ChainCard({ chain, onOpen, mini }) {
   );
 }
 
-export function FeedChain({ onOpenChain }) {
+export function FeedChain({ onOpenChain, chains = [] }) {
   return (
     <div className="col gap16" style={{ padding: '4px 18px 20px' }}>
       <div className="card" style={{ padding: 14, background: 'linear-gradient(135deg, var(--berry-900), var(--berry))', color: '#fff' }}>
@@ -104,14 +81,14 @@ export function FeedChain({ onOpenChain }) {
         <span className="cap">по лоту «{MY_LOT.title.split(',')[0]}»</span>
       </div>
       <div className="col gap12">
-        {CHAINS.map(c => <ChainCard key={c.id} chain={c} mini onOpen={() => onOpenChain(c.id)} />)}
+        {chains.map(c => <ChainCard key={c.id} chain={c} mini onOpen={() => onOpenChain(c.id)} />)}
       </div>
     </div>
   );
 }
 
-export function ChainDetail({ chainId, onBack, onJoin }) {
-  const chain = CHAINS.find(c => c.id === chainId) || CHAIN;
+export function ChainDetail({ chainId, onBack, onJoin, chains = [] }) {
+  const chain = chains.find(c => c.id === chainId) || CHAIN;
   const myStep = chain.steps.find(s => s.who === 'me');
   const iGet = chain.steps[chain.steps.length - 1].gives;
   const total = chain.steps.reduce((a, s) => a + s.value, 0);

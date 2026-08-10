@@ -1,8 +1,8 @@
 // screen-feed.jsx — home feed + discovery mechanics (list / swipe / chain)
 import React from 'react';
-import { LOTS, MATCHES, MY_LOT, lot, U, CAT, ME } from './data.js';
+import { LOTS, MY_LOT, U, CAT, ME } from './data.js';
 import { Icon } from './icons.jsx';
-import { AIBadge, Photo, Credit, LotCard, Sheet, Avatar } from './ui.jsx';
+import { AIBadge, Photo, Credit, LotCard, Sheet } from './ui.jsx';
 
 // ---------- shared: category filter row ----------
 export function CatRow({ active, setActive }) {
@@ -17,7 +17,7 @@ export function CatRow({ active, setActive }) {
 }
 
 // ---------- "ready matches" carousel ----------
-function MatchStrip({ onOpen, onChains }) {
+function MatchStrip({ onOpen, onChains, matches = [], lots = [], myLot = MY_LOT }) {
   return (
     <div className="col gap10" style={{ padding: '4px 0 2px' }}>
       <div className="px row" style={{ justifyContent: 'space-between' }}>
@@ -25,12 +25,14 @@ function MatchStrip({ onOpen, onChains }) {
         <span className="cap" onClick={onChains} style={{ color: 'var(--berry)', cursor: 'pointer' }}>Цепочки →</span>
       </div>
       <div className="row gap12" style={{ overflowX: 'auto', padding: '0 18px 4px', scrollbarWidth: 'none' }}>
-        {MATCHES.map(m => {
-          const L = lot(m.lot);
+        {matches.map(m => {
+          const L = lots.find(x => x.id === m.lot);
+          if (!L) return null;
+          const mine = myLot || MY_LOT;
           return (
             <div key={m.id} className="card" style={{ width: 230, flex: 'none', overflow: 'hidden', cursor: 'pointer' }} onClick={() => onOpen(L.id)}>
               <div className="row" style={{ alignItems: 'stretch', height: 96 }}>
-                <Photo label={MY_LOT.photo} url={MY_LOT.photoUrl} cat={MY_LOT.cat} style={{ flex: 1 }} />
+                <Photo label={mine.photo} url={mine.photoUrl} cat={mine.cat} style={{ flex: 1 }} />
                 <div className="col" style={{ justifyContent: 'center', alignItems: 'center', width: 34, background: 'var(--berry-50)' }}>
                   <Icon name="swap" size={18} color="var(--berry)" />
                 </div>
@@ -58,12 +60,12 @@ function MatchStrip({ onOpen, onChains }) {
 // ===========================================================
 // VARIANT A — LIST / FEED
 // ===========================================================
-export function FeedList({ cat, onOpen, onChains, hints = true, limit, lots = LOTS }) {
+export function FeedList({ cat, onOpen, onChains, hints = true, limit, lots = LOTS, matches = [], myLot = MY_LOT }) {
   let items = lots.filter(l => cat === 'all' || l.cat === cat);
   if (limit) items = items.slice(0, limit);
   return (
     <div className="col gap16" style={{ paddingBottom: 20 }}>
-      {hints && <MatchStrip onOpen={onOpen} onChains={onChains} />}
+      {hints && matches.length > 0 && <MatchStrip matches={matches} lots={lots} myLot={myLot} onOpen={onOpen} onChains={onChains} />}
       <div className="px col gap10">
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <span className="h3">Рядом с вами</span>

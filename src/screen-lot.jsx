@@ -1,6 +1,6 @@
 // screen-lot.jsx — lot detail + AI valuation + make-offer flow
 import React from 'react';
-import { lot, U, MY_LOT, CAT, WALLET, ME } from './data.js';
+import { lot, U, MY_LOT, ME } from './data.js';
 import { Icon } from './icons.jsx';
 import { fmt, Credit, Photo, Avatar, Stars, CatTag, AIBadge, IconBtn, Sheet } from './ui.jsx';
 
@@ -94,12 +94,13 @@ export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, lots }) {
   );
 }
 
-export function OfferSheet({ L, open, onClose, onConfirm }) {
-  const diff = L ? L.value - MY_LOT.value : 0;
+export function OfferSheet({ L, myLot, balance = 0, open, onClose, onConfirm }) {
+  const MY = myLot || MY_LOT;
+  const diff = L ? L.value - MY.value : 0;
   const [credits, setCredits] = React.useState(0);
   React.useEffect(() => { if (L) setCredits(Math.max(0, diff)); }, [L]);
   if (!L) return null;
-  const balanced = MY_LOT.value + credits;
+  const balanced = MY.value + credits;
   const ok = Math.abs(balanced - L.value) <= L.value * 0.12;
 
   return (
@@ -107,9 +108,9 @@ export function OfferSheet({ L, open, onClose, onConfirm }) {
       <div className="px col gap14" style={{ paddingBottom: 8 }}>
         <div className="row" style={{ alignItems: 'center', gap: 8 }}>
           <div className="card-line grow col gap6" style={{ padding: 10, alignItems: 'center' }}>
-            <Photo label={MY_LOT.photo} url={MY_LOT.photoUrl} cat={MY_LOT.cat} style={{ width: '100%', aspectRatio: '4/3', borderRadius: 10 }} />
+            <Photo label={MY.photo} url={MY.photoUrl} cat={MY.cat} style={{ width: '100%', aspectRatio: '4/3', borderRadius: 10 }} />
             <span className="cap" style={{ textAlign: 'center' }}>Вы отдаёте</span>
-            <span className="title" style={{ fontSize: 12.5, textAlign: 'center' }}>{MY_LOT.title}</span>
+            <span className="title" style={{ fontSize: 12.5, textAlign: 'center' }}>{MY.title}</span>
           </div>
           <div className="avatar" style={{ width: 34, height: 34, background: 'var(--berry-50)', flex: 'none' }}><Icon name="swap" size={18} color="var(--berry)" /></div>
           <div className="card-line grow col gap6" style={{ padding: 10, alignItems: 'center' }}>
@@ -130,7 +131,7 @@ export function OfferSheet({ L, open, onClose, onConfirm }) {
             </div>
           </div>
           <div className="row" style={{ justifyContent: 'space-between', marginTop: 10 }}>
-            <span className="cap">Ваш баланс: <b className="amount">{fmt(WALLET.balance)} Б</b></span>
+            <span className="cap">Ваш баланс: <b className="amount">{fmt(balance)} Б</b></span>
             <span className="cap" style={{ color: ok ? 'var(--ok)' : 'var(--warn)' }}>{ok ? '✓ обмен сбалансирован' : 'разница великовата'}</span>
           </div>
         </div>

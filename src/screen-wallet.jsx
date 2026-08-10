@@ -11,7 +11,8 @@ const TX_ICON = {
   bonus: { icon: 'gift', c: 'var(--c-digital)', bg: 'var(--c-digital-soft)' },
 };
 
-export function Wallet({ onInfo }) {
+export function Wallet({ wallet, onInfo }) {
+  const w = wallet || WALLET;
   return (
     <div className="app-scroll">
       <AppBar title="Кошелёк" big sub={ME.name + ' · ' + ME.city} right={<IconBtn name="info" onClick={onInfo} />} />
@@ -21,20 +22,20 @@ export function Wallet({ onInfo }) {
           <div style={{ position: 'absolute', right: 20, bottom: -50, width: 110, height: 110, borderRadius: 999, background: 'rgba(255,255,255,0.06)' }} />
           <div className="row gap6" style={{ marginBottom: 6 }}><Coin size={18} /><span style={{ fontSize: 13.5, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>Бартер-кредиты</span></div>
           <div className="row" style={{ alignItems: 'baseline', gap: 8 }}>
-            <span className="amount" style={{ fontSize: 40, fontWeight: 700, color: '#fff', letterSpacing: '-0.04em' }}>{fmt(WALLET.balance)}</span>
+            <span className="amount" style={{ fontSize: 40, fontWeight: 700, color: '#fff', letterSpacing: '-0.04em' }}>{fmt(w.balance)}</span>
             <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14 }}>Б</span>
           </div>
           <div className="row gap6" style={{ marginTop: 4 }}>
-            <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)' }}>≈ ₽{fmt(WALLET.balance)} · 1 Б = 1 ₽</span>
+            <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)' }}>≈ ₽{fmt(w.balance)} · 1 Б = 1 ₽</span>
           </div>
           <div className="row gap8" style={{ marginTop: 16 }}>
             <div className="grow" style={{ background: 'rgba(255,255,255,0.14)', borderRadius: 13, padding: '10px 12px' }}>
               <div className="row gap6" style={{ color: 'rgba(255,255,255,0.78)', fontSize: 11.5, fontWeight: 600 }}><Icon name="lock" size={13} color="rgba(255,255,255,0.78)" />В эскроу</div>
-              <span className="amount" style={{ fontSize: 18, fontWeight: 700, color: '#fff' }}>{fmt(WALLET.escrow)}</span>
+              <span className="amount" style={{ fontSize: 18, fontWeight: 700, color: '#fff' }}>{fmt(w.escrow)}</span>
             </div>
             <div className="grow" style={{ background: 'rgba(255,255,255,0.14)', borderRadius: 13, padding: '10px 12px' }}>
               <div className="row gap6" style={{ color: 'rgba(255,255,255,0.78)', fontSize: 11.5, fontWeight: 600 }}><Icon name="flame" size={13} color="rgba(255,255,255,0.78)" />За 30 дней</div>
-              <span className="amount" style={{ fontSize: 18, fontWeight: 700, color: '#fff' }}>+{fmt(WALLET.delta30)}</span>
+              <span className="amount" style={{ fontSize: 18, fontWeight: 700, color: '#fff' }}>+{fmt(w.delta30)}</span>
             </div>
           </div>
         </div>
@@ -50,7 +51,7 @@ export function Wallet({ onInfo }) {
             <Icon name="clock" size={20} color="var(--warn)" style={{ marginTop: 1 }} />
             <div className="col gap2">
               <span className="title" style={{ fontSize: 13.5, color: '#7a5410' }}>Баллы любят движение</span>
-              <span className="sub" style={{ color: '#8a6320' }}>Неактивные баллы начнут таять через <b>{WALLET.demurrageInDays} дней</b>. Потратьте их на обмен, чтобы сохранить полную ценность.</span>
+              <span className="sub" style={{ color: '#8a6320' }}>Неактивные баллы начнут таять через <b>{w.demurrageInDays} дней</b>. Потратьте их на обмен, чтобы сохранить полную ценность.</span>
             </div>
           </div>
         </div>
@@ -61,10 +62,10 @@ export function Wallet({ onInfo }) {
             <span className="cap" style={{ color: 'var(--berry)' }}>Все операции</span>
           </div>
           <div className="card" style={{ overflow: 'hidden' }}>
-            {WALLET.tx.map((t, i) => {
-              const s = TX_ICON[t.kind];
+            {(w.tx || []).map((t, i) => {
+              const s = TX_ICON[t.kind] || TX_ICON.earn;
               return (
-                <div key={t.id} className="row gap12" style={{ padding: '13px 14px', borderTop: i ? '1px solid var(--line)' : 'none', alignItems: 'center' }}>
+                <div key={t.id || i} className="row gap12" style={{ padding: '13px 14px', borderTop: i ? '1px solid var(--line)' : 'none', alignItems: 'center' }}>
                   <div className="avatar" style={{ width: 38, height: 38, background: s.bg }}><Icon name={s.icon} size={18} color={s.c} /></div>
                   <div className="col grow" style={{ gap: 1, minWidth: 0 }}>
                     <span className="title ellipsis" style={{ fontSize: 14 }}>{t.title}</span>

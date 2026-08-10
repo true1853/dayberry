@@ -2,6 +2,7 @@
 import React from 'react';
 import { Icon } from './icons.jsx';
 import { fmt, Photo, IconBtn, Coin } from './ui.jsx';
+import { analyzeListingAction } from './server/actions.js';
 
 const SLIDES = [
   {
@@ -114,6 +115,7 @@ const inputStyle = {
 export function CreateListing({ onClose, onPublish }) {
   const [kind, setKind] = React.useState('item'); // 'item' | 'service'
   const [cat, setCat] = React.useState('gadget');
+  const [condition, setCondition] = React.useState('Новое или Б/У');
   const [title, setTitle] = React.useState('');
   const [value, setValue] = React.useState('');
   const [wants, setWants] = React.useState('');
@@ -121,12 +123,54 @@ export function CreateListing({ onClose, onPublish }) {
   const [photo, setPhoto] = React.useState('');
   const [photoName, setPhotoName] = React.useState('');
   const [error, setError] = React.useState('');
+  const [aiBusy, setAiBusy] = React.useState(false);
+  const [aiNote, setAiNote] = React.useState('');
+  const [aiError, setAiError] = React.useState('');
+  const [wantsHints, setWantsHints] = React.useState([]);
 
-  const chooseKind = (k) => { setKind(k); setCat(k === 'service' ? 'digital' : 'gadget'); };
+  const chooseKind = (k) => {
+    setKind(k);
+    setCat(k === 'service' ? 'digital' : 'gadget');
+    setCondition(k === 'service' ? 'Услуга' : 'Новое или Б/У');
+  };
 
   const valueNum = Number(value);
   const aiLow = valueNum > 0 ? Math.round(valueNum * 0.92) : 0;
   const aiHigh = valueNum > 0 ? Math.round(valueNum * 1.08) : 0;
+
+  const runAI = async (mode) => {
+    if (aiBusy) return;
+    setAiBusy(true);
+    setAiError('');
+    try {
+      const res = await analyzeListingAction({
+        kind,
+        title: title.trim(),
+        photo: photo && photo.length <= 3500000 ? photo : '',
+        value: valueNum,
+        wants: wants.trim(),
+      });
+      if (!res.ok) { setAiError(res.error || 'Не удалось получить ответ ИИ'); return; }
+      const d = res.draft || {};
+      setWantsHints((d.wants || '').split(',').map(s => s.trim()).filter(Boolean));
+      if (mode === 'price') {
+        if (d.value > 0) setValue(String(d.value));
+        setAiNote(`AI-оценка: ${fmt(d.value)} Б · диапазон ${fmt(d.aiLow)}–${fmt(d.aiHigh)} Б. ${d.reasoning || ''}`);
+      } else {
+        if (d.title && !title.trim()) setTitle(d.title);
+        if (d.cat) setCat(d.cat);
+        if (d.condition && kind === 'item') setCondition(d.condition);
+        if (d.desc && (!desc.trim() || desc.trim().startsWith('Готов(а)'))) setDesc(d.desc);
+        if (d.wants && !wants.trim()) setWants(d.wants);
+        if (d.value > 0 && !valueNum) setValue(String(d.value));
+        setAiNote(`Черновик готов. ${d.reasoning || 'Проверьте и поправьте поля.'}`);
+      }
+    } catch (e) {
+      setAiError('Не удалось получить ответ ИИ');
+    } finally {
+      setAiBusy(false);
+    }
+  };
 
   const onFile = (e) => {
     const f = e.target.files && e.target.files[0];
@@ -150,7 +194,7 @@ export function CreateListing({ onClose, onPublish }) {
       photo: photoName || placeholder,
       photoUrl: photo || undefined,
       photos: 1,
-      condition: kind === 'service' ? 'Услуга' : 'Новое или Б/У',
+      condition: condition || (kind === 'service' ? 'Услуга' : 'Новое или Б/У'),
       posted: 'только что',
       owner: 'me',
       wants: wants.trim(),
@@ -213,6 +257,21 @@ export function CreateListing({ onClose, onPublish }) {
           <span className="cap">Можно без фото — подставится заглушка категории.</span>
         </div>
 
+        <div className="card" style={{ padding: 12, background: 'var(--berry-50)', border: '1px dashed var(--berry-200)' }}>
+          <div className="row gap10" style={{ alignItems: 'center' }}>
+            <Icon name="spark" size={20} color="var(--berry)" />
+            <div className="grow col" style={{ gap: 2 }}>
+              <span className="title" style={{ fontSize: 13.5 }}>AI-помощник</span>
+              <span className="cap">Добавьте фото или название — заполним категорию, цену и описание.</span>
+            </div>
+            <button className="btn btn-primary" style={{ padding: '10px 14px', fontSize: 13 }} disabled={aiBusy} onClick={() => runAI('all')}>
+              {aiBusy ? 'Думаю…' : 'Заполнить'}
+            </button>
+          </div>
+          {aiNote && <span className="cap row gap6" style={{ color: 'var(--berry)', marginTop: 8 }}><Icon name="spark" size={13} color="var(--berry)" />{aiNote}</span>}
+          {aiError && <span className="cap" style={{ color: 'var(--warn)', marginTop: 6 }}>{aiError}</span>}
+        </div>
+
         <div className="col gap8">
           <span className="over">Категория</span>
           <div className="row gap8" style={{ flexWrap: 'wrap' }}>
@@ -221,6 +280,17 @@ export function CreateListing({ onClose, onPublish }) {
             ))}
           </div>
         </div>
+
+        {kind === 'item' && (
+          <div className="col gap8">
+            <span className="over">Состояние</span>
+            <div className="row gap8" style={{ flexWrap: 'wrap' }}>
+              {['Новое или Б/У', 'Отличное', 'Хорошее'].map(c => (
+                <div key={c} className={'chip chip-berry' + (condition === c ? ' is-on' : '')} onClick={() => setCondition(c)}>{c}</div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="col gap6">
           <span className="over">{kind === 'service' ? 'Название услуги' : 'Название товара'}</span>
@@ -242,6 +312,7 @@ export function CreateListing({ onClose, onPublish }) {
               placeholder="Например: 45000"
               style={{ flex: 1, padding: '13px 16px', border: 'none', outline: 'none', fontSize: 15, fontFamily: 'var(--font)', background: 'transparent' }}
             />
+            <button onClick={() => runAI('price')} disabled={aiBusy} title="Подобрать цену с помощью ИИ" style={{ background: 'var(--berry-50)', border: 'none', color: 'var(--berry)', padding: '0 10px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}><Icon name="spark" size={18} /></button>
             <Coin size={26} />
             <span style={{ paddingRight: 12 }} />
           </div>
@@ -260,6 +331,14 @@ export function CreateListing({ onClose, onPublish }) {
             placeholder="Например: техника Apple, фотоаппарат, реклама"
             style={inputStyle}
           />
+          {wantsHints.length > 0 && (
+            <div className="row gap6" style={{ flexWrap: 'wrap', marginTop: 4 }}>
+              <span className="cap row gap4" style={{ color: 'var(--ink-3)' }}><Icon name="spark" size={12} color="var(--berry)" />AI подобрал:</span>
+              {wantsHints.map((h, i) => (
+                <div key={i} className="chip chip-berry" onClick={() => setWants(h)}>{h}</div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="col gap6">

@@ -37,20 +37,23 @@ function Stepper({ active }) {
 }
 
 export function DealStatus({ deal, onBack, onConfirm, onChat, onDone }) {
-  const { L, credits, stage } = deal;
-  const owner = U[L.owner] || ME;
+  if (!deal) return null;
+  const L = deal.lot || {};
+  const { credits, stage } = deal;
+  const owner = L.owner ? (U[L.owner] || ME) : ME;
   const [confirming, setConfirming] = React.useState(false);
 
   if (stage === 'done') return <DealDone deal={deal} onDone={onDone} />;
 
+  const my = deal.myLot || MY_LOT;
   return (
     <div className="app-scroll">
       <AppBar sub="Сделка · эскроу" title="Обмен в работе" left={<IconBtn name="back" onClick={onBack} />} right={<IconBtn name="chat" onClick={onChat} />} />
       <div className="px col gap16" style={{ paddingBottom: 30 }}>
         <div className="card" style={{ padding: 14 }}>
           <div className="row" style={{ alignItems: 'center', gap: 10 }}>
-            <Photo label={MY_LOT.photo} url={MY_LOT.photoUrl} cat={MY_LOT.cat} style={{ width: 58, height: 58, borderRadius: 13 }} />
-            <div className="col grow" style={{ gap: 2 }}><span className="cap">вы отдаёте</span><span className="title" style={{ fontSize: 13.5 }}>{MY_LOT.title}</span></div>
+            <Photo label={my.photo} url={my.photoUrl} cat={my.cat} style={{ width: 58, height: 58, borderRadius: 13 }} />
+            <div className="col grow" style={{ gap: 2 }}><span className="cap">вы отдаёте</span><span className="title" style={{ fontSize: 13.5 }}>{my.title}</span></div>
           </div>
           <div className="row gap8" style={{ alignItems: 'center', margin: '10px 0' }}><div className="divider grow" /><Icon name="swap" size={18} color="var(--berry)" /><div className="divider grow" /></div>
           <div className="row" style={{ alignItems: 'center', gap: 10 }}>
@@ -78,7 +81,7 @@ export function DealStatus({ deal, onBack, onConfirm, onChat, onDone }) {
         </div>
 
         <div className="row gap12 card" style={{ padding: 12, alignItems: 'center' }} onClick={onChat}>
-          <Avatar user={L.owner} size={42} />
+          <Avatar user={owner.name} size={42} />
           <div className="col grow" style={{ gap: 2 }}><span className="title">{owner.name}</span><span className="cap">обычно отвечает за 5 минут</span></div>
           <button className="btn btn-ghost" style={{ padding: '10px 14px' }}><Icon name="chat" size={18} color="var(--berry)" />Чат</button>
         </div>
@@ -105,7 +108,8 @@ export function DealStatus({ deal, onBack, onConfirm, onChat, onDone }) {
 }
 
 function DealDone({ deal, onDone }) {
-  const { L, credits } = deal;
+  const { credits } = deal;
+  const L = deal.lot || {};
   return (
     <div className="app-scroll" style={{ display: 'flex', flexDirection: 'column' }}>
       <div className="grow col" style={{ alignItems: 'center', justifyContent: 'center', padding: '40px 30px', textAlign: 'center', gap: 16 }}>
@@ -114,7 +118,7 @@ function DealDone({ deal, onDone }) {
         </div>
         <div className="col gap8 fade-in">
           <span className="h1">Обмен завершён 🎉</span>
-          <span className="sub" style={{ maxWidth: 280 }}>Вы получили <b style={{ color: 'var(--ink)' }}>{L.title}</b>, а <b className="amount">{fmt(credits)} Б</b> переведены партнёру из эскроу.</span>
+          <span className="sub" style={{ maxWidth: 280 }}>Вы получили <b style={{ color: 'var(--ink)' }}>{L.title || 'сделку'}</b>, а <b className="amount">{fmt(credits)} Б</b> переведены партнёру из эскроу.</span>
         </div>
         <div className="card fade-in" style={{ padding: 14, width: '100%', maxWidth: 320 }}>
           <div className="row" style={{ justifyContent: 'space-between' }}><span className="sub">Переведено из эскроу</span><Credit n={credits} size={15} coin={14} /></div>

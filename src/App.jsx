@@ -1,8 +1,8 @@
 'use client';
 // App.jsx — root: navigation, phone frame scaling, tweaks
 import React from 'react';
-import { lot, MY_LOT, ME } from './data.js';
-import { sessionAction, listLots, logoutAction, createLotAction, getMyLots, getProfileAction } from './server/actions.js';
+import { lot, MY_LOT, ME, U } from './data.js';
+import { sessionAction, listLots, logoutAction, createLotAction, getMyLots, getProfileAction, listDealsAction, getWalletAction, listChatsAction, listChainsAction, getMatchesAction, createDealAction, confirmReceiptAction, joinChainAction } from './server/actions.js';
 import { FeedList, FeedSwipe, CatRow } from './screen-feed.jsx';
 import { FeedChain, ChainDetail } from './screen-chain.jsx';
 import { LotDetail, OfferSheet } from './screen-lot.jsx';
@@ -72,6 +72,11 @@ export default function App() {
   const [lots, setLots] = React.useState([]);
   const [myLots, setMyLots] = React.useState([]);
   const [profile, setProfile] = React.useState(null);
+  const [deals, setDeals] = React.useState([]);
+  const [wallet, setWallet] = React.useState(null);
+  const [chats, setChats] = React.useState([]);
+  const [chains, setChains] = React.useState([]);
+  const [matches, setMatches] = React.useState([]);
   const isDesktop = useMediaQuery('(min-width: 1128px)');
 
   const syncMe = (user) => {
@@ -86,11 +91,19 @@ export default function App() {
   React.useEffect(() => {
     (async () => {
       try {
-        const [u, ls, ml, pf] = await Promise.all([sessionAction(), listLots(), getMyLots(), getProfileAction()]);
+        const [u, ls, ml, pf, de, wa, ch, cn, ma] = await Promise.all([
+          sessionAction(), listLots(), getMyLots(), getProfileAction(),
+          listDealsAction(), getWalletAction(), listChatsAction(), listChainsAction(), getMatchesAction(),
+        ]);
         if (u) { setCurrentUser(u); setAuthed(true); syncMe(u); }
         setLots(ls);
         setMyLots(ml);
         setProfile(pf);
+        setDeals(de || []);
+        setWallet(wa);
+        setChats(ch || []);
+        setChains(cn || []);
+        setMatches(ma || []);
       } catch (e) {
         console.error('bootstrap failed', e);
       } finally {
@@ -127,29 +140,37 @@ export default function App() {
   const setTab = (id) => { setStack([]); setTabRaw(id); };
   const resetTo = (id) => { setStack([]); setTabRaw(id); };
 
-  const ensureDeal = () => {
-    if (deal) return deal;
-    const d = { L: lot('l1'), credits: 10000, stage: 'meet' };
-    setDeal(d); return d;
+  const openDeal = (id) => {
+    const d = deals.find(x => x.id === id) || deal || deals[0];
+    setDeal(d);
+    go('deal');
   };
 
-  const openDeal = () => { ensureDeal(); go('deal'); };
-  const confirmReceipt = () => setDeal(d => ({ ...d, stage: 'done' }));
+  const confirmReceipt = async () => {
+    if (!deal) return;
+    const res = await confirmReceiptAction(deal.id);
+    if (res.ok) {
+      setDeal(res.deal);
+      setDeals(ds => ds.map(x => x.id === res.deal.id ? res.deal : x));
+      const wa = await getWalletAction();
+      if (wa) setWallet(wa);
+    }
+  };
 
   const tabRoot = () => {
     if (tab === 'home') {
-      return <HomeTab t={t} go={go} tab={tab} setTab={setTab} onCreate={() => setCreating(true)} lots={lots} />;
+      return <HomeTab t={t} go={go} tab={tab} setTab={setTab} onCreate={() => setCreating(true)} lots={lots} myLots={myLots} matches={matches} chains={chains} />;
     }
     if (tab === 'search') return <SearchScreen go={go} tab={tab} setTab={setTab} onCreate={() => setCreating(true)} lots={lots} />;
     if (tab === 'deals') return (
       <div className="app"><div className="safe-top" />
-        <DealsList onOpen={(id) => go('chat', { id })} onOpenDeal={openDeal} />
+        <DealsList chats={chats} deals={deals} onOpen={(id) => go('chat', { id })} onOpenDeal={(id) => openDeal(id)} />
         <TabBar tab={tab} setTab={setTab} onCreate={() => setCreating(true)} unread={2} />
       </div>
     );
     if (tab === 'wallet') return (
       <div className="app"><div className="safe-top" />
-        <Wallet onInfo={() => setInfoOpen(true)} />
+        <Wallet wallet={wallet} onInfo={() => setInfoOpen(true)} />
         <TabBar tab={tab} setTab={setTab} onCreate={() => setCreating(true)} unread={2} />
       </div>
     );
@@ -175,27 +196,38 @@ export default function App() {
     if (!top) return null;
     if (top.name === 'lot') return (
       <div className="app"><div className="safe-top" />
-        <LotDetail lots={lots} lotId={top.params.lotId} onBack={back} onOffer={(L) => setOfferLot(L)} onOwnerChat={() => go('chat', { id: 'c1' })} />
+        <LotDetail lots={lots} myLots={myLots} lotId={top.params.lotId} onBack={back} onOffer={(L) => setOfferLot(L)} onOwnerChat={() => {
+          const L = lots.find(x => x.id === top.params.lotId);
+          const ownerName = L ? (U[L.owner]?.name || '') : '';
+          const ch = chats.find(c => c.partner.name === ownerName);
+          if (ch) go('chat', { id: ch.id });
+        }} />
       </div>
     );
     if (top.name === 'chainfeed') return (
       <div className="app"><div className="safe-top" />
         <AppBar sub="Многосторонний обмен" title="Цепочки" left={<IconBtn name="back" onClick={back} />} />
-        <div className="app-scroll"><FeedChain onOpenChain={(id) => go('chain', { id })} /></div>
+        <div className="app-scroll"><FeedChain chains={chains} onOpenChain={(id) => go('chain', { id })} /></div>
       </div>
     );
     if (top.name === 'chain') return (
       <div className="app"><div className="safe-top" />
-        <ChainDetail chainId={top.params.id} onBack={back} onJoin={(ch) => { const last = ch.steps[ch.steps.length - 1]; const myV = ch.steps.find(s => s.who === 'me').value; setDeal({ L: { ...lot('l3'), title: last.gives, photo: 'MACBOOK', cat: 'gadget', value: last.value, owner: last.who === 'me' ? 'dasha' : last.who }, credits: Math.max(0, last.value - myV) || 0, stage: 'created', chain: true }); go('deal'); }} />
+        <ChainDetail chainId={top.params.id} chains={chains} onBack={back} onJoin={async (ch) => {
+          const res = await joinChainAction(ch.id);
+          const wa = await getWalletAction();
+          if (wa) setWallet(wa);
+          back();
+          if (res.ok) { const de = await listDealsAction(); setDeals(de || []); const dl = de.find(x => x.id === res.dealId); setDeal(dl); go('deal'); }
+        }} />
       </div>
     );
     if (top.name === 'deal') return (
       <div className="app"><div className="safe-top" />
-        <DealStatus deal={deal} onBack={back} onConfirm={confirmReceipt} onChat={() => go('chat', { id: 'c1' })} onDone={(where) => { setDeal(null); resetTo(where === 'home' ? 'home' : 'deals'); }} />
+        <DealStatus deal={deal} onBack={back} onConfirm={confirmReceipt} onChat={() => { const ch = chats.find(c => c.deal && c.deal.id === deal.id); go('chat', { id: ch ? ch.id : undefined }); }} onDone={(where) => { setDeal(null); resetTo(where === 'home' ? 'home' : 'deals'); }} />
       </div>
     );
     if (top.name === 'chat') return (
-      <ChatThread chatId={top.params.id} onBack={back} onOpenDeal={openDeal} />
+      <ChatThread chatId={top.params.id} onBack={back} onOpenDeal={() => { const c = chats.find(x => x.id === top.params.id); openDeal(c && c.deal ? c.deal.id : undefined); }} />
     );
   };
 
@@ -247,7 +279,21 @@ export default function App() {
         </>
       )}
       {creating && <div className="overlay-layer"><CreateListing onClose={() => setCreating(false)} onPublish={publishLot} /></div>}
-      <OfferSheet L={offerLot} open={!!offerLot} onClose={() => setOfferLot(null)} onConfirm={(L, credits) => { setOfferLot(null); setDeal({ L, credits, stage: 'created' }); go('deal'); }} />
+      <OfferSheet L={offerLot} myLot={(myLots && myLots[0]) || MY_LOT} balance={wallet ? wallet.balance : 0} open={!!offerLot} onClose={() => setOfferLot(null)} onConfirm={async (L, credits) => {
+        setOfferLot(null);
+        const res = await createDealAction({ lotId: L.id, credits });
+        if (res.ok) {
+          const de = await listDealsAction();
+          setDeals(de || []);
+          const d = de.find(x => x.id === res.deal.id) || res.deal;
+          setDeal(d);
+          const wa = await getWalletAction();
+          if (wa) setWallet(wa);
+          const ch = await listChatsAction();
+          setChats(ch || []);
+          go('deal');
+        }
+      }} />
       <CreditsInfo open={infoOpen} onClose={() => setInfoOpen(false)} />
     </div>
   );
@@ -259,7 +305,7 @@ const VIEW_MODES = [
   { id: 'chain', label: 'Цепочки' },
 ];
 
-function HomeTab({ t, go, tab, setTab, onCreate, lots }) {
+function HomeTab({ t, go, tab, setTab, onCreate, lots, matches, chains, myLots }) {
   const [cat, setCat] = React.useState('all');
   const [view, setView] = React.useState(t.mechanic || 'list');
 
@@ -284,9 +330,9 @@ function HomeTab({ t, go, tab, setTab, onCreate, lots }) {
       </div>
       {view !== 'chain' && <CatRow active={cat} setActive={setCat} />}
       <div className="app-scroll">
-        {view === 'list' && <FeedList cat={cat} lots={lots} hints={t.matchHints} onOpen={(id) => go('lot', { lotId: id })} onChains={() => setView('chain')} />}
+        {view === 'list' && <FeedList cat={cat} lots={lots} matches={matches} hints={t.matchHints} myLot={myLots && myLots[0]} onOpen={(id) => go('lot', { lotId: id })} onChains={() => setView('chain')} />}
         {view === 'swipe' && <FeedSwipe cat={cat} lots={lots} onOpen={(id) => go('lot', { lotId: id })} />}
-        {view === 'chain' && <FeedChain onOpenChain={(id) => go('chain', { id })} />}
+        {view === 'chain' && <FeedChain chains={chains} onOpenChain={(id) => go('chain', { id })} />}
       </div>
       <TabBar tab={tab} setTab={setTab} onCreate={onCreate} unread={2} />
     </div>

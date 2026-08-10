@@ -8,21 +8,34 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(cuid())
+  id           String        @id @default(cuid())
   name         String
-  email        String   @unique
+  email        String        @unique
   phone        String?
-  city         String   @default("Москва")
-  bio          String   @default("")
-  avatar       String?  @default("")
+  city         String        @default("Москва")
+  bio          String        @default("")
+  avatar       String?       @default("")
   passwordHash String
-  rating       Float    @default(4.9)
-  dealsCount   Int      @default(0)
-  balance      Int      @default(38000)
-  createdAt    DateTime @default(now())
+  rating       Float         @default(4.9)
+  dealsCount   Int           @default(0)
+  balance      Int           @default(38000)
+  createdAt    DateTime      @default(now())
   lots         Lot[]
-  reviewsGiven Review[] @relation("reviewAuthor")
-  reviewsGot   Review[] @relation("reviewTarget")
+  reviewsGiven Review[]      @relation("reviewAuthor")
+  reviewsGot   Review[]      @relation("reviewTarget")
+  deals        Deal[]        @relation("dealInitiator")
+  chatsOwned   Chat[]        @relation("chatOwner")
+  chatsWith    Chat[]        @relation("chatPartner")
+  sentMessages Message[]     @relation("messageFrom")
+  transactions Transaction[]
+}
+
+model AiCache {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  model     String
+  payload   String
+  createdAt DateTime @default(now())
 }
 
 model Review {
@@ -58,4 +71,77 @@ model Lot {
   status    String   @default("active")
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
+  deals     Deal[]   @relation("dealTarget")
+  myDeals   Deal[]   @relation("dealMyLot")
+}
+
+model Deal {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation("dealInitiator", fields: [userId], references: [id], onDelete: Cascade)
+  lotId     String
+  lot       Lot      @relation("dealTarget", fields: [lotId], references: [id], onDelete: Cascade)
+  myLotId   String?
+  myLot     Lot?     @relation("dealMyLot", fields: [myLotId], references: [id], onDelete: SetNull)
+  credits   Int      @default(0)
+  stage     String   @default("created")
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  chat      Chat?
+}
+
+model Transaction {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      String   @default("earn")
+  title     String
+  sub       String   @default("")
+  amt       Int      @default(0)
+  status    String   @default("done")
+  createdAt DateTime @default(now())
+}
+
+model Chat {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation("chatOwner", fields: [userId], references: [id], onDelete: Cascade)
+  partnerId String
+  partner   User      @relation("chatPartner", fields: [partnerId], references: [id], onDelete: Cascade)
+  dealId    String?   @unique
+  deal      Deal?     @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  createdAt DateTime  @default(now())
+  messages  Message[]
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  chatId    String
+  chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  fromId    String?
+  from      User?    @relation("messageFrom", fields: [fromId], references: [id], onDelete: SetNull)
+  text      String
+  createdAt DateTime @default(now())
+}
+
+model Chain {
+  id        String       @id @default(cuid())
+  score     Int          @default(80)
+  note      String       @default("")
+  status    String       @default("active")
+  createdAt DateTime     @default(now())
+  steps     ChainStep[]
+}
+
+model ChainStep {
+  id       String @id @default(cuid())
+  chainId  String
+  chain    Chain  @relation(fields: [chainId], references: [id], onDelete: Cascade)
+  who      String
+  gives    String
+  photoUrl String @default("")
+  to       String
+  value    Int
+  order    Int    @default(0)
 }

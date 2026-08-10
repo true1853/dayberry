@@ -52,10 +52,12 @@ export function Photo({ label, url, cat = 'gadget', style, rounded = 0, badge, c
 
 // ---- avatar ----
 export function Avatar({ user, size = 40 }) {
-  const u = user === 'me' ? ME : (U[user] || { initials: '?' });
+  const u = user === 'me' ? ME : (U[user] || {});
+  const initials = u.initials
+    || (user ? user.split(' ').map(w => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() : '?');
   return (
     <div style={{ position: 'relative', width: size, height: size, flex: 'none' }}>
-      <div className="avatar" style={{ width: size, height: size, fontSize: size * 0.42 }}>{u.initials}</div>
+      <div className="avatar" style={{ width: size, height: size, fontSize: size * 0.42 }}>{initials}</div>
       {u.online && <span style={{ position: 'absolute', right: -1, bottom: -1, width: size * 0.26, height: size * 0.26, minWidth: 9, minHeight: 9, borderRadius: 999, background: 'var(--ok)', border: '2px solid #fff' }} />}
       {u.pro && <span style={{ position: 'absolute', left: -3, top: -3, fontSize: 9, fontWeight: 800, color: '#fff', background: 'var(--berry)', borderRadius: 999, padding: '1px 5px', border: '2px solid #fff' }}>PRO</span>}
     </div>
