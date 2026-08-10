@@ -1,6 +1,6 @@
 // web-app.jsx — desktop web layout (Airbnb-inspired)
 import React from 'react';
-import { lot, MY_LOT, MATCHES, U, CHAIN, CHATLIST, ME } from './data.js';
+import { lot, MY_LOT, U, CHAIN, CHATLIST, ME } from './data.js';
 import { CITIES, REMOTE } from './cities.js';
 import { Icon } from './icons.jsx';
 import { fmt, Logo, Credit, Photo, Avatar, Stars, CatTag, AIBadge } from './ui.jsx';
@@ -150,7 +150,7 @@ function WebLotCard({ L, onOpen, onOffer, onEdit }) {
   );
 }
 
-function HomeView({ lots, query, setQuery, cat, setCat, city, setCity, onOpen, onOffer, onChains }) {
+function HomeView({ lots, myLots = [], matches = [], query, setQuery, cat, setCat, city, setCity, onOpen, onOffer, onChains }) {
   const [cityOpen, setCityOpen] = React.useState(false);
   const q = (query || '').toLowerCase();
   const items = lots.filter(l => {
@@ -222,30 +222,34 @@ function HomeView({ lots, query, setQuery, cat, setCat, city, setCity, onOpen, o
         )}
       </div>
 
-      <div className="web-container web-section" style={{ paddingTop: 0 }}>
-        <div className="web-head">
-          <h2><AIBadge>Умный мэтчинг</AIBadge></h2>
-          <a href="#" onClick={(e) => { e.preventDefault(); onChains(); }}>Цепочки →</a>
-        </div>
-        <div className="web-grid">
-          {MATCHES.map(m => {
-            const L = lot(m.lot);
-            return (
-              <div key={m.id} className="web-lot" onClick={() => onOpen(L.id)}>
-                <div className="web-lot-photo">
-                  <Photo label={MY_LOT.photo} url={MY_LOT.photoUrl} cat={MY_LOT.cat} />
-                  <span className="web-lot-badge" style={{ right: 12, left: 'auto' }}><Icon name="swap" size={11} color="var(--berry)" /> {m.score}%</span>
+      {matches.length > 0 && (
+        <div className="web-container web-section" style={{ paddingTop: 0 }}>
+          <div className="web-head">
+            <h2><AIBadge>Умный мэтчинг</AIBadge></h2>
+            <a href="#" onClick={(e) => { e.preventDefault(); onChains(); }}>Цепочки →</a>
+          </div>
+          <div className="web-grid">
+            {matches.map(m => {
+              const L = lots.find(x => x.id === m.lot);
+              if (!L) return null;
+              const mine = myLots[0] || MY_LOT;
+              return (
+                <div key={m.id} className="web-lot" onClick={() => onOpen(L.id)}>
+                  <div className="web-lot-photo">
+                    <Photo label={mine.photo} url={mine.photoUrl} cat={mine.cat} />
+                    <span className="web-lot-badge" style={{ right: 12, left: 'auto' }}><Icon name="swap" size={11} color="var(--berry)" /> {m.score}%</span>
+                  </div>
+                  <div className="web-lot-meta">
+                    <span className="web-lot-title">Ваши {mine.title.split(',')[0]} ↔ {L.title}</span>
+                    <span className="web-lot-sub">{m.why}</span>
+                    <div className="web-lot-price"><Credit n={m.topup} size={16} coin={15} color={m.dir === 'you-pay' ? 'var(--ink)' : 'var(--ok)'} /></div>
+                  </div>
                 </div>
-                <div className="web-lot-meta">
-                  <span className="web-lot-title">Ваши Apple Watch ↔ {L.title}</span>
-                  <span className="web-lot-sub">{m.why}</span>
-                  <div className="web-lot-price"><Credit n={m.topup} size={16} coin={15} color={m.dir === 'you-pay' ? 'var(--ink)' : 'var(--ok)'} /></div>
-                </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
     </>
   );
 }
@@ -314,6 +318,8 @@ function LotView({ L, onBack, onOffer }) {
     name: L.ownerName || base.name,
     city: L.ownerCity || base.city,
     avatar: L.ownerAvatar || base.avatar || '',
+    rating: L.ownerRating ?? base.rating ?? 0,
+    deals: L.ownerDeals ?? base.deals ?? 0,
   };
   const amenities = [
     ['Смартфон', 'Apple Watch, iPhone, Samsung'],
@@ -489,8 +495,8 @@ function ProfileView({ user, profile, myLots, onOpenLot, onLogout, onProfileSave
   const [editing, setEditing] = React.useState(false);
   const name = (user && user.name) || ME.name;
   const city = (user && user.city) || ME.city;
-  const rating = (user && user.rating) || ME.rating;
-  const deals = (user && user.dealsCount) || ME.deals;
+  const rating = user ? (user.rating ?? 0) : ME.rating;
+  const deals = user ? (user.dealsCount ?? 0) : ME.deals;
   const balance = (user && user.balance) || 0;
   const bio = (profile && profile.bio) || (user && user.bio) || '';
   const avatar = (profile && profile.avatar) || (user && user.avatar) || '';
@@ -558,7 +564,7 @@ function ProfileView({ user, profile, myLots, onOpenLot, onLogout, onProfileSave
 }
 
 // ---------------- root ----------------
-export default function WebApp({ lots, myLots, user, profile, onLogout, onProfileSaved, onOffer, onCreate, onEditLot }) {
+export default function WebApp({ lots, myLots, user, profile, onLogout, onProfileSaved, onOffer, onCreate, onEditLot, matches = [] }) {
   const [view, setView] = React.useState('home');
   const [cat, setCat] = React.useState('all');
   const [city, setCity] = React.useState('all');
@@ -573,7 +579,7 @@ export default function WebApp({ lots, myLots, user, profile, onLogout, onProfil
     <div className="web">
       <WebNav view={view} setView={setView} user={user} avatar={avatar} query={query} setQuery={setQuery} onLogout={onLogout} onCreate={onCreate} />
       <div className="web-body">
-        {view === 'home' && <HomeView lots={lots} query={query} setQuery={setQuery} cat={cat} setCat={setCat} city={city} setCity={setCity} onOpen={(id) => { setSelLot(id); setView('lot'); }} onOffer={onOffer} onChains={() => setView('chains')} />}
+        {view === 'home' && <HomeView lots={lots} myLots={myLots} matches={matches} query={query} setQuery={setQuery} cat={cat} setCat={setCat} city={city} setCity={setCity} onOpen={(id) => { setSelLot(id); setView('lot'); }} onOffer={onOffer} onChains={() => setView('chains')} />}
         {view === 'lot' && selected && <LotView L={selected} onBack={goHome} onOffer={onOffer} />}
         {view === 'chains' && <ChainsView onBack={goHome} onJoin={() => { setView('deals'); }} />}
         {view === 'deals' && <DealsView onBack={goHome} />}

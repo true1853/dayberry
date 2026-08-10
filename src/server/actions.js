@@ -172,7 +172,7 @@ export async function updateAvatarAction(avatar) {
 export async function listLots() {
   const lots = await prisma.lot.findMany({
     where: { status: 'active' },
-    include: { owner: { select: { city: true, name: true, avatar: true } } },
+    include: { owner: { select: { city: true, name: true, avatar: true, rating: true, dealsCount: true } } },
     orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
   });
   return lots.map(l => mapLot(l, l.owner?.city || ''));
@@ -183,7 +183,7 @@ export async function getMyLots() {
   if (!user) return [];
   const lots = await prisma.lot.findMany({
     where: { ownerId: user.id, status: 'active' },
-    include: { owner: { select: { city: true, name: true, avatar: true } } },
+    include: { owner: { select: { city: true, name: true, avatar: true, rating: true, dealsCount: true } } },
     orderBy: { createdAt: 'desc' },
   });
   return lots.map(l => mapLot(l, l.owner?.city || ''));
@@ -221,7 +221,7 @@ export async function createLotAction(input) {
   });
   const withOwner = await prisma.lot.findUnique({
     where: { id: lot.id },
-    include: { owner: { select: { city: true, name: true, avatar: true } } },
+    include: { owner: { select: { city: true, name: true, avatar: true, rating: true, dealsCount: true } } },
   });
   return { ok: true, lot: mapLot(withOwner || lot, user.city) };
 }
@@ -256,7 +256,7 @@ export async function updateLotAction(lotId, input) {
   });
   const withOwner = await prisma.lot.findUnique({
     where: { id: lotId },
-    include: { owner: { select: { city: true, name: true, avatar: true } } },
+    include: { owner: { select: { city: true, name: true, avatar: true, rating: true, dealsCount: true } } },
   });
   return { ok: true, lot: mapLot(withOwner || updated, user.city) };
 }
@@ -585,7 +585,7 @@ export async function getMatchesAction() {
   const user = await getCurrentUser();
   const lots = await prisma.lot.findMany({
     where: { status: 'active' },
-    include: { owner: { select: { name: true, city: true, avatar: true } } },
+    include: { owner: { select: { name: true, city: true, avatar: true, rating: true, dealsCount: true } } },
     orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
   });
   const myLots = user ? lots.filter(l => l.ownerId === user.id) : [];

@@ -41,6 +41,8 @@ export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, lots }) {
     name: L.ownerName || base.name,
     city: L.ownerCity || base.city,
     avatar: L.ownerAvatar || base.avatar || '',
+    rating: L.ownerRating ?? base.rating ?? 0,
+    deals: L.ownerDeals ?? base.deals ?? 0,
   };
 
   return (

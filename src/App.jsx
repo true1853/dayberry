@@ -295,6 +295,7 @@ export default function App() {
           onOffer={(L) => setOfferLot(L)}
           onCreate={() => setCreating(true)}
           onEditLot={(L) => setEditingLot(L)}
+          matches={matches}
         />
       ) : (
         <>

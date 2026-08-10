@@ -240,8 +240,8 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, 
   const name = (user && user.name) || ME.name;
   const email = (user && user.email) || '';
   const city = (user && user.city) || ME.city;
-  const rating = (user && user.rating) || ME.rating;
-  const deals = (user && user.dealsCount) || ME.deals;
+  const rating = user ? (user.rating ?? 0) : ME.rating;
+  const deals = user ? (user.dealsCount ?? 0) : ME.deals;
   const balance = (user && user.balance) || 0;
   const bio = (profile && profile.bio) || (user && user.bio) || '';
   const wants = (profile && profile.wants) || (user && user.wants) || '';
