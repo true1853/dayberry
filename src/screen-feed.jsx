@@ -177,7 +177,7 @@ function SwipeCard({ lot, drag = 0, onDown, onMove, onUp, onTap, style }) {
           <Stamp text="МИМО" color="var(--ink-2)" show={drag < -40} side="right" rot={14} />
         </>
       )}
-      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '40px 16px 16px', background: 'linear-gradient(to top, rgba(20,8,12,0.82), transparent)' }}>
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '40px 16px 16px', background: 'linear-gradient(to top, rgba(0,0,0,0.82), transparent)' }}>
         <div className="row gap6" style={{ marginBottom: 8 }}>
           <span className="tag" style={{ background: 'rgba(255,255,255,0.2)', color: '#fff', backdropFilter: 'blur(6px)' }}>{CAT[lot.cat].label}</span>
           <span className="tag" style={{ background: 'rgba(255,255,255,0.2)', color: '#fff', backdropFilter: 'blur(6px)' }}>{lot.condition}</span>

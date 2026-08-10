@@ -74,12 +74,71 @@ export async function sessionAction() {
   return getCurrentUser();
 }
 
+export async function getProfileAction() {
+  const user = await getCurrentUser();
+  if (!user) return null;
+  const reviews = await prisma.review.findMany({
+    where: { targetId: user.id },
+    include: { author: { select: { name: true } } },
+    orderBy: { createdAt: 'desc' },
+  });
+  return {
+    ...user,
+    bio: user.bio || '',
+    reviews: reviews.map(r => ({
+      id: r.id,
+      author: r.author.name,
+      rating: r.rating,
+      text: r.text,
+      date: r.createdAt.toISOString().slice(0, 10),
+    })),
+  };
+}
+
+export async function updateProfileAction(input) {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: 'Требуется вход' };
+
+  const { name, city, bio } = input || {};
+  if (!name || !name.trim()) return { ok: false, error: 'Введите имя' };
+
+  const updated = await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      name: name.trim(),
+      city: (city || '').trim() || 'Москва',
+      bio: (bio || '').trim(),
+    },
+  });
+  return { ok: true, user: serializeUser(updated) };
+}
+
+export async function updateAvatarAction(avatar) {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: 'Требуется вход' };
+
+  const clean = typeof avatar === 'string' && avatar.startsWith('data:image/')
+    ? avatar
+    : (avatar || '').trim() || '';
+
+  if (clean && clean.length > 2_000_000) {
+    return { ok: false, error: 'Фото слишком большое — выберите файл до 2 МБ' };
+  }
+
+  const updated = await prisma.user.update({
+    where: { id: user.id },
+    data: { avatar: clean },
+  });
+  return { ok: true, user: serializeUser(updated) };
+}
+
 export async function listLots() {
   const lots = await prisma.lot.findMany({
     where: { status: 'active' },
+    include: { owner: { select: { city: true } } },
     orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
   });
-  return lots.map(mapLot);
+  return lots.map(l => mapLot(l, l.owner?.city || ''));
 }
 
 export async function getMyLots() {
@@ -87,9 +146,10 @@ export async function getMyLots() {
   if (!user) return [];
   const lots = await prisma.lot.findMany({
     where: { ownerId: user.id, status: 'active' },
+    include: { owner: { select: { city: true } } },
     orderBy: { createdAt: 'desc' },
   });
-  return lots.map(mapLot);
+  return lots.map(l => mapLot(l, l.owner?.city || ''));
 }
 
 export async function createLotAction(input) {
@@ -121,5 +181,5 @@ export async function createLotAction(input) {
       sortOrder: 0,
     },
   });
-  return { ok: true, lot: mapLot(lot) };
+  return { ok: true, lot: mapLot(lot, user.city) };
 }

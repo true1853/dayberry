@@ -6,6 +6,7 @@ import { LOTS, U, ME } from '../src/data.js';
 const prisma = new PrismaClient();
 
 async function main() {
+  await prisma.review.deleteMany();
   await prisma.lot.deleteMany();
   await prisma.user.deleteMany();
 
@@ -17,6 +18,7 @@ async function main() {
         email: `${key}@dayberry.demo`,
         passwordHash: await bcrypt.hash('demo12345', 10),
         city: u.city,
+        bio: 'Меняюсь по-честному: вещи, техника, услуги.',
         rating: u.rating,
         dealsCount: u.deals,
         balance: 60000,
@@ -30,6 +32,7 @@ async function main() {
       email: 'demo@dayberry.app',
       passwordHash: await bcrypt.hash('demo12345', 10),
       city: ME.city,
+      bio: 'Меняю технику, книги и вещи. Обмен в Москве или по договорённости.',
       rating: ME.rating,
       dealsCount: ME.deals,
       balance: 38000,
@@ -62,7 +65,26 @@ async function main() {
     });
   }
 
-  console.log(`Seeded ${Object.keys(users).length + 1} users, ${LOTS.length} lots`);
+  const reviews = [
+    { author: 'kirill', rating: 5, text: 'Отличный обмен, всё честно и быстро. Рекомендую!' },
+    { author: 'dasha',  rating: 5, text: 'Приятно иметь дело, вещи точно как на фото.' },
+    { author: 'marina', rating: 4, text: 'Всё хорошо, немного задержалась с передачей.' },
+    { author: 'lena',   rating: 5, text: 'Быстрая встреча, договорились за один день.' },
+  ];
+  for (const r of reviews) {
+    const author = users[r.author];
+    if (!author) continue;
+    await prisma.review.create({
+      data: {
+        authorId: author.id,
+        targetId: me.id,
+        rating: r.rating,
+        text: r.text,
+      },
+    });
+  }
+
+  console.log(`Seeded ${Object.keys(users).length + 1} users, ${LOTS.length} lots, ${reviews.length} reviews`);
 }
 
 main()

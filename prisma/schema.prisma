@@ -13,12 +13,27 @@ model User {
   email        String   @unique
   phone        String?
   city         String   @default("Москва")
+  bio          String   @default("")
+  avatar       String?  @default("")
   passwordHash String
   rating       Float    @default(4.9)
   dealsCount   Int      @default(0)
   balance      Int      @default(38000)
   createdAt    DateTime @default(now())
   lots         Lot[]
+  reviewsGiven Review[] @relation("reviewAuthor")
+  reviewsGot   Review[] @relation("reviewTarget")
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  authorId  String
+  author    User     @relation("reviewAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  targetId  String
+  target    User     @relation("reviewTarget", fields: [targetId], references: [id], onDelete: Cascade)
+  rating    Int
+  text      String
+  createdAt DateTime @default(now())
 }
 
 model Lot {

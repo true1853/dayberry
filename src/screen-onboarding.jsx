@@ -63,7 +63,7 @@ export function Onboarding({ onDone }) {
     <div className="app" style={{ position: 'absolute', background: 'var(--bg)' }}>
       <div className="safe-top" />
       <div className="row" style={{ justifyContent: 'space-between', padding: '4px 18px 0' }}>
-        <span className="row gap8"><div className="coin" style={{ width: 26, height: 26, fontSize: 15 }}>Б</div><span className="h3">Дай бери</span></span>
+        <span className="row gap8"><div className="logo" style={{ width: 26, height: 26, fontSize: 12 }}>ДБ</div><span className="h3">Дай бери</span></span>
         <button className="cap" style={{ border: 'none', background: 'none', color: 'var(--ink-3)', cursor: 'pointer' }} onClick={onDone}>Пропустить</button>
       </div>
 
@@ -274,7 +274,7 @@ export function CreateListing({ onClose, onPublish }) {
         </div>
 
         {error && (
-          <div style={{ padding: '10px 14px', borderRadius: 12, background: '#fff0f3', border: '1px solid var(--berry-200)', color: 'var(--berry-700)', fontSize: 13.5, fontWeight: 500 }}>
+          <div style={{ padding: '10px 14px', borderRadius: 12, background: 'var(--berry-50)', border: '1px solid var(--berry-200)', color: 'var(--berry-700)', fontSize: 13.5, fontWeight: 500 }}>
             {error}
           </div>
         )}

@@ -116,7 +116,7 @@ export function AuthScreen({ onDone }) {
 
       {/* header */}
       <div className="col" style={{ alignItems: 'center', padding: '32px 24px 24px', gap: 10 }}>
-        <div className="coin" style={{ width: 56, height: 56, fontSize: 30 }}>Б</div>
+        <div className="logo" style={{ width: 56, height: 56, fontSize: 26 }}>ДБ</div>
         <div className="col" style={{ alignItems: 'center', gap: 4 }}>
           <span className="h2">Дай бери</span>
           <span className="sub" style={{ textAlign: 'center' }}>
@@ -155,7 +155,7 @@ export function AuthScreen({ onDone }) {
           )}
 
           {error && (
-            <div style={{ padding: '10px 14px', borderRadius: 12, background: '#fff0f3', border: '1px solid var(--berry-200)', color: 'var(--berry-700)', fontSize: 13.5, fontWeight: 500 }}>
+            <div style={{ padding: '10px 14px', borderRadius: 12, background: 'var(--berry-50)', border: '1px solid var(--berry-200)', color: 'var(--berry-700)', fontSize: 13.5, fontWeight: 500 }}>
               {error}
             </div>
           )}

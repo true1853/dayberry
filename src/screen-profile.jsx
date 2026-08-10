@@ -1,13 +1,14 @@
 // screen-profile.jsx — user profile screen
 import React from 'react';
-import { ME, WALLET } from './data.js';
+import { ME } from './data.js';
 import { Icon } from './icons.jsx';
-import { Avatar, Credit, Stars, AppBar, IconBtn, TabBar, Photo } from './ui.jsx';
+import { Credit, AppBar, IconBtn, TabBar, Photo, Sheet } from './ui.jsx';
+import { updateProfileAction, updateAvatarAction } from './server/actions.js';
 
 function StatBox({ value, label }) {
   return (
     <div className="col" style={{ alignItems: 'center', gap: 3, flex: 1 }}>
-      <span style={{ fontSize: 22, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-0.03em' }}>{value}</span>
+      <span style={{ fontSize: 22, fontWeight: 600, color: 'var(--ink)', letterSpacing: '-0.03em' }}>{value}</span>
       <span style={{ fontSize: 12, color: 'var(--ink-3)', fontWeight: 500 }}>{label}</span>
     </div>
   );
@@ -22,7 +23,7 @@ function SettingsRow({ icon, label, sub, onClick, danger, right }) {
     >
       <div style={{
         width: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: danger ? '#fff0f3' : 'var(--line-2)', flex: 'none',
+        background: danger ? 'var(--berry-50)' : 'var(--line-2)', flex: 'none',
       }}>
         <Icon name={icon} size={18} color={danger ? 'var(--berry)' : 'var(--ink-2)'} />
       </div>
@@ -55,18 +56,101 @@ function GroupCard({ children }) {
   );
 }
 
-export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, myLots = [] }) {
+const fmtDate = (iso) => {
+  if (!iso) return '';
+  const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
+  const months = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+  return `${d} ${months[(m || 1) - 1]}`;
+};
+
+export function EditProfileSheet({ user, open, onClose, onSaved }) {
+  const [name, setName] = React.useState(user?.name || '');
+  const [city, setCity] = React.useState(user?.city || '');
+  const [bio, setBio] = React.useState(user?.bio || '');
+  const [error, setError] = React.useState('');
+  const [saving, setSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    if (open) {
+      setName(user?.name || '');
+      setCity(user?.city || '');
+      setBio(user?.bio || '');
+      setError('');
+    }
+  }, [open, user]);
+
+  const save = async () => {
+    if (!name.trim()) return setError('Введите имя');
+    setSaving(true);
+    setError('');
+    const res = await updateProfileAction({ name, city, bio });
+    setSaving(false);
+    if (!res.ok) return setError(res.error || 'Ошибка сохранения');
+    onSaved(res.user);
+    onClose();
+  };
+
+  const field = { width: '100%', padding: '12px 14px', border: '1.5px solid var(--line)', borderRadius: 10, fontSize: 15, fontFamily: 'var(--font)', background: '#fff', color: 'var(--ink)', outline: 'none', boxSizing: 'border-box' };
+
+  return (
+    <Sheet open={open} onClose={onClose} title="Редактировать профиль">
+      <div className="px col gap14" style={{ paddingBottom: 10 }}>
+        <div className="col gap6">
+          <label className="cap">Имя</label>
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="Как вас зовут?" style={field} />
+        </div>
+        <div className="col gap6">
+          <label className="cap">Город</label>
+          <input value={city} onChange={e => setCity(e.target.value)} placeholder="Москва" style={field} />
+        </div>
+        <div className="col gap6">
+          <label className="cap">О себе</label>
+          <textarea value={bio} onChange={e => setBio(e.target.value)} placeholder="Чем меняетесь, где, как любите договариваться…" rows={4} style={{ ...field, resize: 'none', lineHeight: 1.5 }} />
+        </div>
+        {error && (
+          <div style={{ padding: '10px 14px', borderRadius: 12, background: 'var(--berry-50)', border: '1px solid var(--berry-200)', color: 'var(--berry-700)', fontSize: 13.5, fontWeight: 500 }}>{error}</div>
+        )}
+        <button className="btn btn-primary btn-block btn-lg" onClick={save} disabled={saving} style={{ opacity: saving ? 0.7 : 1 }}>
+          {saving ? 'Сохраняем…' : 'Сохранить'}
+        </button>
+      </div>
+    </Sheet>
+  );
+}
+
+export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, myLots = [], onProfileSaved }) {
   const [activeTab, setActiveTab] = React.useState('lots'); // 'lots' | 'reviews'
+  const [editing, setEditing] = React.useState(false);
+  const avatarRef = React.useRef(null);
 
   const name = (user && user.name) || ME.name;
   const city = (user && user.city) || ME.city;
+  const rating = (user && user.rating) || ME.rating;
+  const deals = (user && user.dealsCount) || ME.deals;
+  const balance = (user && user.balance) || 0;
+  const bio = (profile && profile.bio) || (user && user.bio) || '';
+  const avatar = (profile && profile.avatar) || (user && user.avatar) || '';
+  const reviews = (profile && profile.reviews) || [];
   const initial = (name || '?').trim().charAt(0).toUpperCase();
 
-  const reviews = [
-    { from: 'Кирилл М.', rating: 5, text: 'Отличный обмен, всё честно и быстро. Рекомендую!', date: '12 мая' },
-    { from: 'Даша П.',   rating: 5, text: 'Приятно иметь дело, вещи точно как на фото.', date: '3 мая' },
-    { from: 'Марина В.', rating: 4, text: 'Всё хорошо, немного задержалась с передачей.', date: '21 апр' },
-  ];
+  const onAvatarFile = async (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    try {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('Не удалось прочитать файл'));
+        reader.readAsDataURL(f);
+      });
+      const resized = await resizeImage(dataUrl, 256);
+      const res = await updateAvatarAction(resized);
+      if (res.ok && onProfileSaved) onProfileSaved(res.user);
+    } catch (err) {
+      console.error('avatar upload failed', err);
+    }
+  };
 
   return (
     <div className="app">
@@ -81,20 +165,27 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, myLots = 
         {/* hero */}
         <div className="col" style={{ alignItems: 'center', padding: '8px 24px 24px', gap: 12 }}>
           <div style={{ position: 'relative' }}>
-            <div style={{
-              width: 88, height: 88, borderRadius: 999,
-              background: 'linear-gradient(135deg, var(--berry), var(--berry-500))',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 36, fontWeight: 800, color: '#fff',
-              boxShadow: '0 6px 20px rgba(193,18,79,0.35)',
-            }}>{initial}</div>
-            <button style={{
+            {avatar ? (
+              <div style={{ width: 88, height: 88, borderRadius: 999, overflow: 'hidden', boxShadow: '0 6px 20px rgba(255,56,92,0.35)' }}>
+                <img src={avatar} alt="аватар" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+              </div>
+            ) : (
+              <div style={{
+                width: 88, height: 88, borderRadius: 999,
+                background: 'linear-gradient(135deg, var(--berry), var(--berry-500))',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 36, fontWeight: 800, color: '#fff',
+                boxShadow: '0 6px 20px rgba(255,56,92,0.35)',
+              }}>{initial}</div>
+            )}
+            <button onClick={() => avatarRef.current && avatarRef.current.click()} style={{
               position: 'absolute', bottom: 0, right: 0, width: 28, height: 28, borderRadius: 999,
               background: 'var(--berry)', border: '2.5px solid var(--bg)', display: 'flex',
               alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
             }}>
               <Icon name="camera" size={13} color="#fff" />
             </button>
+            <input ref={avatarRef} type="file" accept="image/*" onChange={onAvatarFile} style={{ display: 'none' }} />
           </div>
 
           <div className="col" style={{ alignItems: 'center', gap: 4 }}>
@@ -105,27 +196,31 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, myLots = 
             </div>
             <div className="row gap4" style={{ marginTop: 2 }}>
               {[1,2,3,4,5].map(i => (
-                <Icon key={i} name="star" size={14} color={i <= Math.round(ME.rating) ? '#f5a623' : 'var(--line)'} />
+                <Icon key={i} name="star" size={14} color={i <= Math.round(rating) ? '#222222' : 'var(--line)'} />
               ))}
-              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', marginLeft: 4 }}>{ME.rating}</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', marginLeft: 4 }}>{rating}</span>
             </div>
           </div>
 
           {/* stats */}
           <div className="card row" style={{ width: '100%', padding: '16px 8px', marginTop: 4 }}>
-            <StatBox value={ME.deals} label="сделок" />
+            <StatBox value={deals} label="сделок" />
             <div style={{ width: 1, background: 'var(--line)', alignSelf: 'stretch' }} />
             <StatBox value={myLots.length} label="объявлений" />
             <div style={{ width: 1, background: 'var(--line)', alignSelf: 'stretch' }} />
-            <StatBox value={<span style={{ display:'flex', alignItems:'center', gap:3 }}><Credit n={WALLET.balance} size={18} coin={16} /></span>} label="баллов" />
+            <StatBox value={<span style={{ display:'flex', alignItems:'center', gap:3 }}><Credit n={balance} size={18} coin={16} /></span>} label="баллов" />
           </div>
 
           {/* bio */}
           <div style={{ width: '100%', padding: '12px 14px', background: 'var(--berry-50)', borderRadius: 14, border: '1px solid var(--berry-100)' }}>
             <span style={{ fontSize: 13.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>
-              Меняю технику, книги и вещи. Обмен в Москве или по договорённости.
+              {bio || 'Пока ничего о себе не написано.'}
             </span>
           </div>
+
+          <button className="btn btn-soft" style={{ padding: '10px 18px', fontSize: 14 }} onClick={() => setEditing(true)}>
+            <Icon name="user" size={16} color="var(--ink)" />Редактировать
+          </button>
         </div>
 
         {/* lots / reviews tabs */}
@@ -172,19 +267,25 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, myLots = 
 
         {activeTab === 'reviews' && (
           <div className="col" style={{ padding: '0 16px 16px', gap: 10 }}>
+            {reviews.length === 0 && (
+              <div className="col gap8" style={{ alignItems: 'center', padding: '30px 20px', textAlign: 'center' }}>
+                <Icon name="star" size={30} color="var(--ink-3)" />
+                <span className="sub">Отзывов пока нет. Завершите обмен — и партнёры смогут вас оценить.</span>
+              </div>
+            )}
             {reviews.map((r, i) => (
-              <div key={i} className="card" style={{ padding: '14px 16px', gap: 8 }} >
+              <div key={r.id || i} className="card" style={{ padding: '14px 16px', gap: 8 }} >
                 <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
                   <div className="row gap8">
-                    <Avatar user={['kirill', 'dasha', 'marina'][i]} size={34} />
+                    <div className="avatar" style={{ width: 34, height: 34, fontSize: 14 }}>{(r.author || '?').charAt(0)}</div>
                     <div className="col" style={{ gap: 2 }}>
-                      <span className="title" style={{ fontSize: 13.5 }}>{r.from}</span>
+                      <span className="title" style={{ fontSize: 13.5 }}>{r.author}</span>
                       <div className="row gap3">
-                        {[1,2,3,4,5].map(s => <Icon key={s} name="star" size={11} color={s <= r.rating ? '#f5a623' : 'var(--line)'} />)}
+                        {[1,2,3,4,5].map(s => <Icon key={s} name="star" size={11} color={s <= r.rating ? '#222222' : 'var(--line)'} />)}
                       </div>
                     </div>
                   </div>
-                  <span className="cap">{r.date}</span>
+                  <span className="cap">{fmtDate(r.date)}</span>
                 </div>
                 <span style={{ fontSize: 14, color: 'var(--ink-2)', lineHeight: 1.5 }}>{r.text}</span>
               </div>
@@ -195,19 +296,17 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, myLots = 
         {/* settings */}
         <SectionHeader title="Настройки" />
         <GroupCard>
-          <SettingsRow icon="user" label="Редактировать профиль" sub="Имя, фото, биография" />
-          <Divider />
           <SettingsRow icon="bell" label="Уведомления" sub="Push, email" />
           <Divider />
           <SettingsRow icon="shield" label="Безопасность" sub="Пароль, двухфакторная" />
           <Divider />
-          <SettingsRow icon="map" label="Город и доставка" sub={city} />
+          <SettingsRow icon="map" label="Город и доставка" sub={city} onClick={() => setEditing(true)} />
         </GroupCard>
 
         <SectionHeader title="Приложение" />
         <GroupCard>
           <SettingsRow icon="wallet" label="Кошелёк и баллы"
-            right={<div className="row gap6"><Credit n={WALLET.balance} size={13} coin={13} /><Icon name="chevR" size={18} color="var(--ink-3)" /></div>}
+            right={<div className="row gap6"><Credit n={balance} size={13} coin={13} /><Icon name="chevR" size={18} color="var(--ink-3)" /></div>}
             onClick={() => setTab('wallet')}
           />
           <Divider />
@@ -225,6 +324,26 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, myLots = 
       </div>
 
       <TabBar tab={tab} setTab={setTab} onCreate={onCreate} unread={2} />
+      <EditProfileSheet user={profile || user} open={editing} onClose={() => setEditing(false)} onSaved={onProfileSaved} />
     </div>
   );
+}
+
+function resizeImage(dataUrl, size) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, size / Math.max(img.width, img.height));
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', 0.82));
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
 }

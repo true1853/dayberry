@@ -59,7 +59,7 @@ export function DealStatus({ deal, onBack, onConfirm, onChat, onDone }) {
           </div>
         </div>
 
-        <div className="card" style={{ padding: 16, background: 'linear-gradient(135deg, #241016, #3a1622)', color: '#fff', position: 'relative', overflow: 'hidden' }}>
+        <div className="card" style={{ padding: 16, background: 'linear-gradient(135deg, #1b1b1b, #2a2a2a)', color: '#fff', position: 'relative', overflow: 'hidden' }}>
           <div className="row gap10" style={{ marginBottom: 12 }}>
             <Icon name="lock" size={20} color="var(--berry-200)" />
             <span className="title" style={{ color: '#fff' }}>В эскроу заморожено</span>

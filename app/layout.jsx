@@ -1,6 +1,7 @@
 import React from 'react';
 import './globals.css';
 import '../src/design.css';
+import '../src/web.css';
 
 export const metadata = {
   title: 'Дай бери',
@@ -21,7 +22,7 @@ export const viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
-  themeColor: '#c1124f',
+  themeColor: '#ff385c',
 };
 
 export default function RootLayout({ children }) {
@@ -31,11 +32,11 @@ export default function RootLayout({ children }) {
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
-          href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap"
           rel="stylesheet"
         />
       </head>
-      <body style={{ margin: 0, height: '100%', overflow: 'hidden', background: '#faf7f8' }}>
+      <body style={{ margin: 0, height: '100%', overflow: 'hidden', background: '#ffffff' }}>
         {children}
       </body>
     </html>

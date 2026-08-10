@@ -11,6 +11,13 @@ export function Coin({ size = 16 }) {
     <span className="coin" style={{ width: size, height: size, fontSize: size * 0.62 }}>Б</span>
   );
 }
+
+// ---- brand logo badge ----
+export function Logo({ size = 40, rounded = '30%' }) {
+  return (
+    <span className="logo" style={{ width: size, height: size, borderRadius: rounded, fontSize: size * 0.42, lineHeight: 1 }}>ДБ</span>
+  );
+}
 // amount with coin: <Credit n={48000} />
 export function Credit({ n, size = 15, weight = 700, coin = 14, color, gap = 5, sign = false }) {
   const s = sign && n > 0 ? '+' : '';
@@ -58,7 +65,7 @@ export function Avatar({ user, size = 40 }) {
 export function Stars({ value, size = 12 }) {
   return (
     <span className="row gap4">
-      <span className="stars">{[0,1,2,3,4].map(i => <Icon key={i} name="star" size={size} color={i < Math.round(value) ? '#e8a51b' : '#e3dcdf'} />)}</span>
+      <span className="stars">{[0,1,2,3,4].map(i => <Icon key={i} name="star" size={size} color={i < Math.round(value) ? '#222222' : '#dddddd'} />)}</span>
     </span>
   );
 }

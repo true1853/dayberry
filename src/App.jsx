@@ -2,7 +2,7 @@
 // App.jsx — root: navigation, phone frame scaling, tweaks
 import React from 'react';
 import { lot, MY_LOT, ME } from './data.js';
-import { sessionAction, listLots, logoutAction, createLotAction, getMyLots } from './server/actions.js';
+import { sessionAction, listLots, logoutAction, createLotAction, getMyLots, getProfileAction } from './server/actions.js';
 import { FeedList, FeedSwipe, CatRow } from './screen-feed.jsx';
 import { FeedChain, ChainDetail } from './screen-chain.jsx';
 import { LotDetail, OfferSheet } from './screen-lot.jsx';
@@ -12,27 +12,40 @@ import { Wallet, CreditsInfo } from './screen-wallet.jsx';
 import { Onboarding, CreateListing } from './screen-onboarding.jsx';
 import { AuthScreen } from './screen-auth.jsx';
 import { ProfileScreen } from './screen-profile.jsx';
+import WebApp from './web-app.jsx';
 
 import { AppBar, IconBtn, TabBar, LotCard } from './ui.jsx';
 import { Icon } from './icons.jsx';
 import { useTweaks } from './tweaks-panel.jsx';
 
+const useMediaQuery = (query) => {
+  const [matches, setMatches] = React.useState(() => typeof window !== 'undefined' ? window.matchMedia(query).matches : false);
+  React.useEffect(() => {
+    const mql = window.matchMedia(query);
+    const onChange = (e) => setMatches(e.matches);
+    mql.addEventListener('change', onChange);
+    setMatches(mql.matches);
+    return () => mql.removeEventListener('change', onChange);
+  }, [query]);
+  return matches;
+};
+
 const TWEAK_DEFAULTS = {
   mechanic: 'list',
-  accent: '#c1124f',
+  accent: '#ff385c',
   showOnboarding: true,
   matchHints: true,
 };
 
 const ACCENTS = {
-  '#c1124f': { berry900: '#5e0a29', berry700: '#8f0f3c', berry: '#c1124f', berry500: '#d6275f', b200: '#f2b8c6', b100: '#fbe2ea', b50: '#fef5f8' },
+  '#ff385c': { berry900: '#a90a33', berry700: '#e00b41', berry: '#ff385c', berry500: '#ff5c77', b200: '#ffd1da', b100: '#ffe6eb', b50: '#fff0f3' },
   '#6a4ad6': { berry900: '#2c1e5e', berry700: '#4a30a8', berry: '#6a4ad6', berry500: '#7d5fe0', b200: '#cbbcf2', b100: '#ece6fb', b50: '#f6f3fe' },
   '#1f8a5b': { berry900: '#0d3a26', berry700: '#176844', berry: '#1f8a5b', berry500: '#2aa56e', b200: '#aedcc4', b100: '#dcf0e6', b50: '#f1faf5' },
   '#e8541e': { berry900: '#6e2408', berry700: '#b53c12', berry: '#e8541e', berry500: '#f06a38', b200: '#f7c3aa', b100: '#fde6da', b50: '#fff6f1' },
 };
 
 function applyAccent(hex) {
-  const a = ACCENTS[hex] || ACCENTS['#c1124f'];
+  const a = ACCENTS[hex] || ACCENTS['#ff385c'];
   const r = document.documentElement.style;
   r.setProperty('--berry-900', a.berry900);
   r.setProperty('--berry-700', a.berry700);
@@ -58,6 +71,8 @@ export default function App() {
   const [infoOpen, setInfoOpen] = React.useState(false);
   const [lots, setLots] = React.useState([]);
   const [myLots, setMyLots] = React.useState([]);
+  const [profile, setProfile] = React.useState(null);
+  const isDesktop = useMediaQuery('(min-width: 1128px)');
 
   const syncMe = (user) => {
     ME.name = user.name;
@@ -71,10 +86,11 @@ export default function App() {
   React.useEffect(() => {
     (async () => {
       try {
-        const [u, ls, ml] = await Promise.all([sessionAction(), listLots(), getMyLots()]);
+        const [u, ls, ml, pf] = await Promise.all([sessionAction(), listLots(), getMyLots(), getProfileAction()]);
         if (u) { setCurrentUser(u); setAuthed(true); syncMe(u); }
         setLots(ls);
         setMyLots(ml);
+        setProfile(pf);
       } catch (e) {
         console.error('bootstrap failed', e);
       } finally {
@@ -138,7 +154,20 @@ export default function App() {
       </div>
     );
     if (tab === 'profile') return (
-      <ProfileScreen tab={tab} setTab={setTab} onCreate={() => setCreating(true)} onLogout={handleLogout} user={currentUser} myLots={myLots} />
+      <ProfileScreen
+        tab={tab}
+        setTab={setTab}
+        onCreate={() => setCreating(true)}
+        onLogout={handleLogout}
+        user={currentUser}
+        profile={profile}
+        myLots={myLots}
+        onProfileSaved={(updated) => {
+          setCurrentUser(updated);
+          syncMe(updated);
+          setProfile(p => (p ? { ...p, ...updated } : updated));
+        }}
+      />
     );
   };
 
@@ -173,7 +202,7 @@ export default function App() {
   if (booting) {
     return (
       <div className="app-root col" style={{ alignItems: 'center', justifyContent: 'center' }}>
-        <div className="coin pop" style={{ width: 56, height: 56, fontSize: 30 }}>Б</div>
+        <div className="logo pop" style={{ width: 56, height: 56, fontSize: 26 }}>ДБ</div>
       </div>
     );
   }
@@ -196,8 +225,27 @@ export default function App() {
 
   return (
     <div className="app-root">
-      {tabRoot()}
-      {top && <div className="overlay-layer">{overlay()}</div>}
+      {isDesktop ? (
+        <WebApp
+          lots={lots}
+          myLots={myLots}
+          user={currentUser}
+          profile={profile}
+          onLogout={handleLogout}
+          onProfileSaved={(updated) => {
+            setCurrentUser(updated);
+            syncMe(updated);
+            setProfile(p => (p ? { ...p, ...updated } : updated));
+          }}
+          onOffer={(L) => setOfferLot(L)}
+          onCreate={() => setCreating(true)}
+        />
+      ) : (
+        <>
+          {tabRoot()}
+          {top && <div className="overlay-layer">{overlay()}</div>}
+        </>
+      )}
       {creating && <div className="overlay-layer"><CreateListing onClose={() => setCreating(false)} onPublish={publishLot} /></div>}
       <OfferSheet L={offerLot} open={!!offerLot} onClose={() => setOfferLot(null)} onConfirm={(L, credits) => { setOfferLot(null); setDeal({ L, credits, stage: 'created' }); go('deal'); }} />
       <CreditsInfo open={infoOpen} onClose={() => setInfoOpen(false)} />
@@ -220,7 +268,7 @@ function HomeTab({ t, go, tab, setTab, onCreate, lots }) {
       <div className="safe-top" />
       <AppBar
         big sub="Обмен без денег" title="Дай бери"
-        left={<div className="coin" style={{ width: 38, height: 38, fontSize: 21 }}>Б</div>}
+        left={<div className="logo" style={{ width: 38, height: 38, fontSize: 17 }}>ДБ</div>}
         right={<IconBtn name="bell" badge={2} />}
       />
       {/* view switcher */}
