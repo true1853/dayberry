@@ -2,7 +2,7 @@
 // App.jsx — root: navigation, phone frame scaling, tweaks
 import React from 'react';
 import { lot, MY_LOT, ME, U } from './data.js';
-import { sessionAction, listLots, logoutAction, createLotAction, getMyLots, getProfileAction, listDealsAction, getWalletAction, listChatsAction, listChainsAction, getMatchesAction, createDealAction, confirmReceiptAction, joinChainAction } from './server/actions.js';
+import { sessionAction, listLots, logoutAction, createLotAction, updateLotAction, getMyLots, getProfileAction, listDealsAction, getWalletAction, listChatsAction, listChainsAction, getMatchesAction, createDealAction, confirmReceiptAction, joinChainAction } from './server/actions.js';
 import { FeedList, FeedSwipe, CatRow } from './screen-feed.jsx';
 import { FeedChain, ChainDetail } from './screen-chain.jsx';
 import { LotDetail, OfferSheet } from './screen-lot.jsx';
@@ -73,6 +73,7 @@ export default function App() {
   const [offerLot, setOfferLot] = React.useState(null);
   const [deal, setDeal] = React.useState(null);
   const [creating, setCreating] = React.useState(false);
+  const [editingLot, setEditingLot] = React.useState(null);
   const [infoOpen, setInfoOpen] = React.useState(false);
   const [lots, setLots] = React.useState([]);
   const [myLots, setMyLots] = React.useState([]);
@@ -132,14 +133,22 @@ export default function App() {
     if (publishingRef.current) return;
     publishingRef.current = true;
     try {
-      const res = await createLotAction(lotData);
+      const res = lotData && lotData.id
+        ? await updateLotAction(lotData.id, lotData)
+        : await createLotAction(lotData);
       if (res.ok) {
-        setLots(ls => [res.lot, ...ls]);
-        setMyLots(ms => [res.lot, ...ms]);
+        if (lotData && lotData.id) {
+          setLots(ls => ls.map(x => x.id === res.lot.id ? res.lot : x));
+          setMyLots(ms => ms.map(x => x.id === res.lot.id ? res.lot : x));
+        } else {
+          setLots(ls => [res.lot, ...ls]);
+          setMyLots(ms => [res.lot, ...ms]);
+        }
       }
     } finally {
       publishingRef.current = false;
       setCreating(false);
+      setEditingLot(null);
       resetTo('home');
     }
   };
@@ -193,6 +202,7 @@ export default function App() {
         user={currentUser}
         profile={profile}
         myLots={myLots}
+        onEditLot={(L) => setEditingLot(L)}
         onProfileSaved={(updated) => {
           setCurrentUser(updated);
           syncMe(updated);
@@ -284,6 +294,7 @@ export default function App() {
           }}
           onOffer={(L) => setOfferLot(L)}
           onCreate={() => setCreating(true)}
+          onEditLot={(L) => setEditingLot(L)}
         />
       ) : (
         <>
@@ -291,7 +302,7 @@ export default function App() {
           {top && <div className="overlay-layer">{overlay()}</div>}
         </>
       )}
-      {creating && <div className="overlay-layer"><CreateListing onClose={() => setCreating(false)} onPublish={publishLot} initialWants={currentUser && currentUser.wants} /></div>}
+      {(creating || editingLot) && <div className="overlay-layer"><CreateListing onClose={() => { setCreating(false); setEditingLot(null); }} onPublish={publishLot} initialWants={currentUser && currentUser.wants} editLot={editingLot} /></div>}
       <OfferSheet L={offerLot} myLot={(myLots && myLots[0]) || MY_LOT} balance={wallet ? wallet.balance : 0} open={!!offerLot} onClose={() => setOfferLot(null)} onConfirm={async (L, credits) => {
         setOfferLot(null);
         const res = await createDealAction({ lotId: L.id, credits });

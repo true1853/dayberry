@@ -248,6 +248,6 @@
 .spin { display: inline-block; width: 16px; height: 16px; flex: none; border: 2px solid rgba(255,255,255,.35); border-top-color: #fff; border-radius: 50%; animation: spin .8s linear infinite; }
 
 /* overlay layer (pushed screens sit above the tab root inside the device) */
-.overlay-layer { position: absolute; inset: 0; z-index: 50; animation: slide-in .26s cubic-bezier(.2,.8,.2,1) both; }
+.overlay-layer { position: absolute; inset: 0; z-index: 300; animation: slide-in .26s cubic-bezier(.2,.8,.2,1) both; }
 @keyframes slide-in { from { transform: translateX(8%); opacity: 0.4; } to { transform: none; opacity: 1; } }
 .col.gap2 { gap: 2px; }

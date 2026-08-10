@@ -127,12 +127,13 @@ const bigInputStyle = {
   cursor: 'text',
 };
 
-function WebLotCard({ L, onOpen, onOffer }) {
+function WebLotCard({ L, onOpen, onOffer, onEdit }) {
   return (
     <div className="web-lot" onClick={() => onOpen(L.id)}>
       <div className="web-lot-photo">
         <Photo label={L.photo} url={L.photoUrl} cat={L.cat} />
         {L.hot && <span className="web-lot-badge"><Icon name="flame" size={11} color="var(--berry)" /> Хит</span>}
+        {onEdit && <button className="web-lot-heart" title="Редактировать" onClick={(e) => { e.stopPropagation(); onEdit(L); }}><Icon name="edit" size={15} color="var(--ink-2)" /></button>}
         <button className="web-lot-heart" onClick={(e) => { e.stopPropagation(); onOffer && onOffer(L); }}><Icon name="heart" size={17} color="var(--ink-2)" /></button>
       </div>
       <div className="web-lot-meta">
@@ -474,7 +475,7 @@ function DealsView({ onBack, onOpenLot }) {
 }
 
 // ---------------- profile ----------------
-function ProfileView({ user, profile, myLots, onOpenLot, onLogout, onProfileSaved, onWallet }) {
+function ProfileView({ user, profile, myLots, onOpenLot, onLogout, onProfileSaved, onWallet, onEditLot }) {
   const [editing, setEditing] = React.useState(false);
   const name = (user && user.name) || ME.name;
   const city = (user && user.city) || ME.city;
@@ -516,7 +517,7 @@ function ProfileView({ user, profile, myLots, onOpenLot, onLogout, onProfileSave
             <div className="web-head"><h2>Объявления</h2><a href="#" onClick={e => e.preventDefault()}>Все →</a></div>
             {myLots.length ? (
               <div className="web-grid">
-                {myLots.map(L => <WebLotCard key={L.id} L={L} onOpen={onOpenLot} />)}
+                {myLots.map(L => <WebLotCard key={L.id} L={L} onOpen={onOpenLot} onEdit={onEditLot} />)}
               </div>
             ) : (
               <div className="web-empty"><Icon name="tag" size={34} color="var(--ink-3)" /><span>Здесь появятся ваши товары и услуги</span></div>
@@ -547,7 +548,7 @@ function ProfileView({ user, profile, myLots, onOpenLot, onLogout, onProfileSave
 }
 
 // ---------------- root ----------------
-export default function WebApp({ lots, myLots, user, profile, onLogout, onProfileSaved, onOffer, onCreate }) {
+export default function WebApp({ lots, myLots, user, profile, onLogout, onProfileSaved, onOffer, onCreate, onEditLot }) {
   const [view, setView] = React.useState('home');
   const [cat, setCat] = React.useState('all');
   const [city, setCity] = React.useState('all');
@@ -566,7 +567,7 @@ export default function WebApp({ lots, myLots, user, profile, onLogout, onProfil
         {view === 'lot' && selected && <LotView L={selected} onBack={goHome} onOffer={onOffer} />}
         {view === 'chains' && <ChainsView onBack={goHome} onJoin={() => { setView('deals'); }} />}
         {view === 'deals' && <DealsView onBack={goHome} />}
-        {view === 'profile' && <ProfileView user={user} profile={profile} myLots={myLots} onOpenLot={(id) => { setSelLot(id); setView('lot'); }} onLogout={onLogout} onProfileSaved={onProfileSaved} onWallet={goHome} />}
+        {view === 'profile' && <ProfileView user={user} profile={profile} myLots={myLots} onOpenLot={(id) => { setSelLot(id); setView('lot'); }} onLogout={onLogout} onProfileSaved={onProfileSaved} onWallet={goHome} onEditLot={onEditLot} />}
       </div>
       <WebFooter />
     </div>

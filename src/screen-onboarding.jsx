@@ -112,13 +112,13 @@ const inputStyle = {
   transition: 'border-color .15s',
 };
 
-export function CreateListing({ onClose, onPublish, initialWants = '' }) {
-  const [kind, setKind] = React.useState('item'); // 'item' | 'service'
-  const [cat, setCat] = React.useState('gadget');
-  const [condition, setCondition] = React.useState('Новое или Б/У');
-  const [title, setTitle] = React.useState('');
-  const [value, setValue] = React.useState('');
-  const [wants, setWants] = React.useState(initialWants || '');
+export function CreateListing({ onClose, onPublish, initialWants = '', editLot = null }) {
+  const [kind, setKind] = React.useState(editLot ? (editLot.cat === 'digital' ? 'service' : 'item') : 'item'); // 'item' | 'service'
+  const [cat, setCat] = React.useState(editLot ? editLot.cat : 'gadget');
+  const [condition, setCondition] = React.useState(editLot ? (editLot.condition || 'Новое или Б/У') : 'Новое или Б/У');
+  const [title, setTitle] = React.useState(editLot ? editLot.title : '');
+  const [value, setValue] = React.useState(editLot ? String(editLot.value) : '');
+  const [wants, setWants] = React.useState(editLot ? editLot.wants : (initialWants || ''));
   const [desc, setDesc] = React.useState('');
   const [photo, setPhoto] = React.useState('');
   const [photoName, setPhotoName] = React.useState('');
@@ -195,6 +195,7 @@ export function CreateListing({ onClose, onPublish, initialWants = '' }) {
     setError('');
     const placeholder = kind === 'service' ? 'УСЛУГА' : (cat === 'gadget' ? 'ТЕХНИКА' : 'ВЕЩЬ');
     const lot = {
+      id: editLot ? editLot.id : undefined,
       title: title.trim(),
       cat,
       value: valueNum,
@@ -230,7 +231,7 @@ export function CreateListing({ onClose, onPublish, initialWants = '' }) {
       <div className="safe-top" />
       <div className="row gap10" style={{ padding: '4px 14px 12px', alignItems: 'center' }}>
         <IconBtn name="close" onClick={onClose} />
-        <span className="h3 grow">Новое объявление</span>
+        <span className="h3 grow">{editLot ? 'Редактировать объявление' : 'Новое объявление'}</span>
       </div>
 
       <div className="app-scroll px col gap16" style={{ paddingBottom: 20 }}>
@@ -380,9 +381,9 @@ export function CreateListing({ onClose, onPublish, initialWants = '' }) {
       <div className="px" style={{ padding: '12px 18px calc(12px + env(safe-area-inset-bottom))', borderTop: '1px solid var(--line)', background: '#fff' }}>
         <button className="btn btn-primary btn-block btn-lg" onClick={submit} disabled={publishing} style={{ opacity: publishing ? 0.8 : 1 }}>
           {publishing ? (
-            <><span className="spin" />Публикуем…</>
+            <><span className="spin" />{editLot ? 'Сохраняем…' : 'Публикуем…'}</>
           ) : (
-            <><Icon name="check" size={18} color="#fff" />Опубликовать</>
+            <><Icon name="check" size={18} color="#fff" />{editLot ? 'Сохранить' : 'Опубликовать'}</>
           )}
         </button>
       </div>

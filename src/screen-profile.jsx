@@ -234,7 +234,7 @@ export function AboutSheet({ open, onClose }) {
   );
 }
 
-export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, myLots = [], onProfileSaved }) {
+export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, myLots = [], onProfileSaved, onEditLot }) {
   const [activeTab, setActiveTab] = React.useState('lots'); // 'lots' | 'reviews'
   const [editing, setEditing] = React.useState(false);
   const [passwordOpen, setPasswordOpen] = React.useState(false);
@@ -396,7 +396,7 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, 
         {activeTab === 'lots' && (
           <div style={{ padding: '0 16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, paddingBottom: 16 }}>
             {myLots.map(l => (
-              <div key={l.id} className="card" style={{ overflow: 'hidden', cursor: 'pointer' }}>
+              <div key={l.id} className="card" style={{ overflow: 'hidden', cursor: 'pointer' }} onClick={() => onEditLot && onEditLot(l)}>
                 <Photo label={l.photo} url={l.photoUrl} cat={l.cat} style={{ aspectRatio: '1/1' }} />
                 <div className="col" style={{ padding: '10px 12px 12px', gap: 4 }}>
                   <Credit n={l.value} size={15} coin={14} />

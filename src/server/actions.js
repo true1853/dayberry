@@ -220,6 +220,37 @@ export async function createLotAction(input) {
   return { ok: true, lot: mapLot(lot, user.city) };
 }
 
+export async function updateLotAction(lotId, input) {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: 'Требуется вход' };
+
+  const lot = await prisma.lot.findUnique({ where: { id: lotId } });
+  if (!lot) return { ok: false, error: 'Объявление не найдено' };
+  if (lot.ownerId !== user.id) return { ok: false, error: 'Это не ваше объявление' };
+
+  const { title, cat, value, aiLow, aiHigh, wants, desc, condition, valuationSource } = input || {};
+  if (!title || !title.trim()) return { ok: false, error: 'Введите название' };
+  if (!value || value <= 0) return { ok: false, error: 'Укажите оценку в баллах' };
+  if (!wants || !wants.trim()) return { ok: false, error: 'Укажите, на что хотите обменять' };
+
+  const num = Math.round(Number(value));
+  const updated = await prisma.lot.update({
+    where: { id: lotId },
+    data: {
+      title: title.trim(),
+      cat: cat || lot.cat,
+      value: num,
+      aiLow: aiLow || Math.round(num * 0.92),
+      aiHigh: aiHigh || Math.round(num * 1.08),
+      valuationSource: valuationSource === 'ai' ? 'ai' : 'manual',
+      wants: wants.trim(),
+      desc: desc || '',
+      condition: condition || lot.condition,
+    },
+  });
+  return { ok: true, lot: mapLot(updated, user.city) };
+}
+
 // ---------- deals ----------
 
 const DEAL_STAGE_ORDER = ['created', 'meet', 'confirm', 'done'];
