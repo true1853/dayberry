@@ -9,6 +9,12 @@ RUN npm ci --ignore-scripts
 
 COPY . .
 
+# public OAuth client ids (inlined by next build)
+ARG NEXT_PUBLIC_VK_CLIENT_ID
+ENV NEXT_PUBLIC_VK_CLIENT_ID=$NEXT_PUBLIC_VK_CLIENT_ID
+ARG NEXT_PUBLIC_YANDEX_CLIENT_ID
+ENV NEXT_PUBLIC_YANDEX_CLIENT_ID=$NEXT_PUBLIC_YANDEX_CLIENT_ID
+
 RUN npx prisma generate
 RUN npm run build
 

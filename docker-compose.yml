@@ -1,6 +1,10 @@
 services:
   dayberry:
-    build: .
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_VK_CLIENT_ID: ${NEXT_PUBLIC_VK_CLIENT_ID:-}
+        NEXT_PUBLIC_YANDEX_CLIENT_ID: ${NEXT_PUBLIC_YANDEX_CLIENT_ID:-}
     container_name: dayberry
     restart: unless-stopped
     ports:
@@ -12,6 +16,11 @@ services:
       AI_BASE_URL: ${AI_BASE_URL:-https://routerai.ru/api/v1}
       AI_MODEL: ${AI_MODEL:-qwen/qwen3-vl-30b-a3b-instruct}
       AI_EMBED_MODEL: ${AI_EMBED_MODEL:-qwen/qwen3-embedding-4b}
+      APP_URL: ${APP_URL:-}
+      NEXT_PUBLIC_VK_CLIENT_ID: ${NEXT_PUBLIC_VK_CLIENT_ID:-}
+      VK_CLIENT_SECRET: ${VK_CLIENT_SECRET:-}
+      NEXT_PUBLIC_YANDEX_CLIENT_ID: ${NEXT_PUBLIC_YANDEX_CLIENT_ID:-}
+      YANDEX_CLIENT_SECRET: ${YANDEX_CLIENT_SECRET:-}
     volumes:
       - dayberry-data:/app/data
     networks:
