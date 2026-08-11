@@ -10,8 +10,9 @@ import { DealsList, ChatThread } from './screen-chat.jsx';
 import { Wallet, CreditsInfo } from './screen-wallet.jsx';
 import { Onboarding, CreateListing } from './screen-onboarding.jsx';
 import { AuthScreen } from './screen-auth.jsx';
-import { ProfileScreen } from './screen-profile.jsx';
+import { ProfileScreen, SettingsScreen } from './screen-profile.jsx';
 import WebApp from './web-app.jsx';
+import { parseRoute, tabPath, screenPath, readPath } from './router.js';
 
 import { AppBar, IconBtn, TabBar, LotCard } from './ui.jsx';
 import { Icon } from './icons.jsx';
@@ -66,8 +67,7 @@ export default function App() {
     if (typeof window === 'undefined') return false;
     try { return window.localStorage.getItem(ONBOARDED_KEY) === '1'; } catch { return false; }
   });
-  const [tab, setTabRaw] = React.useState('home');
-  const [stack, setStack] = React.useState([]);
+  const [path, setPath] = React.useState(readPath);
   const publishingRef = React.useRef(false);
   const [authOpen, setAuthOpen] = React.useState(false);
   const [authMsg, setAuthMsg] = React.useState('');
@@ -94,6 +94,40 @@ export default function App() {
     if (snackTimer.current) clearTimeout(snackTimer.current);
     snackTimer.current = setTimeout(() => setSnack(''), 8000);
   };
+
+  // URL routing (hash-based history): every screen has its own address,
+  // browser back/forward and deep links work naturally.
+  React.useEffect(() => {
+    const onHash = () => setPath(readPath());
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
+  const navigate = (to, opts = {}) => {
+    if (typeof window === 'undefined') return;
+    const hash = to === '/' ? '' : '#' + to;
+    if (opts.replace) {
+      window.history.replaceState(null, '', hash);
+      setPath(to);
+    } else {
+      window.location.hash = hash;
+      setPath(to);
+    }
+  };
+
+  const route = React.useMemo(() => parseRoute(path), [path]);
+  const tab = route.tab;
+  const stack = route.stack;
+  const top = stack[stack.length - 1];
+
+  const go = (name, params = {}) => navigate(screenPath(name, params));
+  const back = () => {
+    if (typeof window === 'undefined') return;
+    if (window.history.length > 1) window.history.back();
+    else navigate('/');
+  };
+  const setTab = (id) => { navigate(tabPath(id)); };
+  const resetTo = (id) => { navigate(tabPath(id), { replace: true }); };
 
   React.useEffect(() => { applyAccent(t.accent); }, [t.accent]);
 
@@ -140,11 +174,10 @@ export default function App() {
 
   const guardedTab = (t) => {
     if (!authed && (t === 'deals' || t === 'wallet' || t === 'profile')) {
-      requireAuth('Войдите, чтобы открыть этот раздел', () => { setStack([]); setTabRaw(t); });
+      requireAuth('Войдите, чтобы открыть этот раздел', () => { navigate(tabPath(t)); });
       return;
     }
-    setStack([]);
-    setTabRaw(t);
+    navigate(tabPath(t));
   };
 
   const handleLogout = () => {
@@ -152,8 +185,7 @@ export default function App() {
     setCurrentUser(null);
     setAuthed(false);
     setAuthOpen(false);
-    setTabRaw('home');
-    setStack([]);
+    navigate('/');
   };
 
   const publishLot = async (lotData) => {
@@ -188,16 +220,12 @@ export default function App() {
     }
   };
 
-  const top = stack[stack.length - 1];
-  const go = (name, params = {}) => setStack(s => [...s, { name, params }]);
-  const back = () => setStack(s => s.slice(0, -1));
-  const setTab = (id) => { setStack([]); setTabRaw(id); };
-  const resetTo = (id) => { setStack([]); setTabRaw(id); };
+  const topDeal = deal || (top && top.name === 'deal' && top.params && top.params.id ? deals.find(x => x.id === top.params.id) : null) || null;
 
   const openDeal = (id) => {
     const d = deals.find(x => x.id === id) || deal || deals[0];
     setDeal(d);
-    go('deal');
+    go('deal', { id: d ? d.id : id });
   };
 
   const confirmDeal = async (d) => {
@@ -308,6 +336,7 @@ export default function App() {
         profile={profile}
         myLots={myLots}
         onEditLot={(L) => setEditingLot(L)}
+        onOpenSettings={() => go('settings')}
         onProfileSaved={(updated) => {
           setCurrentUser(updated);
           setProfile(p => (p ? { ...p, ...updated } : updated));
@@ -336,17 +365,36 @@ export default function App() {
           const wa = await getWalletAction();
           if (wa) setWallet(wa);
           back();
-          if (res.ok) { const de = await listDealsAction(); setDeals(de || []); const dl = de.find(x => x.id === res.dealId); setDeal(dl); go('deal'); }
+          if (res.ok) { const de = await listDealsAction(); setDeals(de || []); const dl = de.find(x => x.id === res.dealId); setDeal(dl); go('deal', { id: res.dealId }); }
         })} />
       </div>
     );
-    if (top.name === 'deal') return (
-      <div className="app"><div className="safe-top" />
-        <DealStatus deal={deal} onBack={back} onConfirm={() => confirmDeal()} onCancel={async () => { const ok = await cancelDeal(deal); if (ok) resetTo('deals'); }} onChat={() => openDealChat(deal)} onDone={(where) => { setDeal(null); resetTo(where === 'home' ? 'home' : 'deals'); }} />
-      </div>
-    );
+    if (top.name === 'deal') {
+      const d = topDeal;
+      if (!d) return null;
+      return (
+        <div className="app"><div className="safe-top" />
+          <DealStatus deal={d} onBack={back} onConfirm={() => confirmDeal(d)} onCancel={async () => { const ok = await cancelDeal(d); if (ok) resetTo('deals'); }} onChat={() => openDealChat(d)} onDone={(where) => { setDeal(null); resetTo(where === 'home' ? 'home' : 'deals'); }} />
+        </div>
+      );
+    }
     if (top.name === 'chat') return (
       <ChatThread chatId={top.params.id} onBack={back} onOpenDeal={() => { const c = chats.find(x => x.id === top.params.id); openDeal(c && c.deal ? c.deal.id : undefined); }} />
+    );
+    if (top.name === 'settings') return (
+      <div className="app"><div className="safe-top" />
+        <SettingsScreen
+          user={currentUser}
+          profile={profile}
+          onBack={back}
+          onLogout={handleLogout}
+          onGoWallet={() => navigate(tabPath('wallet'))}
+          onProfileSaved={(updated) => {
+            setCurrentUser(updated);
+            setProfile(p => (p ? { ...p, ...updated } : updated));
+          }}
+        />
+      </div>
     );
   };
 
@@ -404,7 +452,7 @@ export default function App() {
           if (wa) setWallet(wa);
           const ch = await listChatsAction();
           setChats(ch || []);
-          go('deal');
+          go('deal', { id: d.id });
         } catch (e) {
           console.error('createDealAction failed', e);
           showSnack('Не удалось создать сделку — обновите страницу и попробуйте ещё раз');

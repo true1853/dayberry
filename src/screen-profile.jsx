@@ -351,12 +351,9 @@ export function AboutSheet({ open, onClose }) {
   );
 }
 
-export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, myLots = [], onProfileSaved, onEditLot }) {
+export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, myLots = [], onProfileSaved, onEditLot, onOpenSettings }) {
   const [activeTab, setActiveTab] = React.useState('lots'); // 'lots' | 'reviews'
   const [editing, setEditing] = React.useState(false);
-  const [passwordOpen, setPasswordOpen] = React.useState(false);
-  const [aboutOpen, setAboutOpen] = React.useState(false);
-  const [shareNote, setShareNote] = React.useState('');
   const avatarRef = React.useRef(null);
 
   const name = (user && user.name) || '';
@@ -370,31 +367,6 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, 
   const avatar = (profile && profile.avatar) || (user && user.avatar) || '';
   const reviews = (profile && profile.reviews) || [];
   const initial = (name || '?').trim().charAt(0).toUpperCase();
-
-  const setting = (k) => !user || user[k] !== false;
-  const toggleSetting = async (k) => {
-    if (!user) return;
-    const next = {
-      notifyPush: setting('notifyPush'),
-      notifyEmail: setting('notifyEmail'),
-      notifyDeals: setting('notifyDeals'),
-      [k]: !setting(k),
-    };
-    const res = await updateSettingsAction(next);
-    if (res.ok && res.user && onProfileSaved) onProfileSaved(res.user);
-  };
-
-  const shareInvite = async () => {
-    const text = 'Дай бери — обмен без денег. Присоединяйся: https://dayberry.prismatica.agency';
-    if (typeof navigator !== 'undefined' && navigator.share) {
-      try { await navigator.share({ title: 'Дай бери', text }); return; } catch {}
-    }
-    try {
-      await navigator.clipboard.writeText(text);
-      setShareNote('Ссылка скопирована');
-      setTimeout(() => setShareNote(''), 2500);
-    } catch {}
-  };
 
   const onAvatarFile = async (e) => {
     const f = e.target.files && e.target.files[0];
@@ -568,43 +540,91 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, 
         )}
 
         {/* settings */}
-        <SectionHeader title="Аккаунт" />
-        <GroupCard>
-          <SettingsRow icon="user" label="Профиль" sub={email || 'Email'} onClick={() => setEditing(true)} />
-          <Divider />
-          <SettingsRow icon="shield" label="Сменить пароль" onClick={() => setPasswordOpen(true)} />
-        </GroupCard>
-
-        <SectionHeader title="Уведомления" />
-        <GroupCard>
-          <SettingsRow icon="bell" label="Push-уведомления" right={<Switch on={setting('notifyPush')} onChange={() => toggleSetting('notifyPush')} />} />
-          <Divider />
-          <SettingsRow icon="mail" label="Email-рассылка" right={<Switch on={setting('notifyEmail')} onChange={() => toggleSetting('notifyEmail')} />} />
-          <Divider />
-          <SettingsRow icon="chat" label="Сделки и чаты" right={<Switch on={setting('notifyDeals')} onChange={() => toggleSetting('notifyDeals')} />} />
-        </GroupCard>
-
-        <SectionHeader title="Приложение" />
-        <GroupCard>
-          <SettingsRow icon="wallet" label="Кошелёк и баллы"
-            right={<div className="row gap6"><Credit n={balance} size={13} coin={13} /><Icon name="chevR" size={18} color="var(--ink-3)" /></div>}
-            onClick={() => setTab('wallet')}
-          />
-          <Divider />
-          <SettingsRow icon="gift" label="Пригласить друга" sub={shareNote || 'Поделиться ссылкой на сервис'} onClick={shareInvite} />
-          <Divider />
-          <SettingsRow icon="info" label="О приложении" sub="Версия 1.0.0" onClick={() => setAboutOpen(true)} />
-        </GroupCard>
-
         <SectionHeader title="" />
         <GroupCard>
-          <SettingsRow icon="lock" label="Выйти из аккаунта" danger onClick={onLogout} />
+          <SettingsRow icon="settings" label="Настройки" sub="Профиль, уведомления, кошелёк" onClick={() => onOpenSettings && onOpenSettings()} />
         </GroupCard>
 
         <div style={{ height: 32 }} />
       </div>
 
       <TabBar tab={tab} setTab={setTab} onCreate={onCreate} unread={0} />
+      <EditProfileSheet user={profile || user} open={editing} onClose={() => setEditing(false)} onSaved={onProfileSaved} />
+    </div>
+  );
+}
+
+export function SettingsScreen({ user, profile, onBack, onLogout, onProfileSaved, onGoWallet }) {
+  const [editing, setEditing] = React.useState(false);
+  const [passwordOpen, setPasswordOpen] = React.useState(false);
+  const [aboutOpen, setAboutOpen] = React.useState(false);
+  const [shareNote, setShareNote] = React.useState('');
+  const email = (user && user.email) || '';
+  const balance = (user && user.balance) || 0;
+
+  const setting = (k) => !user || user[k] !== false;
+  const toggleSetting = async (k) => {
+    if (!user) return;
+    const next = {
+      notifyPush: setting('notifyPush'),
+      notifyEmail: setting('notifyEmail'),
+      notifyDeals: setting('notifyDeals'),
+      [k]: !setting(k),
+    };
+    const res = await updateSettingsAction(next);
+    if (res.ok && res.user && onProfileSaved) onProfileSaved(res.user);
+  };
+
+  const shareInvite = async () => {
+    const text = 'Дай бери — обмен без денег. Присоединяйся: https://dayberry.prismatica.agency';
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try { await navigator.share({ title: 'Дай бери', text }); return; } catch {}
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      setShareNote('Ссылка скопирована');
+      setTimeout(() => setShareNote(''), 2500);
+    } catch {}
+  };
+
+  return (
+    <div className="app-scroll">
+      <AppBar title="Настройки" left={<IconBtn name="back" onClick={onBack} />} />
+      <SectionHeader title="Аккаунт" />
+      <GroupCard>
+        <SettingsRow icon="user" label="Профиль" sub={email || 'Email'} onClick={() => setEditing(true)} />
+        <Divider />
+        <SettingsRow icon="shield" label="Сменить пароль" onClick={() => setPasswordOpen(true)} />
+      </GroupCard>
+
+      <SectionHeader title="Уведомления" />
+      <GroupCard>
+        <SettingsRow icon="bell" label="Push-уведомления" right={<Switch on={setting('notifyPush')} onChange={() => toggleSetting('notifyPush')} />} />
+        <Divider />
+        <SettingsRow icon="mail" label="Email-рассылка" right={<Switch on={setting('notifyEmail')} onChange={() => toggleSetting('notifyEmail')} />} />
+        <Divider />
+        <SettingsRow icon="chat" label="Сделки и чаты" right={<Switch on={setting('notifyDeals')} onChange={() => toggleSetting('notifyDeals')} />} />
+      </GroupCard>
+
+      <SectionHeader title="Приложение" />
+      <GroupCard>
+        <SettingsRow icon="wallet" label="Кошелёк и баллы"
+          right={<div className="row gap6"><Credit n={balance} size={13} coin={13} /><Icon name="chevR" size={18} color="var(--ink-3)" /></div>}
+          onClick={onGoWallet}
+        />
+        <Divider />
+        <SettingsRow icon="gift" label="Пригласить друга" sub={shareNote || 'Поделиться ссылкой на сервис'} onClick={shareInvite} />
+        <Divider />
+        <SettingsRow icon="info" label="О приложении" sub="Версия 1.0.0" onClick={() => setAboutOpen(true)} />
+      </GroupCard>
+
+      <SectionHeader title="" />
+      <GroupCard>
+        <SettingsRow icon="lock" label="Выйти из аккаунта" danger onClick={onLogout} />
+      </GroupCard>
+
+      <div style={{ height: 32 }} />
+
       <EditProfileSheet user={profile || user} open={editing} onClose={() => setEditing(false)} onSaved={onProfileSaved} />
       <ChangePasswordSheet open={passwordOpen} onClose={() => setPasswordOpen(false)} />
       <AboutSheet open={aboutOpen} onClose={() => setAboutOpen(false)} />
