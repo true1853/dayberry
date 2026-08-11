@@ -69,7 +69,7 @@ const YandexIcon = () => (
   </svg>
 );
 
-export function AuthScreen({ onDone }) {
+export function AuthScreen({ onDone, onClose, message = '' }) {
   const [mode, setMode] = React.useState('login'); // 'login' | 'register'
   const [name, setName] = React.useState('');
   const [email, setEmail] = React.useState('');
@@ -135,13 +135,19 @@ export function AuthScreen({ onDone }) {
       <div className="safe-top" />
 
       {/* header */}
-      <div className="col" style={{ alignItems: 'center', padding: '32px 24px 24px', gap: 10 }}>
+      <div className="col" style={{ alignItems: 'center', padding: '32px 24px 24px', gap: 10, position: 'relative' }}>
+        {onClose && (
+          <button onClick={onClose} aria-label="Закрыть" style={{ position: 'absolute', top: 14, right: 14, width: 36, height: 36, borderRadius: 999, border: 'none', background: 'var(--line-2)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Icon name="close" size={18} color="var(--ink-2)" />
+          </button>
+        )}
         <div className="logo" style={{ width: 56, height: 56, fontSize: 26 }}>ДБ</div>
         <div className="col" style={{ alignItems: 'center', gap: 4 }}>
           <span className="h2">Дай бери</span>
           <span className="sub" style={{ textAlign: 'center' }}>
             {isLogin ? 'Войдите в аккаунт' : 'Создайте аккаунт'}
           </span>
+          {message && <span className="cap" style={{ color: 'var(--berry)', fontWeight: 600, textAlign: 'center', marginTop: 2 }}>{message}</span>}
         </div>
       </div>
 

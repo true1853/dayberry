@@ -69,6 +69,8 @@ export default function App() {
   const [tab, setTabRaw] = React.useState('home');
   const [stack, setStack] = React.useState([]);
   const publishingRef = React.useRef(false);
+  const [authOpen, setAuthOpen] = React.useState(false);
+  const [authMsg, setAuthMsg] = React.useState('');
   const [offerLot, setOfferLot] = React.useState(null);
   const [deal, setDeal] = React.useState(null);
   const [creating, setCreating] = React.useState(false);
@@ -113,12 +115,32 @@ export default function App() {
   const handleAuth = (user) => {
     setCurrentUser(user);
     setAuthed(true);
+    setAuthOpen(false);
+  };
+
+  const requireAuth = (msg) => {
+    if (authed) return true;
+    setAuthMsg(msg || 'Войдите или зарегистрируйтесь, чтобы продолжить');
+    setAuthOpen(true);
+    return false;
+  };
+
+  const guardedTab = (t) => {
+    if (!authed && (t === 'deals' || t === 'wallet' || t === 'profile')) {
+      requireAuth('Войдите, чтобы открыть этот раздел');
+      return;
+    }
+    setStack([]);
+    setTabRaw(t);
   };
 
   const handleLogout = () => {
     logoutAction();
     setCurrentUser(null);
     setAuthed(false);
+    setAuthOpen(false);
+    setTabRaw('home');
+    setStack([]);
   };
 
   const publishLot = async (lotData) => {
@@ -168,28 +190,30 @@ export default function App() {
     }
   };
 
+  const onCreate = () => { if (requireAuth('Создать объявление можно после регистрации')) setCreating(true); };
+
   const tabRoot = () => {
     if (tab === 'home') {
-      return <HomeTab t={t} go={go} tab={tab} setTab={setTab} onCreate={() => setCreating(true)} lots={lots} myLots={myLots} matches={matches} chains={chains} />;
+      return <HomeTab t={t} go={go} tab={tab} setTab={guardedTab} onCreate={onCreate} lots={lots} myLots={myLots} matches={matches} chains={chains} />;
     }
-    if (tab === 'search') return <SearchScreen go={go} tab={tab} setTab={setTab} onCreate={() => setCreating(true)} lots={lots} />;
+    if (tab === 'search') return <SearchScreen go={go} tab={tab} setTab={guardedTab} onCreate={onCreate} lots={lots} />;
     if (tab === 'deals') return (
       <div className="app"><div className="safe-top" />
         <DealsList chats={chats} deals={deals} onOpen={(id) => go('chat', { id })} onOpenDeal={(id) => openDeal(id)} />
-        <TabBar tab={tab} setTab={setTab} onCreate={() => setCreating(true)} unread={0} />
+        <TabBar tab={tab} setTab={guardedTab} onCreate={onCreate} unread={0} />
       </div>
     );
     if (tab === 'wallet') return (
       <div className="app"><div className="safe-top" />
         <Wallet wallet={wallet} onInfo={() => setInfoOpen(true)} />
-        <TabBar tab={tab} setTab={setTab} onCreate={() => setCreating(true)} unread={0} />
+        <TabBar tab={tab} setTab={guardedTab} onCreate={onCreate} unread={0} />
       </div>
     );
     if (tab === 'profile') return (
       <ProfileScreen
         tab={tab}
-        setTab={setTab}
-        onCreate={() => setCreating(true)}
+        setTab={guardedTab}
+        onCreate={onCreate}
         onLogout={handleLogout}
         user={currentUser}
         profile={profile}
@@ -207,7 +231,8 @@ export default function App() {
     if (!top) return null;
     if (top.name === 'lot') return (
       <div className="app"><div className="safe-top" />
-        <LotDetail lots={lots} myLots={myLots} lotId={top.params.lotId} onBack={back} onOffer={(L) => setOfferLot(L)} onOwnerChat={() => {
+        <LotDetail lots={lots} myLots={myLots} lotId={top.params.lotId} onBack={back} onOffer={(L) => { if (requireAuth('Предложить обмен можно после регистрации')) setOfferLot(L); }} onOwnerChat={() => {
+          if (!requireAuth('Войдите, чтобы написать владельцу')) return;
           const L = lots.find(x => x.id === top.params.lotId);
           const ownerName = L ? (L.ownerName || '') : '';
           const ch = chats.find(c => c.partner.name === ownerName);
@@ -224,6 +249,7 @@ export default function App() {
     if (top.name === 'chain') return (
       <div className="app"><div className="safe-top" />
         <ChainDetail chainId={top.params.id} chains={chains} onBack={back} onJoin={async (ch) => {
+          if (!requireAuth('Вступить в цепочку можно после регистрации')) return;
           const res = await joinChainAction(ch.id);
           const wa = await getWalletAction();
           if (wa) setWallet(wa);
@@ -250,41 +276,24 @@ export default function App() {
     );
   }
 
-  if (!authed) {
-    return (
-      <div className="app-root">
-        <AuthScreen onDone={handleAuth} />
-      </div>
-    );
-  }
-
-  if (!onboarded) {
-    return (
-      <div className="app-root">
-        <Onboarding onDone={() => {
-          setOnboarded(true);
-          try { window.localStorage.setItem(ONBOARDED_KEY, '1'); } catch {}
-        }} />
-      </div>
-    );
-  }
-
-  return (
-    <div className="app-root">
+  const appContent = (
+    <>
       {isDesktop ? (
         <WebApp
           lots={lots}
           myLots={myLots}
           user={currentUser}
           profile={profile}
+          authed={authed}
+          onAuthRequired={(m) => requireAuth(m)}
           onLogout={handleLogout}
           onProfileSaved={(updated) => {
             setCurrentUser(updated);
             setProfile(p => (p ? { ...p, ...updated } : updated));
           }}
-          onOffer={(L) => setOfferLot(L)}
-          onCreate={() => setCreating(true)}
-          onEditLot={(L) => setEditingLot(L)}
+          onOffer={(L) => { if (requireAuth('Предложить обмен можно после регистрации')) setOfferLot(L); }}
+          onCreate={onCreate}
+          onEditLot={(L) => { if (requireAuth('Редактировать объявление можно после регистрации')) setEditingLot(L); }}
           matches={matches}
           chats={chats}
           chains={chains}
@@ -312,6 +321,32 @@ export default function App() {
         }
       }} />
       <CreditsInfo open={infoOpen} onClose={() => setInfoOpen(false)} />
+    </>
+  );
+
+  if (!authed) {
+    return (
+      <div className="app-root">
+        {appContent}
+        {authOpen && <div className="overlay-layer"><AuthScreen message={authMsg} onClose={() => setAuthOpen(false)} onDone={handleAuth} /></div>}
+      </div>
+    );
+  }
+
+  if (!onboarded) {
+    return (
+      <div className="app-root">
+        <Onboarding onDone={() => {
+          setOnboarded(true);
+          try { window.localStorage.setItem(ONBOARDED_KEY, '1'); } catch {}
+        }} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="app-root">
+      {appContent}
     </div>
   );
 }

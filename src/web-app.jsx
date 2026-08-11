@@ -19,7 +19,7 @@ function fmtDate(iso) {
 }
 
 // ---------------- top nav ----------------
-function WebNav({ view, setView, user, avatar, query, setQuery, onLogout, onCreate }) {
+function WebNav({ view, setView, user, avatar, query, setQuery, onLogout, onCreate, authed = true, onAuthRequired }) {
   const [menu, setMenu] = React.useState(false);
   const [q, setQ] = React.useState(query || '');
   const tabs = [
@@ -28,7 +28,14 @@ function WebNav({ view, setView, user, avatar, query, setQuery, onLogout, onCrea
     { id: 'deals', label: 'Сделки' },
     { id: 'profile', label: 'Профиль' },
   ];
-  const goTab = (id) => { setView(id); setMenu(false); };
+  const goTab = (id) => {
+    if (!authed && (id === 'deals' || id === 'profile')) {
+      onAuthRequired && onAuthRequired('Войдите, чтобы открыть этот раздел');
+      return;
+    }
+    setView(id);
+    setMenu(false);
+  };
   const submit = (e) => { e.preventDefault(); setQuery(q); setView('home'); };
   return (
     <nav className="web-nav">
@@ -568,7 +575,7 @@ function ProfileView({ user, profile, myLots, onOpenLot, onLogout, onProfileSave
 }
 
 // ---------------- root ----------------
-export default function WebApp({ lots, myLots, user, profile, onLogout, onProfileSaved, onOffer, onCreate, onEditLot, matches = [], chats = [], chains = [] }) {
+export default function WebApp({ lots, myLots, user, profile, onLogout, onProfileSaved, onOffer, onCreate, onEditLot, matches = [], chats = [], chains = [], authed = true, onAuthRequired }) {
   const [view, setView] = React.useState('home');
   const [cat, setCat] = React.useState('all');
   const [city, setCity] = React.useState('all');
@@ -581,7 +588,7 @@ export default function WebApp({ lots, myLots, user, profile, onLogout, onProfil
 
   return (
     <div className="web">
-      <WebNav view={view} setView={setView} user={user} avatar={avatar} query={query} setQuery={setQuery} onLogout={onLogout} onCreate={onCreate} />
+      <WebNav view={view} setView={setView} user={user} avatar={avatar} query={query} setQuery={setQuery} onLogout={onLogout} onCreate={onCreate} authed={authed} onAuthRequired={onAuthRequired} />
       <div className="web-body">
         {view === 'home' && <HomeView lots={lots} myLots={myLots} matches={matches} query={query} setQuery={setQuery} cat={cat} setCat={setCat} city={city} setCity={setCity} onOpen={(id) => { setSelLot(id); setView('lot'); }} onOffer={onOffer} onChains={() => setView('chains')} />}
         {view === 'lot' && selected && <LotView L={selected} onBack={goHome} onOffer={onOffer} />}
