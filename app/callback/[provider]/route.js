@@ -53,19 +53,26 @@ export async function GET(req, { params }) {
       try { parsed = JSON.parse(stored); } catch { parsed = null; }
       if (!parsed || parsed.state !== state || !parsed.verifier) return fail('state mismatch');
 
-      const profile = await exchangeVk(code, deviceId, parsed.verifier, state, base);
+      // Use the base the user authorized from so redirect_uri matches exactly.
+      const vkBase = parsed.base || url.origin;
+      const profile = await exchangeVk(code, deviceId, parsed.verifier, state, vkBase);
       const user = await upsertUser(profile);
       await createSession(user.id);
-      return NextResponse.redirect(`${base}/`);
+      return NextResponse.redirect(`${vkBase}/`);
     }
 
     if (provider === 'yandex') {
       const code = url.searchParams.get('code');
       if (!code) return fail('no code');
-      const profile = await exchangeYandex(code, base);
+      const c = await cookies();
+      const stored = c.get('yandex_oauth')?.value;
+      c.delete('yandex_oauth');
+      let yBase = url.origin;
+      if (stored) { try { const p = JSON.parse(stored); if (p && p.base) yBase = p.base; } catch {} }
+      const profile = await exchangeYandex(code, yBase);
       const user = await upsertUser(profile);
       await createSession(user.id);
-      return NextResponse.redirect(`${base}/`);
+      return NextResponse.redirect(`${yBase}/`);
     }
 
     return fail('bad provider');

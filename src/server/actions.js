@@ -726,22 +726,25 @@ export async function joinChainAction(chainId) {
 
 export async function getOAuthUrlAction(provider, origin) {
   const c = await cookies();
-  const base = typeof origin === 'string' && origin ? origin.replace(/\/$/, '') : '';
+  const base = (typeof origin === 'string' && origin ? origin : '').replace(/\/$/, '');
+  const baseFinal = base || process.env.APP_URL || '';
+  const cookieOpts = {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 600,
+    path: '/',
+  };
   if (provider === 'vk') {
-    const r = vkAuthStart(base || undefined);
+    const r = vkAuthStart(baseFinal || undefined);
     if (!r) return { ok: false, error: 'OAuth VK не настроен — добавьте ключи в .env' };
-    c.set('vk_oauth', JSON.stringify({ state: r.state, verifier: r.codeVerifier }), {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 600,
-      path: '/',
-    });
+    c.set('vk_oauth', JSON.stringify({ state: r.state, verifier: r.codeVerifier, base: baseFinal }), cookieOpts);
     return { ok: true, url: r.url };
   }
   if (provider === 'yandex') {
-    const r = yandexAuthStart(base || undefined);
+    const r = yandexAuthStart(baseFinal || undefined);
     if (!r) return { ok: false, error: 'OAuth Яндекса не настроен — добавьте ключи в .env' };
+    c.set('yandex_oauth', JSON.stringify({ base: baseFinal }), cookieOpts);
     return { ok: true, url: r.url };
   }
   return { ok: false, error: 'Неизвестный провайдер' };
