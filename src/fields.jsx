@@ -2,14 +2,12 @@
 import React from 'react';
 import { Icon } from './icons.jsx';
 import { Sheet } from './ui.jsx';
+import { CITIES as ALL_CITIES, VLADIMIR_REGION } from './cities.js';
 
-export const CITIES = [
-  'Москва', 'Санкт-Петербург', 'Новосибирск', 'Екатеринбург', 'Казань',
-  'Нижний Новгород', 'Челябинск', 'Самара', 'Омск', 'Ростов-на-Дону',
-  'Уфа', 'Красноярск', 'Воронеж', 'Пермь', 'Волгоград', 'Краснодар',
-  'Саратов', 'Тюмень', 'Тольятти', 'Ижевск', 'Иркутск', 'Хабаровск',
-  'Владивосток', 'Ярославль', 'Томск', 'Оренбург', 'Кемерово', 'Удалённо',
-];
+// Список городов один на всё приложение — здесь был свой, разошедшийся
+// с cities.js: во Владимире объявление создать было нельзя, а в фильтре
+// он был.
+export const CITIES = [...ALL_CITIES, 'Удалённо'];
 
 const inputStyle = {
   width: '100%', padding: '13px 16px', border: '1.5px solid var(--line)', borderRadius: 14,
@@ -58,7 +56,11 @@ export function CityField({ label = 'Город', value, onChange, placeholder =
   const [custom, setCustom] = React.useState('');
   const [customOpen, setCustomOpen] = React.useState(false);
   const ql = q.toLowerCase();
-  const list = CITIES.filter(c => c.toLowerCase().includes(ql));
+  const matches = CITIES.filter(c => c.toLowerCase().includes(ql));
+  // домашний регион — вверх списка, иначе «Ковров» ищется среди полусотни
+  const home = matches.filter(c => VLADIMIR_REGION.includes(c));
+  const rest = matches.filter(c => !VLADIMIR_REGION.includes(c));
+  const list = [...home, ...rest];
 
   return (
     <div className="col gap6">

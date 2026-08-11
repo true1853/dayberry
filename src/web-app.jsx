@@ -1,6 +1,6 @@
 // web-app.jsx — desktop web layout (Airbnb-inspired)
 import React from 'react';
-import { CITIES, REMOTE } from './cities.js';
+import { CITIES, REMOTE, VLADIMIR_REGION } from './cities.js';
 import { CAT, CAT_IDS, normalizeCat } from './data.js';
 import { Icon } from './icons.jsx';
 import { fmt, Logo, Credit, Photo, Avatar, Stars, CatTag, AIBadge } from './ui.jsx';
@@ -206,8 +206,11 @@ function HomeView({ lots, lotsLoading = false, myLots = [], matches = [], query,
                   <button type="button" className={'web-city-item' + (city === 'all' ? ' is-on' : '')} onClick={() => { setCity('all'); setCityOpen(false); }}><Icon name="map" size={15} color="var(--ink-3)" />Везде</button>
                   <button type="button" className={'web-city-item' + (city === REMOTE ? ' is-on' : '')} onClick={() => { setCity(REMOTE); setCityOpen(false); }}><Icon name="spark" size={15} color="var(--ink-3)" />Удалённо</button>
                   <div className="web-city-sep" />
-                  {CITIES.map(c => (
-                    <button key={c} type="button" className={'web-city-item' + (city === c ? ' is-on' : '')} onClick={() => { setCity(c); setCityOpen(false); }}>{c}</button>
+                  {CITIES.map((c, i) => (
+                    <React.Fragment key={c}>
+                      {i === VLADIMIR_REGION.length && <div className="web-city-sep" />}
+                      <button type="button" className={'web-city-item' + (city === c ? ' is-on' : '')} onClick={() => { setCity(c); setCityOpen(false); }}>{c}</button>
+                    </React.Fragment>
                   ))}
                 </div>
               )}
