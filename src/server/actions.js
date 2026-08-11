@@ -3,7 +3,10 @@
 import { prisma } from '../../lib/prisma';
 import { analyzeListing, computeMatches, askWants } from '../../lib/ai';
 import { vkAuthStart, yandexAuthStart } from '../../lib/oauth';
+import { saveDataUrl, saveDataUrls, isStorableImage } from '../../lib/storage';
 import { cookies } from 'next/headers';
+import { randomUUID } from 'node:crypto';
+import * as rateLimit from '../../lib/rate-limit';
 import {
   createSession,
   destroySession,
@@ -23,6 +26,12 @@ export async function registerAction(input) {
   if (!key || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(key)) return { ok: false, error: 'Некорректный email' };
   if (!password || password.length < 6) return { ok: false, error: 'Пароль — минимум 6 символов' };
   if (!name || !name.trim()) return { ok: false, error: 'Введите имя' };
+
+  // Регистрация тоже стоит одного bcrypt-хэша — ограничиваем частоту.
+  const gate = rateLimit.hit(`register:${key}`, { max: 5 });
+  if (!gate.ok) {
+    return { ok: false, error: `Слишком много попыток. Попробуйте через ${Math.ceil(gate.retryAfterSec / 60)} мин.` };
+  }
 
   const exists = await prisma.user.findUnique({ where: { email: key } });
   if (exists) return { ok: false, error: 'Этот email уже зарегистрирован — попробуйте войти' };
@@ -45,28 +54,36 @@ export async function loginAction({ email, password } = {}) {
   if (!key) return { ok: false, error: 'Введите email' };
   if (!password) return { ok: false, error: 'Введите пароль' };
 
+  // Проверка до bcrypt: иначе перебор паролей упирается только в CPU сервера.
+  const gate = rateLimit.hit(`login:${key}`);
+  if (!gate.ok) {
+    return { ok: false, error: `Слишком много попыток входа. Попробуйте через ${Math.ceil(gate.retryAfterSec / 60)} мин.` };
+  }
+
   const user = await prisma.user.findUnique({ where: { email: key } });
   if (!user) return { ok: false, error: 'Аккаунт не найден. Зарегистрируйтесь или проверьте email' };
 
   const ok = await verifyPassword(password, user.passwordHash);
   if (!ok) return { ok: false, error: 'Неверный пароль' };
 
+  rateLimit.reset(`login:${key}`);
   await createSession(user.id);
   return { ok: true, user: serializeUser(user) };
 }
 
 export async function guestAction() {
-  let user = await prisma.user.findUnique({ where: { email: 'guest@dayberry.app' } });
-  if (!user) {
-    user = await prisma.user.create({
-      data: {
-        name: 'Гость',
-        email: 'guest@dayberry.app',
-        passwordHash: await hashPassword('guest12345'),
-        city: 'Москва',
-      },
-    });
-  }
+  // Раньше все гости садились в один аккаунт guest@dayberry.app и видели
+  // чужие сделки, чаты и кошелёк. Теперь каждый гость — отдельный аккаунт
+  // со случайным адресом и неиспользуемым паролем.
+  const token = randomUUID();
+  const user = await prisma.user.create({
+    data: {
+      name: 'Гость',
+      email: `guest-${token}@dayberry.local`,
+      passwordHash: await hashPassword(randomUUID() + randomUUID()),
+      city: 'Москва',
+    },
+  });
   await createSession(user.id);
   return { ok: true, user: serializeUser(user) };
 }
@@ -80,13 +97,43 @@ export async function sessionAction() {
   return getCurrentUser();
 }
 
-export async function getProfileAction() {
+// ---------- bootstrap ----------
+//
+// Next.js выполняет server actions последовательно, поэтому Promise.all из
+// десяти вызовов на клиенте давал десять round-trip'ов подряд, и каждый заново
+// поднимал сессию (cookie + jwtVerify + SELECT User). Здесь запросы собраны в
+// два экшена: сессия разрешается один раз, а параллелится уже работа с БД.
+//
+// Разделение на два — намеренное: критический путь (сессия + лента) не должен
+// ждать кошелёк и переписки.
+
+export async function bootstrapAction() {
   const user = await getCurrentUser();
+  const [lots, chains] = await Promise.all([lotsFeed(user), chainsList()]);
+  return { user, lots, chains };
+}
+
+export async function loadAuthedDataAction() {
+  const user = await getCurrentUser();
+  if (!user) return null;
+  const [myLots, profile, deals, wallet, chats, favorites] = await Promise.all([
+    myLotsOf(user), profileOf(user), dealsOf(user),
+    walletOf(user), chatsOf(user), favoritesOf(user),
+  ]);
+  return { myLots, profile, deals, wallet, chats, favorites };
+}
+
+export async function getProfileAction() {
+  return profileOf(await getCurrentUser());
+}
+
+async function profileOf(user) {
   if (!user) return null;
   const reviews = await prisma.review.findMany({
     where: { targetId: user.id },
     include: { author: { select: { name: true } } },
     orderBy: { createdAt: 'desc' },
+    take: 50,
   });
   return {
     ...user,
@@ -157,13 +204,14 @@ export async function updateAvatarAction(avatar) {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: 'Требуется вход' };
 
-  const clean = typeof avatar === 'string' && avatar.startsWith('data:image/')
-    ? avatar
-    : (avatar || '').trim() || '';
+  const incoming = typeof avatar === 'string' ? avatar.trim() : '';
 
-  if (clean && clean.length > 2_000_000) {
+  if (incoming.length > 2_000_000) {
     return { ok: false, error: 'Фото слишком большое — выберите файл до 2 МБ' };
   }
+
+  // Пустая строка = снять аватар; иначе кладём файл на диск и храним путь.
+  const clean = incoming ? await saveDataUrl(incoming) : '';
 
   const updated = await prisma.user.update({
     where: { id: user.id },
@@ -173,7 +221,10 @@ export async function updateAvatarAction(avatar) {
 }
 
 export async function listLots() {
-  const user = await getCurrentUser();
+  return lotsFeed(await getCurrentUser());
+}
+
+async function lotsFeed(user) {
   const where = { status: 'active' };
   if (user) where.ownerId = { not: user.id };
   const lots = await prisma.lot.findMany({
@@ -185,7 +236,10 @@ export async function listLots() {
 }
 
 export async function getMyLots() {
-  const user = await getCurrentUser();
+  return myLotsOf(await getCurrentUser());
+}
+
+async function myLotsOf(user) {
   if (!user) return [];
   const lots = await prisma.lot.findMany({
     where: { ownerId: user.id, status: 'active' },
@@ -201,19 +255,25 @@ export async function toggleFavoriteAction(lotId) {
   const lot = await prisma.lot.findUnique({ where: { id: lotId } });
   if (!lot) return { ok: false, error: 'Объявление не найдено' };
 
-  const existing = await prisma.favorite.findUnique({
-    where: { userId_lotId: { userId: user.id, lotId } },
-  });
-  if (existing) {
-    await prisma.favorite.delete({ where: { id: existing.id } });
-    return { ok: true, fav: false };
+  // deleteMany/create вместо find+delete: при быстрых кликах гонка между
+  // чтением и записью роняла create на unique-констрейнте.
+  const removed = await prisma.favorite.deleteMany({ where: { userId: user.id, lotId } });
+  if (removed.count > 0) return { ok: true, fav: false };
+
+  try {
+    await prisma.favorite.create({ data: { userId: user.id, lotId } });
+  } catch (e) {
+    // параллельный запрос успел добавить — состояние всё равно «в избранном»
+    if (e.code !== 'P2002') throw e;
   }
-  await prisma.favorite.create({ data: { userId: user.id, lotId } });
   return { ok: true, fav: true };
 }
 
 export async function listFavoritesAction() {
-  const user = await getCurrentUser();
+  return favoritesOf(await getCurrentUser());
+}
+
+async function favoritesOf(user) {
   if (!user) return [];
   const favs = await prisma.favorite.findMany({
     where: { userId: user.id },
@@ -239,10 +299,14 @@ export async function createLotAction(input) {
   if (!value || value <= 0) return { ok: false, error: 'Укажите оценку в баллах' };
   if (!wants || !wants.trim()) return { ok: false, error: 'Укажите, на что хотите обменять' };
 
-  const photoList = Array.isArray(photos) ? photos.filter(u => typeof u === 'string' && u.startsWith('data:image/')) : [];
-  if (photoList.length > MAX_LOT_PHOTOS) return { ok: false, error: `Можно добавить не больше ${MAX_LOT_PHOTOS} фото` };
-  const totalChars = photoList.reduce((n, u) => n + u.length, 0);
+  const incoming = Array.isArray(photos) ? photos.filter(isStorableImage) : [];
+  if (incoming.length > MAX_LOT_PHOTOS) return { ok: false, error: `Можно добавить не больше ${MAX_LOT_PHOTOS} фото` };
+  const totalChars = incoming.reduce((n, u) => n + u.length, 0);
   if (totalChars > MAX_PHOTOS_CHARS) return { ok: false, error: 'Фото слишком тяжёлые — добавьте меньше или выберите файлы поменьше' };
+
+  // data-URL'ы уезжают на диск, в БД остаются пути /uploads/...
+  const photoList = await saveDataUrls(incoming);
+  const mainUrl = await saveDataUrl(photoUrl);
 
   const num = Math.round(Number(value));
   const lot = await prisma.lot.create({
@@ -257,7 +321,7 @@ export async function createLotAction(input) {
       aiHigh: aiHigh || Math.round(num * 1.08),
       valuationSource: valuationSource === 'ai' ? 'ai' : 'manual',
       photo: photo || '',
-      photoUrl: photoUrl || photoList[0] || '',
+      photoUrl: mainUrl || photoList[0] || '',
       wants: wants.trim(),
       desc: desc || '',
       condition: condition || (kind === 'service' ? 'Услуга' : 'Новое или Б/У'),
@@ -290,10 +354,25 @@ export async function updateLotAction(lotId, input) {
   if (!value || value <= 0) return { ok: false, error: 'Укажите оценку в баллах' };
   if (!wants || !wants.trim()) return { ok: false, error: 'Укажите, на что хотите обменять' };
 
-  const photoList = Array.isArray(photos) ? photos.filter(u => typeof u === 'string' && u.startsWith('data:image/')) : [];
-  if (photoList.length > MAX_LOT_PHOTOS) return { ok: false, error: `Можно добавить не больше ${MAX_LOT_PHOTOS} фото` };
-  const totalChars = photoList.reduce((n, u) => n + u.length, 0);
+  // При редактировании клиент присылает вперемешку новые data-URL'ы и уже
+  // сохранённые пути — принимаем и то и другое, иначе правка заголовка
+  // стирала бы существующие фото.
+  const incoming = Array.isArray(photos) ? photos.filter(isStorableImage) : [];
+  if (incoming.length > MAX_LOT_PHOTOS) return { ok: false, error: `Можно добавить не больше ${MAX_LOT_PHOTOS} фото` };
+  const totalChars = incoming.reduce((n, u) => n + u.length, 0);
   if (totalChars > MAX_PHOTOS_CHARS) return { ok: false, error: 'Фото слишком тяжёлые — добавьте меньше или выберите файлы поменьше' };
+
+  const photoList = await saveDataUrls(incoming);
+  const mainUrl = photoUrl !== undefined ? await saveDataUrl(photoUrl) : undefined;
+
+  const existingPhotos = await prisma.lotPhoto.findMany({
+    where: { lotId },
+    select: { url: true },
+    orderBy: { order: 'asc' },
+  });
+  const photosChanged = Array.isArray(photos)
+    && (existingPhotos.length !== photoList.length
+      || existingPhotos.some((p, i) => p.url !== photoList[i]));
 
   const num = Math.round(Number(value));
   const updated = await prisma.lot.update({
@@ -309,8 +388,10 @@ export async function updateLotAction(lotId, input) {
       desc: desc || '',
       condition: condition || lot.condition,
       photo: photo !== undefined ? photo : lot.photo,
-      photoUrl: photoUrl !== undefined ? photoUrl : (photoList[0] || ''),
-      ...(Array.isArray(photos) ? {
+      photoUrl: mainUrl !== undefined ? mainUrl : (photoList[0] || ''),
+      // Пересоздаём галерею только если набор или порядок фото реально
+      // изменился: правка заголовка не должна трогать строки с картинками.
+      ...(Array.isArray(photos) && photosChanged ? {
         lotPhotos: {
           deleteMany: {},
           create: photoList.map((url, i) => ({ url, label: '', order: i })),
@@ -328,6 +409,10 @@ export async function updateLotAction(lotId, input) {
 // ---------- deals ----------
 
 const DEAL_STAGE_ORDER = ['created', 'meet', 'confirm', 'done'];
+
+// Сигналы отката транзакции — не выносим наружу как 500.
+class InsufficientFunds extends Error {}
+class DealClosed extends Error {}
 
 function dealWith() {
   return {
@@ -353,16 +438,21 @@ async function serializeDeal(d, currentUserId) {
   };
 }
 
+// Расчёт по сделке: разморозка эскроу, начисление владельцу и счётчики.
+// Всё одной транзакцией — иначе сбой в середине оставляет баллы висеть
+// в эскроу, а у получателя их уже нет.
 async function completeDeal(deal) {
   const held = await prisma.transaction.findFirst({
     where: { userId: deal.userId, kind: 'escrow-in', status: 'held' },
     orderBy: { createdAt: 'desc' },
   });
+
+  const ops = [];
   if (held) {
-    await prisma.transaction.update({ where: { id: held.id }, data: { status: 'done' } });
+    ops.push(prisma.transaction.update({ where: { id: held.id }, data: { status: 'done' } }));
   }
   if (deal.credits > 0) {
-    await prisma.transaction.create({
+    ops.push(prisma.transaction.create({
       data: {
         userId: deal.lot.ownerId,
         kind: 'earn',
@@ -371,10 +461,12 @@ async function completeDeal(deal) {
         amt: deal.credits,
         status: 'done',
       },
-    });
+    }));
   }
-  await prisma.user.update({ where: { id: deal.lot.ownerId }, data: { balance: { increment: deal.credits }, dealsCount: { increment: 1 } } });
-  await prisma.user.update({ where: { id: deal.userId }, data: { dealsCount: { increment: 1 } } });
+  ops.push(prisma.user.update({ where: { id: deal.lot.ownerId }, data: { balance: { increment: deal.credits }, dealsCount: { increment: 1 } } }));
+  ops.push(prisma.user.update({ where: { id: deal.userId }, data: { dealsCount: { increment: 1 } } }));
+
+  await prisma.$transaction(ops);
 }
 
 export async function createDealAction(input) {
@@ -391,48 +483,66 @@ export async function createDealAction(input) {
     return { ok: false, error: 'Недостаточно баллов — пополните кошелёк' };
   }
 
-  const deal = await prisma.deal.create({
-    data: {
-      userId: user.id,
-      lotId: lot.id,
-      myLotId: myLotId || null,
-      credits: num,
-      stage: 'created',
-      status: 'active',
-    },
-  });
+  // Списание, сделка и чат — одной транзакцией. Списываем условным UPDATE
+  // (balance >= num), а не по ранее прочитанному значению: иначе два
+  // параллельных запроса проходят одну и ту же проверку и уводят баланс в минус.
+  let result;
+  try {
+    result = await prisma.$transaction(async (tx) => {
+      if (num > 0) {
+        const debited = await tx.user.updateMany({
+          where: { id: user.id, balance: { gte: num } },
+          data: { balance: { decrement: num } },
+        });
+        if (debited.count !== 1) throw new InsufficientFunds();
 
-  if (num > 0) {
-    await prisma.user.update({ where: { id: user.id }, data: { balance: { decrement: num } } });
-    await prisma.transaction.create({
-      data: {
-        userId: user.id,
-        kind: 'escrow-in',
-        title: `Эскроу · ${lot.title.split(',')[0]}`,
-        sub: 'Доплата заморожена до подтверждения',
-        amt: num,
-        status: 'held',
-      },
+        await tx.transaction.create({
+          data: {
+            userId: user.id,
+            kind: 'escrow-in',
+            title: `Эскроу · ${lot.title.split(',')[0]}`,
+            sub: 'Доплата заморожена до подтверждения',
+            amt: num,
+            status: 'held',
+          },
+        });
+      }
+
+      const deal = await tx.deal.create({
+        data: {
+          userId: user.id,
+          lotId: lot.id,
+          myLotId: myLotId || null,
+          credits: num,
+          stage: 'created',
+          status: 'active',
+        },
+      });
+
+      // chat with the lot owner
+      const chat = await tx.chat.create({
+        data: { userId: user.id, partnerId: lot.ownerId, dealId: deal.id },
+      });
+      await tx.message.create({
+        data: { chatId: chat.id, text: `Открыл(а) сделку на «${lot.title}» — ${num} Б в эскроу.` },
+      });
+
+      return { dealId: deal.id, chatId: chat.id };
     });
+  } catch (e) {
+    if (e instanceof InsufficientFunds) return { ok: false, error: 'Недостаточно баллов — пополните кошелёк' };
+    throw e;
   }
 
-  // chat with the lot owner
-  const chat = await prisma.chat.create({
-    data: {
-      userId: user.id,
-      partnerId: lot.ownerId,
-      dealId: deal.id,
-    },
-  });
-  await prisma.message.create({
-    data: { chatId: chat.id, text: `Открыл(а) сделку на «${lot.title}» — ${num} Б в эскроу.` },
-  });
-
-  return { ok: true, deal: await serializeDeal(await prisma.deal.findUnique({ where: { id: deal.id }, include: dealWith() }), user.id), chatId: chat.id };
+  const created = await prisma.deal.findUnique({ where: { id: result.dealId }, include: dealWith() });
+  return { ok: true, deal: await serializeDeal(created, user.id), chatId: result.chatId };
 }
 
 export async function listDealsAction() {
-  const user = await getCurrentUser();
+  return dealsOf(await getCurrentUser());
+}
+
+async function dealsOf(user) {
   if (!user) return [];
   const deals = await prisma.deal.findMany({
     where: { OR: [{ userId: user.id }, { lot: { ownerId: user.id } }], status: { not: 'cancelled' } },
@@ -442,44 +552,44 @@ export async function listDealsAction() {
   return Promise.all(deals.map(d => serializeDeal(d, user.id)));
 }
 
+// Общая часть обоих подтверждений. Флаг ставится условным UPDATE (по ещё
+// не выставленному флагу), поэтому две одновременные попытки не могут обе
+// увидеть «второй уже подтвердил» и дважды провести расчёт по сделке.
+async function confirmSide(dealId, user, side) {
+  const mine = side === 'initiator' ? 'initiatorConfirmed' : 'partnerConfirmed';
+  const other = side === 'initiator' ? 'partnerConfirmed' : 'initiatorConfirmed';
+
+  const deal = await prisma.deal.findUnique({ where: { id: dealId }, include: dealWith() });
+  const owns = side === 'initiator' ? deal?.userId === user.id : deal?.lot?.ownerId === user.id;
+  if (!deal || !owns) return { ok: false, error: 'Сделка не найдена' };
+  if (deal.stage === 'done') return { ok: false, error: 'Сделка уже завершена' };
+  if (deal[mine]) return { ok: false, error: 'Вы уже подтвердили получение' };
+  if (deal.status !== 'active') return { ok: false, error: 'Сделка уже закрыта' };
+
+  const both = deal[other];
+  const claimed = await prisma.deal.updateMany({
+    where: { id: deal.id, status: 'active', [mine]: false, [other]: both },
+    data: both
+      ? { stage: 'done', status: 'done', [mine]: true }
+      : { stage: 'confirm', [mine]: true },
+  });
+  if (claimed.count !== 1) return { ok: false, error: 'Статус сделки изменился — обновите страницу' };
+
+  const updated = await prisma.deal.findUnique({ where: { id: deal.id }, include: dealWith() });
+  if (both) await completeDeal(updated);
+  return { ok: true, deal: await serializeDeal(updated, user.id) };
+}
+
 export async function confirmReceiptAction(dealId) {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: 'Требуется вход' };
-  const deal = await prisma.deal.findUnique({ where: { id: dealId }, include: dealWith() });
-  if (!deal || deal.userId !== user.id) return { ok: false, error: 'Сделка не найдена' };
-  if (deal.stage === 'done') return { ok: false, error: 'Сделка уже завершена' };
-  if (deal.initiatorConfirmed) return { ok: false, error: 'Вы уже подтвердили получение' };
-
-  const both = deal.partnerConfirmed;
-  const updated = await prisma.deal.update({
-    where: { id: deal.id },
-    data: both
-      ? { stage: 'done', status: 'done', initiatorConfirmed: true }
-      : { stage: 'confirm', initiatorConfirmed: true },
-    include: dealWith(),
-  });
-  if (both) await completeDeal(updated);
-  return { ok: true, deal: await serializeDeal(updated, user.id) };
+  return confirmSide(dealId, user, 'initiator');
 }
 
 export async function confirmPartnerAction(dealId) {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: 'Требуется вход' };
-  const deal = await prisma.deal.findUnique({ where: { id: dealId }, include: dealWith() });
-  if (!deal || deal.lot?.ownerId !== user.id) return { ok: false, error: 'Сделка не найдена' };
-  if (deal.stage === 'done') return { ok: false, error: 'Сделка уже завершена' };
-  if (deal.partnerConfirmed) return { ok: false, error: 'Вы уже подтвердили получение' };
-
-  const both = deal.initiatorConfirmed;
-  const updated = await prisma.deal.update({
-    where: { id: deal.id },
-    data: both
-      ? { stage: 'done', status: 'done', partnerConfirmed: true }
-      : { stage: 'confirm', partnerConfirmed: true },
-    include: dealWith(),
-  });
-  if (both) await completeDeal(updated);
-  return { ok: true, deal: await serializeDeal(updated, user.id) };
+  return confirmSide(dealId, user, 'partner');
 }
 
 export async function cancelDealAction(dealId) {
@@ -490,20 +600,32 @@ export async function cancelDealAction(dealId) {
   if (deal.status !== 'active') return { ok: false, error: 'Сделка уже закрыта' };
   if (deal.initiatorConfirmed || deal.partnerConfirmed) return { ok: false, error: 'Сделка подтверждена — отменить нельзя' };
 
-  if (deal.credits > 0) {
-    await prisma.user.update({ where: { id: deal.userId }, data: { balance: { increment: deal.credits } } });
-    const held = await prisma.transaction.findFirst({
-      where: { userId: deal.userId, kind: 'escrow-in', status: 'held' },
-      orderBy: { createdAt: 'desc' },
+  // Отмена и возврат из эскроу — атомарно. Сначала закрываем сделку условным
+  // UPDATE: если её уже отменил параллельный запрос, count = 0 и вся
+  // транзакция откатывается, поэтому баллы не вернутся дважды.
+  try {
+    await prisma.$transaction(async (tx) => {
+      const closed = await tx.deal.updateMany({
+        where: { id: deal.id, status: 'active' },
+        data: { status: 'cancelled' },
+      });
+      if (closed.count !== 1) throw new DealClosed();
+
+      if (deal.credits > 0) {
+        await tx.user.update({ where: { id: deal.userId }, data: { balance: { increment: deal.credits } } });
+        const held = await tx.transaction.findFirst({
+          where: { userId: deal.userId, kind: 'escrow-in', status: 'held' },
+          orderBy: { createdAt: 'desc' },
+        });
+        if (held) await tx.transaction.update({ where: { id: held.id }, data: { status: 'refunded' } });
+      }
     });
-    if (held) await prisma.transaction.update({ where: { id: held.id }, data: { status: 'refunded' } });
+  } catch (e) {
+    if (e instanceof DealClosed) return { ok: false, error: 'Сделка уже закрыта' };
+    throw e;
   }
 
-  const updated = await prisma.deal.update({
-    where: { id: deal.id },
-    data: { status: 'cancelled' },
-    include: dealWith(),
-  });
+  const updated = await prisma.deal.findUnique({ where: { id: deal.id }, include: dealWith() });
   return { ok: true, deal: await serializeDeal(updated, user.id) };
 }
 
@@ -535,10 +657,17 @@ export async function topUpAction(amount) {
 }
 
 export async function getWalletAction() {
-  const user = await getCurrentUser();
+  return walletOf(await getCurrentUser());
+}
+
+// История транзакций режется: суммы считаются агрегатами в БД,
+// а в списке пользователю нужны последние операции, а не все за всё время.
+const WALLET_TX_LIMIT = 50;
+
+async function walletOf(user) {
   if (!user) return null;
   const [txs, heldSum, delta] = await Promise.all([
-    prisma.transaction.findMany({ where: { userId: user.id }, orderBy: { createdAt: 'desc' } }),
+    prisma.transaction.findMany({ where: { userId: user.id }, orderBy: { createdAt: 'desc' }, take: WALLET_TX_LIMIT }),
     prisma.transaction.aggregate({ where: { userId: user.id, status: 'held' }, _sum: { amt: true } }),
     prisma.transaction.aggregate({
       where: { userId: user.id, createdAt: { gte: new Date(Date.now() - 30 * 86400000) }, status: 'done' },
@@ -564,11 +693,26 @@ export async function getWalletAction() {
 
 // ---------- chat ----------
 
-const chatWith = {
+// Лимит переписки в открытом треде. Без него чат тянет всю историю целиком.
+const THREAD_MESSAGE_LIMIT = 200;
+
+const chatBase = {
   partner: { select: { id: true, name: true, city: true, avatar: true } },
   user: { select: { id: true, name: true, city: true, avatar: true } },
-  deal: { select: { id: true, stage: true, credits: true, status: true, lot: { include: { owner: { select: { name: true } } } } } },
-  messages: { orderBy: { createdAt: 'asc' } },
+  deal: { select: { id: true, stage: true, credits: true, status: true, lot: { select: { title: true } } } },
+};
+
+// Открытый чат: последние N сообщений (забираем с конца, отдаём по возрастанию).
+const chatWith = {
+  ...chatBase,
+  messages: { orderBy: { createdAt: 'desc' }, take: THREAD_MESSAGE_LIMIT },
+};
+
+// Список чатов: нужен только последний текст для превью — вся история
+// всех переписок раньше уезжала клиенту на каждой загрузке приложения.
+const chatListWith = {
+  ...chatBase,
+  messages: { orderBy: { createdAt: 'desc' }, take: 1 },
 };
 
 async function serializeChat(c, currentUserId) {
@@ -589,7 +733,8 @@ async function serializeChat(c, currentUserId) {
       status: c.deal.status,
       title: c.deal.lot?.title || '',
     } : null,
-    messages: c.messages.map(m => ({
+    // из БД приходят по убыванию (свежие сверху) — разворачиваем в хронологию
+    messages: c.messages.slice().reverse().map(m => ({
       id: m.id,
       from: !m.fromId ? 'sys' : (m.fromId === currentUserId ? 'me' : 'them'),
       me: m.fromId ? m.fromId === currentUserId : false,
@@ -601,11 +746,14 @@ async function serializeChat(c, currentUserId) {
 }
 
 export async function listChatsAction() {
-  const user = await getCurrentUser();
+  return chatsOf(await getCurrentUser());
+}
+
+async function chatsOf(user) {
   if (!user) return [];
   const chats = await prisma.chat.findMany({
     where: { OR: [{ userId: user.id }, { partnerId: user.id }] },
-    include: chatWith,
+    include: chatListWith,
     orderBy: { createdAt: 'desc' },
   });
   return Promise.all(chats.map(c => serializeChat(c, user.id)));
@@ -688,6 +836,10 @@ function serializeChain(c) {
 }
 
 export async function listChainsAction() {
+  return chainsList();
+}
+
+async function chainsList() {
   const chains = await prisma.chain.findMany({ where: { status: 'active' }, include: chainWith, orderBy: { score: 'desc' } });
   return chains.map(serializeChain);
 }
@@ -697,28 +849,34 @@ export async function joinChainAction(chainId) {
   if (!user) return { ok: false, error: 'Требуется вход' };
   const chain = await prisma.chain.findUnique({ where: { id: chainId }, include: chainWith });
   if (!chain) return { ok: false, error: 'Цепочка не найдена' };
+  if (!chain.steps.length) return { ok: false, error: 'В цепочке нет шагов' };
+
   const last = chain.steps[chain.steps.length - 1];
   const myStep = chain.steps.find(s => s.who === 'me');
   const credits = Math.max(0, last.value - (myStep ? myStep.value : 0));
 
   // pick the lot I receive from the last step (best-effort by title, else first active)
   const received = await prisma.lot.findFirst({
-    where: { status: 'active', title: { contains: last.gives.split(' ')[0] } },
+    where: { status: 'active', ownerId: { not: user.id }, title: { contains: last.gives.split(' ')[0] } },
     orderBy: { sortOrder: 'asc' },
   });
   const target = received || await prisma.lot.findFirst({ where: { status: 'active', ownerId: { not: user.id } }, orderBy: { sortOrder: 'asc' } });
+  // lotId — обязательная ссылка: раньше при отсутствии лота писалась пустая
+  // строка и получалась сделка, указывающая в никуда.
+  if (!target) return { ok: false, error: 'Нет доступных лотов для этой цепочки' };
 
-  const deal = await prisma.deal.create({
-    data: { userId: user.id, lotId: target ? target.id : '', credits, stage: 'created', status: 'active' },
-  });
-  if (target) {
-    const chat = await prisma.chat.create({
-      data: { userId: user.id, partnerId: target.ownerId, dealId: deal.id },
+  const deal = await prisma.$transaction(async (tx) => {
+    const d = await tx.deal.create({
+      data: { userId: user.id, lotId: target.id, credits, stage: 'created', status: 'active' },
     });
-    await prisma.message.create({
+    const chat = await tx.chat.create({
+      data: { userId: user.id, partnerId: target.ownerId, dealId: d.id },
+    });
+    await tx.message.create({
       data: { chatId: chat.id, text: `Вступил(а) в цепочку «${chain.note}» — ${credits} Б в эскроу.` },
     });
-  }
+    return d;
+  });
   return { ok: true, dealId: deal.id };
 }
 
@@ -789,9 +947,15 @@ export async function analyzeListingAction(input) {
 
 export async function getMatchesAction() {
   const user = await getCurrentUser();
+  // Матчингу нужны только тексты и цены — фото не тянем: ответ содержит
+  // лишь id лота, лента берёт карточку из уже загруженного listLots().
   const lots = await prisma.lot.findMany({
     where: { status: 'active' },
-    include: { owner: { select: { name: true, city: true, avatar: true, rating: true, dealsCount: true } }, lotPhotos: { orderBy: { order: 'asc' } } },
+    select: {
+      id: true, ownerId: true, cat: true, title: true, desc: true,
+      wants: true, value: true, views: true, hot: true,
+      owner: { select: { name: true } },
+    },
     orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
   });
   const myLots = user ? lots.filter(l => l.ownerId === user.id) : [];
