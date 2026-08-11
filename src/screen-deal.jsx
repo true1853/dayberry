@@ -5,8 +5,8 @@ import { fmt, Credit, Photo, Avatar, Stars, AppBar, IconBtn, Sheet } from './ui.
 
 const DEAL_STEPS = [
   { id: 'created', label: 'Сделка создана', sub: 'Баллы заморожены в эскроу' },
-  { id: 'meet',    label: 'Передача вещи',  sub: 'Личная встреча или доставка' },
-  { id: 'confirm', label: 'Подтверждение',  sub: 'Вы подтверждаете получение' },
+  { id: 'meet',    label: 'Передача вещей',  sub: 'Личная встреча или доставка' },
+  { id: 'confirm', label: 'Подтверждение',  sub: 'Обе стороны подтверждают получение' },
   { id: 'done',    label: 'Баллы переведены',sub: 'Эскроу разморожен' },
 ];
 
@@ -38,26 +38,33 @@ function Stepper({ active }) {
 export function DealStatus({ deal, onBack, onConfirm, onChat, onDone }) {
   if (!deal) return null;
   const L = deal.lot || {};
-  const { credits, stage } = deal;
+  const { credits, stage, role } = deal;
   const owner = { name: deal.ownerName || '' };
   const [confirming, setConfirming] = React.useState(false);
 
   if (stage === 'done') return <DealDone deal={deal} onDone={onDone} />;
 
+  const isPartner = role === 'partner';
   const my = deal.myLot || { title: '', photo: '', photoUrl: '', cat: 'gadget' };
+  const myConfirmed = isPartner ? deal.partnerConfirmed : deal.initiatorConfirmed;
+  const partnerConfirmed = isPartner ? deal.initiatorConfirmed : deal.partnerConfirmed;
+  const give = isPartner ? L : my;
+  const receive = isPartner ? my : L;
+  const giveEmpty = !give || !give.title;
+
   return (
     <div className="app-scroll">
       <AppBar sub="Сделка · эскроу" title="Обмен в работе" left={<IconBtn name="back" onClick={onBack} />} right={<IconBtn name="chat" onClick={onChat} />} />
       <div className="px col gap16" style={{ paddingBottom: 30 }}>
         <div className="card" style={{ padding: 14 }}>
           <div className="row" style={{ alignItems: 'center', gap: 10 }}>
-            <Photo label={my.photo} url={my.photoUrl} cat={my.cat} style={{ width: 58, height: 58, borderRadius: 13 }} />
-            <div className="col grow" style={{ gap: 2 }}><span className="cap">вы отдаёте</span><span className="title" style={{ fontSize: 13.5 }}>{my.title}</span></div>
+            <Photo label={giveEmpty ? 'ВЕЩЬ' : give.photo} url={give.photoUrl} cat={give.cat || 'gadget'} style={{ width: 58, height: 58, borderRadius: 13 }} />
+            <div className="col grow" style={{ gap: 2 }}><span className="cap">вы отдаёте</span><span className="title" style={{ fontSize: 13.5 }}>{giveEmpty ? 'без своего объявления' : give.title}</span></div>
           </div>
           <div className="row gap8" style={{ alignItems: 'center', margin: '10px 0' }}><div className="divider grow" /><Icon name="swap" size={18} color="var(--berry)" /><div className="divider grow" /></div>
           <div className="row" style={{ alignItems: 'center', gap: 10 }}>
-            <Photo label={L.photo} url={L.photoUrl} cat={L.cat} style={{ width: 58, height: 58, borderRadius: 13 }} />
-            <div className="col grow" style={{ gap: 2 }}><span className="cap" style={{ color: 'var(--ok)' }}>вы получаете</span><span className="title" style={{ fontSize: 13.5 }}>{L.title}</span></div>
+            <Photo label={receive.photo || 'ВЕЩЬ'} url={receive.photoUrl} cat={receive.cat || 'gadget'} style={{ width: 58, height: 58, borderRadius: 13 }} />
+            <div className="col grow" style={{ gap: 2 }}><span className="cap" style={{ color: 'var(--ok)' }}>вы получаете</span><span className="title" style={{ fontSize: 13.5 }}>{receive.title || '—'}</span></div>
           </div>
         </div>
 
@@ -70,13 +77,29 @@ export function DealStatus({ deal, onBack, onConfirm, onChat, onDone }) {
           </div>
           <Credit n={credits} size={30} coin={24} color="#fff" />
           <span style={{ display: 'block', marginTop: 8, fontSize: 13, color: 'rgba(255,255,255,0.78)', lineHeight: 1.5 }}>
-            {(owner.name || 'Партнёр').split(' ')[0]} получит баллы только после вашего подтверждения. Если вещь не та — деньги вернутся вам.
+            {isPartner
+              ? <>Партнёр отдаёт <b style={{ color: '#fff' }}>{fmt(credits)} Б</b> — они придут вам, когда обе стороны подтвердят получение.</>
+              : <>Партнёр получит <b style={{ color: '#fff' }}>{fmt(credits)} Б</b> после подтверждения обеих сторон. Если вещь не та — откройте спор, и баллы вернутся вам.</>}
           </span>
         </div>
 
         <div className="card" style={{ padding: '16px 16px 2px' }}>
           <span className="over" style={{ display: 'block', marginBottom: 14 }}>Статус сделки</span>
           <Stepper active={stage} />
+        </div>
+
+        <div className="card" style={{ padding: 14 }}>
+          <span className="over">Подтверждение обеих сторон</span>
+          <div className="col gap8" style={{ marginTop: 10 }}>
+            <div className="row gap8" style={{ alignItems: 'center' }}>
+              <Icon name={myConfirmed ? 'checkCircle' : 'clock'} size={17} color={myConfirmed ? 'var(--ok)' : 'var(--ink-3)'} />
+              <span className="sub" style={{ color: myConfirmed ? 'var(--ink)' : 'var(--ink-2)' }}>Вы — {myConfirmed ? 'подтвердили получение' : 'ещё не подтвердили'}</span>
+            </div>
+            <div className="row gap8" style={{ alignItems: 'center' }}>
+              <Icon name={partnerConfirmed ? 'checkCircle' : 'clock'} size={17} color={partnerConfirmed ? 'var(--ok)' : 'var(--ink-3)'} />
+              <span className="sub" style={{ color: partnerConfirmed ? 'var(--ink)' : 'var(--ink-2)' }}>{partnerConfirmed ? 'Партнёр подтвердил получение' : 'Партнёр ещё не подтвердил'}</span>
+            </div>
+          </div>
         </div>
 
         <div className="row gap12 card" style={{ padding: 12, alignItems: 'center' }} onClick={onChat}>
@@ -87,14 +110,29 @@ export function DealStatus({ deal, onBack, onConfirm, onChat, onDone }) {
       </div>
 
       <div style={{ position: 'sticky', bottom: 0, padding: '12px 18px calc(12px + env(safe-area-inset-bottom, 0px) + 28px)', background: 'linear-gradient(to top, var(--bg) 72%, transparent)' }}>
-        <button className="btn btn-primary btn-block btn-lg" onClick={() => setConfirming(true)}>
-          <Icon name="checkCircle" size={20} color="#fff" />Подтвердить получение
-        </button>
+        {myConfirmed ? (
+          <button className="btn btn-block btn-lg" disabled style={{ background: 'var(--line-2)', color: 'var(--ink-3)', cursor: 'default' }}>
+            <Icon name="clock" size={20} color="var(--ink-3)" />{partnerConfirmed ? 'Сделка завершена' : 'Ждём подтверждение партнёра'}
+          </button>
+        ) : partnerConfirmed ? (
+          <>
+            <div className="card" style={{ padding: 12, background: 'var(--ok-soft)', marginBottom: 10 }}>
+              <span className="sub" style={{ color: '#15663f' }}><Icon name="checkCircle" size={16} color="var(--ok)" style={{ display: 'inline' }} /> Партнёр подтвердил получение. Подтвердите и вы — эскроу разморозится.</span>
+            </div>
+            <button className="btn btn-primary btn-block btn-lg" onClick={() => setConfirming(true)}>
+              <Icon name="checkCircle" size={20} color="#fff" />Подтвердить получение
+            </button>
+          </>
+        ) : (
+          <button className="btn btn-primary btn-block btn-lg" onClick={() => setConfirming(true)}>
+            <Icon name="checkCircle" size={20} color="#fff" />Подтвердить получение
+          </button>
+        )}
       </div>
 
       <Sheet open={confirming} onClose={() => setConfirming(false)} title="Подтвердить получение?">
         <div className="px col gap14" style={{ paddingBottom: 8 }}>
-          <span className="body">Подтверждайте, только когда получили вещь и проверили её. После этого <b>{fmt(credits)} Б</b> моментально уйдут партнёру, а сделка закроется.</span>
+          <span className="body">Подтверждайте, только когда получили и проверили вещь. После подтверждения обеими сторонами {isPartner ? <b>{fmt(credits)} Б</b> : <>эскроу разморозится и <b>{fmt(credits)} Б</b> уйдут партнёру</>}.</span>
           <div className="card" style={{ padding: 12, background: 'var(--warn-soft)' }}>
             <span className="row gap8 sub" style={{ color: '#7a5410' }}><Icon name="shield" size={18} color="var(--warn)" />Что-то не так? Откройте спор — баллы останутся замороженными до решения.</span>
           </div>
@@ -107,8 +145,10 @@ export function DealStatus({ deal, onBack, onConfirm, onChat, onDone }) {
 }
 
 function DealDone({ deal, onDone }) {
-  const { credits } = deal;
+  const { credits, role } = deal;
   const L = deal.lot || {};
+  const my = deal.myLot || { title: '' };
+  const receiveTitle = role === 'partner' ? my.title : L.title;
   return (
     <div className="app-scroll" style={{ display: 'flex', flexDirection: 'column' }}>
       <div className="grow col" style={{ alignItems: 'center', justifyContent: 'center', padding: '40px 30px', textAlign: 'center', gap: 16 }}>
@@ -117,10 +157,12 @@ function DealDone({ deal, onDone }) {
         </div>
         <div className="col gap8 fade-in">
           <span className="h1">Обмен завершён 🎉</span>
-          <span className="sub" style={{ maxWidth: 280 }}>Вы получили <b style={{ color: 'var(--ink)' }}>{L.title || 'сделку'}</b>, а <b className="amount">{fmt(credits)} Б</b> переведены партнёру из эскроу.</span>
+          <span className="sub" style={{ maxWidth: 300 }}>{role === 'partner'
+            ? <>Вы получили <b style={{ color: 'var(--ink)' }}>{fmt(credits)} Б</b> из эскроу, а ваша вещь у партнёра.</>
+            : <>Вы получили <b style={{ color: 'var(--ink)' }}>{receiveTitle || 'вещь'}</b>, а <b className="amount">{fmt(credits)} Б</b> переведены партнёру из эскроу.</>}</span>
         </div>
         <div className="card fade-in" style={{ padding: 14, width: '100%', maxWidth: 320 }}>
-          <div className="row" style={{ justifyContent: 'space-between' }}><span className="sub">Переведено из эскроу</span><Credit n={credits} size={15} coin={14} /></div>
+          <div className="row" style={{ justifyContent: 'space-between' }}><span className="sub">Эскроу разморожен</span><Credit n={credits} size={15} coin={14} /></div>
           <div className="divider" style={{ margin: '10px 0' }} />
           <div className="row" style={{ justifyContent: 'space-between' }}><span className="sub">Ваш рейтинг</span><span className="row gap6"><Stars value={5} /><span className="title" style={{ fontSize: 13 }}>+1 сделка</span></span></div>
         </div>

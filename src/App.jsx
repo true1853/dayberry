@@ -1,7 +1,7 @@
 'use client';
 // App.jsx — root: navigation, phone frame scaling, tweaks
 import React from 'react';
-import { sessionAction, listLots, logoutAction, createLotAction, updateLotAction, getMyLots, getProfileAction, listDealsAction, getWalletAction, listChatsAction, listChainsAction, getMatchesAction, createDealAction, confirmReceiptAction, joinChainAction, startChatAction } from './server/actions.js';
+import { sessionAction, listLots, logoutAction, createLotAction, updateLotAction, getMyLots, getProfileAction, listDealsAction, getWalletAction, listChatsAction, listChainsAction, getMatchesAction, createDealAction, confirmReceiptAction, confirmPartnerAction, joinChainAction, startChatAction } from './server/actions.js';
 import { FeedList, FeedSwipe, CatRow } from './screen-feed.jsx';
 import { FeedChain, ChainDetail } from './screen-chain.jsx';
 import { LotDetail, OfferSheet } from './screen-lot.jsx';
@@ -184,9 +184,10 @@ export default function App() {
     go('deal');
   };
 
-  const confirmReceipt = async () => {
-    if (!deal) return;
-    const res = await confirmReceiptAction(deal.id);
+  const confirmDeal = async (d) => {
+    const target = d || deal;
+    if (!target) return;
+    const res = target.role === 'partner' ? await confirmPartnerAction(target.id) : await confirmReceiptAction(target.id);
     if (res.ok) {
       setDeal(res.deal);
       setDeals(ds => ds.map(x => x.id === res.deal.id ? res.deal : x));
@@ -270,7 +271,7 @@ export default function App() {
     );
     if (top.name === 'deal') return (
       <div className="app"><div className="safe-top" />
-        <DealStatus deal={deal} onBack={back} onConfirm={confirmReceipt} onChat={() => { const ch = chats.find(c => c.deal && c.deal.id === deal.id); go('chat', { id: ch ? ch.id : undefined }); }} onDone={(where) => { setDeal(null); resetTo(where === 'home' ? 'home' : 'deals'); }} />
+        <DealStatus deal={deal} onBack={back} onConfirm={() => confirmDeal()} onChat={() => { const ch = chats.find(c => c.deal && c.deal.id === deal.id); go('chat', { id: ch ? ch.id : undefined }); }} onDone={(where) => { setDeal(null); resetTo(where === 'home' ? 'home' : 'deals'); }} />
       </div>
     );
     if (top.name === 'chat') return (
@@ -308,6 +309,8 @@ export default function App() {
           matches={matches}
           chats={chats}
           chains={chains}
+          deals={deals}
+          onConfirmDeal={confirmDeal}
         />
       ) : (
         <>

@@ -298,7 +298,7 @@ function dealWith() {
   };
 }
 
-async function serializeDeal(d) {
+async function serializeDeal(d, currentUserId) {
   const partnerLot = d.lot ? mapLot(d.lot, d.lot.owner?.city) : null;
   return {
     id: d.id,
@@ -309,7 +309,34 @@ async function serializeDeal(d) {
     status: d.status,
     createdAt: d.createdAt.toISOString(),
     myLot: d.myLot ? mapLot(d.myLot, d.myLot.owner?.city) : null,
+    role: d.userId === currentUserId ? 'initiator' : 'partner',
+    initiatorConfirmed: d.initiatorConfirmed,
+    partnerConfirmed: d.partnerConfirmed,
   };
+}
+
+async function completeDeal(deal) {
+  const held = await prisma.transaction.findFirst({
+    where: { userId: deal.userId, kind: 'escrow-in', status: 'held' },
+    orderBy: { createdAt: 'desc' },
+  });
+  if (held) {
+    await prisma.transaction.update({ where: { id: held.id }, data: { status: 'done' } });
+  }
+  if (deal.credits > 0) {
+    await prisma.transaction.create({
+      data: {
+        userId: deal.lot.ownerId,
+        kind: 'earn',
+        title: `Обмен: «${deal.lot.title.split(',')[0]}»`,
+        sub: 'Переведено из эскроу',
+        amt: deal.credits,
+        status: 'done',
+      },
+    });
+  }
+  await prisma.user.update({ where: { id: deal.lot.ownerId }, data: { balance: { increment: deal.credits }, dealsCount: { increment: 1 } } });
+  await prisma.user.update({ where: { id: deal.userId }, data: { dealsCount: { increment: 1 } } });
 }
 
 export async function createDealAction(input) {
@@ -358,18 +385,18 @@ export async function createDealAction(input) {
     data: { chatId: chat.id, text: `Открыл(а) сделку на «${lot.title}» — ${num} Б в эскроу.` },
   });
 
-  return { ok: true, deal: await serializeDeal(await prisma.deal.findUnique({ where: { id: deal.id }, include: dealWith() })), chatId: chat.id };
+  return { ok: true, deal: await serializeDeal(await prisma.deal.findUnique({ where: { id: deal.id }, include: dealWith() }), user.id), chatId: chat.id };
 }
 
 export async function listDealsAction() {
   const user = await getCurrentUser();
   if (!user) return [];
   const deals = await prisma.deal.findMany({
-    where: { userId: user.id },
+    where: { OR: [{ userId: user.id }, { lot: { ownerId: user.id } }], status: { not: 'cancelled' } },
     include: dealWith(),
     orderBy: { createdAt: 'desc' },
   });
-  return Promise.all(deals.map(serializeDeal));
+  return Promise.all(deals.map(d => serializeDeal(d, user.id)));
 }
 
 export async function confirmReceiptAction(dealId) {
@@ -378,37 +405,38 @@ export async function confirmReceiptAction(dealId) {
   const deal = await prisma.deal.findUnique({ where: { id: dealId }, include: dealWith() });
   if (!deal || deal.userId !== user.id) return { ok: false, error: 'Сделка не найдена' };
   if (deal.stage === 'done') return { ok: false, error: 'Сделка уже завершена' };
+  if (deal.initiatorConfirmed) return { ok: false, error: 'Вы уже подтвердили получение' };
 
+  const both = deal.partnerConfirmed;
   const updated = await prisma.deal.update({
     where: { id: deal.id },
-    data: { stage: 'done', status: 'done' },
+    data: both
+      ? { stage: 'done', status: 'done', initiatorConfirmed: true }
+      : { stage: 'confirm', initiatorConfirmed: true },
     include: dealWith(),
   });
+  if (both) await completeDeal(updated);
+  return { ok: true, deal: await serializeDeal(updated, user.id) };
+}
 
-  // release escrow -> earn for the lot owner, spend for me
-  const held = await prisma.transaction.findFirst({
-    where: { userId: user.id, kind: 'escrow-in', status: 'held' },
-    orderBy: { createdAt: 'desc' },
+export async function confirmPartnerAction(dealId) {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: 'Требуется вход' };
+  const deal = await prisma.deal.findUnique({ where: { id: dealId }, include: dealWith() });
+  if (!deal || deal.lot?.ownerId !== user.id) return { ok: false, error: 'Сделка не найдена' };
+  if (deal.stage === 'done') return { ok: false, error: 'Сделка уже завершена' };
+  if (deal.partnerConfirmed) return { ok: false, error: 'Вы уже подтвердили получение' };
+
+  const both = deal.initiatorConfirmed;
+  const updated = await prisma.deal.update({
+    where: { id: deal.id },
+    data: both
+      ? { stage: 'done', status: 'done', partnerConfirmed: true }
+      : { stage: 'confirm', partnerConfirmed: true },
+    include: dealWith(),
   });
-  if (held) {
-    await prisma.transaction.update({ where: { id: held.id }, data: { status: 'done' } });
-  }
-  if (updated.credits > 0) {
-    await prisma.transaction.create({
-      data: {
-        userId: updated.lot.ownerId,
-        kind: 'earn',
-        title: `Обмен: «${updated.lot.title.split(',')[0]}»`,
-        sub: 'Переведено из эскроу',
-        amt: updated.credits,
-        status: 'done',
-      },
-    });
-  }
-  await prisma.user.update({ where: { id: updated.lot.ownerId }, data: { balance: { increment: updated.credits }, dealsCount: { increment: 1 } } });
-  await prisma.user.update({ where: { id: user.id }, data: { dealsCount: { increment: 1 } } });
-
-  return { ok: true, deal: await serializeDeal(updated) };
+  if (both) await completeDeal(updated);
+  return { ok: true, deal: await serializeDeal(updated, user.id) };
 }
 
 // ---------- wallet ----------

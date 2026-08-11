@@ -5,6 +5,8 @@ import { Icon } from './icons.jsx';
 import { fmt, Logo, Credit, Photo, Avatar, Stars, CatTag, AIBadge } from './ui.jsx';
 import { EditProfileSheet, resizeImage } from './screen-profile.jsx';
 import { updateAvatarAction } from './server/actions.js';
+import { DealStatus } from './screen-deal.jsx';
+import { ChatThread } from './screen-chat.jsx';
 
 const FOOTER_COLS = [
   { h: 'Поддержка', links: ['Справка', 'Безопасность', 'Центр доверия', 'Правила сообщества', 'Связь с нами'] },
@@ -416,12 +418,39 @@ const fmtChatTime = (iso) => {
   return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
 };
 
-function DealsView({ onBack, chats = [] }) {
+function DealsView({ onBack, chats = [], deals = [], onOpenDeal, onOpenChat }) {
   const sorted = [...chats].sort((a, b) => (b.messages?.[b.messages.length - 1]?.t || b.createdAt || '') < (a.messages?.[a.messages.length - 1]?.t || a.createdAt || '') ? -1 : 1);
+  const activeDeals = deals.filter(d => d.status === 'active' && d.stage !== 'done');
   return (
     <div className="web-container web-section">
       <button className="web-back" onClick={onBack}><Icon name="back" size={16} color="var(--ink-2)" />На главную</button>
       <div className="web-head" style={{ marginTop: 16 }}><h2>Сделки</h2></div>
+      {activeDeals.length > 0 && (
+        <div className="card" style={{ overflow: 'hidden', maxWidth: 720 }}>
+          {activeDeals.map((d, i) => {
+            const L = d.lot || {};
+            const myConf = d.role === 'initiator' ? d.initiatorConfirmed : d.partnerConfirmed;
+            const parConf = d.role === 'initiator' ? d.partnerConfirmed : d.initiatorConfirmed;
+            const pct = myConf || parConf ? 75 : d.stage === 'meet' ? 50 : 25;
+            return (
+              <div key={d.id} className="row gap14" style={{ padding: '16px 20px', borderTop: i ? '1px solid var(--line-2)' : 'none', cursor: 'pointer', alignItems: 'center' }} onClick={() => onOpenDeal(d.id)}>
+                <div className="avatar" style={{ width: 44, height: 44, background: 'var(--berry-50)', flex: 'none' }}><Icon name="lock" size={20} color="var(--berry)" /></div>
+                <div className="grow col" style={{ gap: 3 }}>
+                  <div className="row" style={{ justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 15, fontWeight: 600 }}>Активная сделка · эскроу</span>
+                    <span className="cap">{fmt(d.credits)} Б в эскроу</span>
+                  </div>
+                  <span className="sub ellipsis">{d.role === 'partner' ? `Вы отдаёте «${(L.title || '').split(',')[0]}»` : `${(L.title || '').split(',')[0]} ↔ ваши вещи`}</span>
+                  <div className="escrow-track" style={{ marginTop: 6 }}><div className="escrow-fill" style={{ width: pct + '%' }} /></div>
+                </div>
+                <Icon name="chevR" size={18} color="var(--ink-3)" />
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="web-head" style={{ marginTop: 24 }}><h2>Переписки</h2><span className="cap">{sorted.length} шт.</span></div>
       {sorted.length ? (
         <div className="card" style={{ overflow: 'hidden', maxWidth: 720 }}>
           {sorted.map((c, i) => {
@@ -429,7 +458,7 @@ function DealsView({ onBack, chats = [] }) {
             const dealTitle = c.deal ? c.deal.title : null;
             const credits = c.deal && c.deal.credits > 0 ? ` · ${c.deal.credits} Б` : '';
             return (
-              <div key={c.id} className="row gap14" style={{ padding: '16px 20px', borderTop: i ? '1px solid var(--line-2)' : 'none' }}>
+              <div key={c.id} className="row gap14" style={{ padding: '16px 20px', borderTop: i ? '1px solid var(--line-2)' : 'none', cursor: 'pointer' }} onClick={() => onOpenChat(c.id)}>
                 <Avatar user="them" url={c.partner.avatar} size={48} />
                 <div className="grow col" style={{ gap: 2 }}>
                   <div className="row" style={{ justifyContent: 'space-between' }}>
@@ -439,6 +468,7 @@ function DealsView({ onBack, chats = [] }) {
                   <span className="sub">{dealTitle ? `${dealTitle}${credits}` : 'Обсуждение обмена'}</span>
                   {last && <span className="cap ellipsis" style={{ maxWidth: 500 }}>{last.text}</span>}
                 </div>
+                <Icon name="chevR" size={18} color="var(--ink-3)" />
               </div>
             );
           })}
@@ -548,16 +578,19 @@ function ProfileView({ user, profile, myLots, onOpenLot, onLogout, onProfileSave
 }
 
 // ---------------- root ----------------
-export default function WebApp({ lots, myLots, user, profile, onLogout, onProfileSaved, onOffer, onCreate, onEditLot, matches = [], chats = [], chains = [], authed = true, onAuthRequired, onOwnerChat }) {
+export default function WebApp({ lots, myLots, user, profile, onLogout, onProfileSaved, onOffer, onCreate, onEditLot, matches = [], chats = [], chains = [], deals = [], onConfirmDeal, authed = true, onAuthRequired, onOwnerChat }) {
   const [view, setView] = React.useState('home');
   const [cat, setCat] = React.useState('all');
   const [city, setCity] = React.useState('all');
   const [query, setQuery] = React.useState('');
   const [selLot, setSelLot] = React.useState(null);
+  const [selDeal, setSelDeal] = React.useState(null);
+  const [selChat, setSelChat] = React.useState(null);
   const avatar = (profile && profile.avatar) || (user && user.avatar) || '';
   const selected = selLot ? lots.find(l => l.id === selLot) || null : null;
 
-  const goHome = () => { setView('home'); setSelLot(null); };
+  const goHome = () => { setView('home'); setSelLot(null); setSelDeal(null); setSelChat(null); };
+  const dealOpen = selDeal ? deals.find(x => x.id === selDeal) || null : null;
 
   return (
     <div className="web">
@@ -566,10 +599,33 @@ export default function WebApp({ lots, myLots, user, profile, onLogout, onProfil
         {view === 'home' && <HomeView lots={lots} myLots={myLots} matches={matches} query={query} setQuery={setQuery} cat={cat} setCat={setCat} city={city} setCity={setCity} onOpen={(id) => { setSelLot(id); setView('lot'); }} onOffer={onOffer} onChains={() => setView('chains')} />}
         {view === 'lot' && selected && <LotView L={selected} onBack={goHome} onOffer={onOffer} onOwnerChat={onOwnerChat} />}
         {view === 'chains' && <ChainsView onBack={goHome} />}
-        {view === 'deals' && <DealsView onBack={goHome} chats={chats} />}
+        {view === 'deals' && <DealsView onBack={goHome} chats={chats} deals={deals} onOpenDeal={(id) => setSelDeal(id)} onOpenChat={(id) => setSelChat(id)} />}
         {view === 'profile' && <ProfileView user={user} profile={profile} myLots={myLots} onOpenLot={(id) => { setSelLot(id); setView('lot'); }} onLogout={onLogout} onProfileSaved={onProfileSaved} onWallet={goHome} onEditLot={onEditLot} />}
       </div>
       <WebFooter />
+
+      {selDeal && dealOpen ? (
+        <div className="web-modal">
+          <div className="app">
+            <div className="safe-top" />
+            <DealStatus
+              deal={dealOpen}
+              onBack={() => setSelDeal(null)}
+              onConfirm={() => onConfirmDeal(dealOpen)}
+              onChat={() => { const c = chats.find(x => x.deal && x.deal.id === selDeal); if (c) { setSelChat(c.id); setSelDeal(null); } }}
+              onDone={() => setSelDeal(null)}
+            />
+          </div>
+        </div>
+      ) : selChat ? (
+        <div className="web-modal">
+          <ChatThread
+            chatId={selChat}
+            onBack={() => setSelChat(null)}
+            onOpenDeal={() => { const c = chats.find(x => x.id === selChat); if (c && c.deal) setSelDeal(c.deal.id); }}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

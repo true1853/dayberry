@@ -31,17 +31,21 @@ export function DealsList({ chats = [], deals = [], onOpen, onOpenDeal }) {
         {activeDeals.map(d => {
           const L = d.lot;
           if (!L) return null;
+          const myConf = d.role === 'initiator' ? d.initiatorConfirmed : d.partnerConfirmed;
+          const parConf = d.role === 'initiator' ? d.partnerConfirmed : d.initiatorConfirmed;
+          const pct = myConf || parConf ? 75 : d.stage === 'meet' ? 50 : 25;
           return (
             <div key={d.id} className="card" style={{ padding: 14, cursor: 'pointer', border: '1px solid var(--berry-100)' }} onClick={() => onOpenDeal(d.id)}>
               <div className="row gap10">
                 <div className="avatar" style={{ width: 42, height: 42, background: 'var(--berry-50)' }}><Icon name="lock" size={20} color="var(--berry)" /></div>
                 <div className="col grow" style={{ gap: 2 }}>
                   <span className="title">Активная сделка · эскроу</span>
-                  <span className="sub ellipsis">{L.title.split(',')[0]} ↔ ваши вещи — {fmt(d.credits)} Б в эскроу</span>
+                  <span className="sub ellipsis">{d.role === 'partner' ? `Вы отдаёте «${L.title.split(',')[0]}»` : `${L.title.split(',')[0]} ↔ ваши вещи`} — {fmt(d.credits)} Б в эскроу</span>
                 </div>
+                {myConf ? <span className="tag" style={{ background: 'var(--ok-soft)', color: 'var(--ok)', flex: 'none', alignSelf: 'center' }}>ждём партнёра</span> : parConf ? <span className="tag" style={{ background: 'var(--berry-50)', color: 'var(--berry)', flex: 'none', alignSelf: 'center' }}>подтвердите</span> : null}
                 <Icon name="chevR" size={20} color="var(--ink-3)" />
               </div>
-              <div className="escrow-track" style={{ marginTop: 12 }}><div className="escrow-fill" style={{ width: d.stage === 'meet' ? '50%' : d.stage === 'confirm' ? '75%' : '25%' }} /></div>
+              <div className="escrow-track" style={{ marginTop: 12 }}><div className="escrow-fill" style={{ width: pct + '%' }} /></div>
             </div>
           );
         })}
