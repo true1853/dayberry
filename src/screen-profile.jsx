@@ -1,7 +1,7 @@
 // screen-profile.jsx — user profile screen
 import React from 'react';
 import { Icon } from './icons.jsx';
-import { Credit, AppBar, IconBtn, TabBar, Photo, Sheet, LotCard } from './ui.jsx';
+import { Logo, Credit, AppBar, IconBtn, TabBar, Photo, Sheet, LotCard } from './ui.jsx';
 import { updateProfileAction, updateAvatarAction, changePasswordAction, updateSettingsAction, askWantsAction } from './server/actions.js';
 import { PhoneField, CityField } from './fields.jsx';
 
@@ -333,8 +333,8 @@ export function AboutSheet({ open, onClose }) {
     <Sheet open={open} onClose={onClose} title="О приложении">
       <div className="px col gap14" style={{ paddingBottom: 10 }}>
         <div className="col" style={{ alignItems: 'center', gap: 6, padding: '10px 0 4px' }}>
-          <div className="logo" style={{ width: 58, height: 58, fontSize: 27 }}>ДБ</div>
-          <span className="h3">Дай бери</span>
+          <Logo size={58} />
+          <span className="h3">Дайбери</span>
           <span className="cap">Обмен без денег · версия 1.0.0</span>
         </div>
         <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--ink-2)', margin: 0 }}>
@@ -402,7 +402,7 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, 
         <div className="col" style={{ alignItems: 'center', padding: '8px 24px 24px', gap: 12 }}>
           <div style={{ position: 'relative' }}>
             {avatar ? (
-              <div style={{ width: 88, height: 88, borderRadius: 999, overflow: 'hidden', boxShadow: '0 6px 20px rgba(255,56,92,0.35)' }}>
+              <div style={{ width: 88, height: 88, borderRadius: 999, overflow: 'hidden', boxShadow: '0 6px 20px rgba(75,43,201,0.30)' }}>
                 <img src={avatar} alt="аватар" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
               </div>
             ) : (
@@ -411,7 +411,7 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, 
                 background: 'linear-gradient(135deg, var(--berry), var(--berry-500))',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: 36, fontWeight: 800, color: '#fff',
-                boxShadow: '0 6px 20px rgba(255,56,92,0.35)',
+                boxShadow: '0 6px 20px rgba(75,43,201,0.30)',
               }}>{initial}</div>
             )}
             <button onClick={() => avatarRef.current && avatarRef.current.click()} style={{
@@ -434,7 +434,7 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, 
               {reviewsCount > 0 ? (
                 <>
                   {[1,2,3,4,5].map(i => (
-                    <Icon key={i} name="star" size={14} color={i <= Math.round(rating) ? '#222222' : 'var(--line)'} />
+                    <Icon key={i} name="star" size={14} color={i <= Math.round(rating) ? '#F5A623' : 'var(--line)'} />
                   ))}
                   <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', marginLeft: 4 }}>{rating.toFixed(1)}</span>
                   <span className="cap" style={{ marginLeft: 2 }}>· {reviewsCount}</span>
@@ -535,7 +535,7 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, 
                     <div className="col" style={{ gap: 2 }}>
                       <span className="title" style={{ fontSize: 13.5 }}>{r.author}</span>
                       <div className="row gap3">
-                        {[1,2,3,4,5].map(s => <Icon key={s} name="star" size={11} color={s <= r.rating ? '#222222' : 'var(--line)'} />)}
+                        {[1,2,3,4,5].map(s => <Icon key={s} name="star" size={11} color={s <= r.rating ? '#F5A623' : 'var(--line)'} />)}
                       </div>
                     </div>
                   </div>
@@ -620,9 +620,9 @@ export function SettingsScreen({ user, profile, onBack, onLogout, onProfileSaved
 
   const shareInvite = async () => {
     const origin = typeof window !== 'undefined' ? window.location.origin : 'https://dayberry.ru';
-    const text = `Дай бери — обмен без денег. Присоединяйся: ${origin}`;
+    const text = `Дайбери — обмен без денег. Присоединяйся: ${origin}`;
     if (typeof navigator !== 'undefined' && navigator.share) {
-      try { await navigator.share({ title: 'Дай бери', text }); return; } catch {}
+      try { await navigator.share({ title: 'Дайбери', text }); return; } catch {}
     }
     try {
       await navigator.clipboard.writeText(text);

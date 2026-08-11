@@ -4,17 +4,20 @@ import '../src/design.css';
 import '../src/web.css';
 
 export const metadata = {
-  title: 'Дай бери',
+  title: 'Дайбери',
   description: 'Обмен без денег — бартер-кредиты, эскроу и честные обмены',
   manifest: '/manifest.webmanifest',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'Дай бери',
+    title: 'Дайбери',
   },
   icons: {
-    icon: '/favicon.svg',
-    apple: '/pwa-192x192.svg',
+    icon: [
+      { url: '/favicon-32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/favicon-48.png', sizes: '48x48', type: 'image/png' },
+    ],
+    apple: '/apple-touch-icon.png',
   },
 };
 
@@ -22,7 +25,7 @@ export const viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
-  themeColor: '#ff385c',
+  themeColor: '#4B2BC9',
 };
 
 export default function RootLayout({ children }) {

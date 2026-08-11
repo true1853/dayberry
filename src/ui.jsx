@@ -12,10 +12,18 @@ export function Coin({ size = 16 }) {
   );
 }
 
-// ---- brand logo badge ----
-export function Logo({ size = 40, rounded = '30%' }) {
+// ---- brand logo ----
+// Знак уже фирменного цвета, поэтому подложки под ним нет: на фиолетовом
+// градиенте, каким был старый бейдж «ДБ», он бы просто не читался.
+export function Logo({ size = 40 }) {
   return (
-    <span className="logo" style={{ width: size, height: size, borderRadius: rounded, fontSize: size * 0.42, lineHeight: 1 }}>ДБ</span>
+    <img
+      src="/logo.png"
+      alt="Дайбери"
+      width={size}
+      height={size}
+      style={{ width: size, height: size, display: 'block', flex: 'none', objectFit: 'contain' }}
+    />
   );
 }
 // amount with coin: <Credit n={48000} />
@@ -85,7 +93,7 @@ export function Stars({ value, size = 12, count, showValue = false }) {
   }
   return (
     <span className="row gap4">
-      <span className="stars">{[0,1,2,3,4].map(i => <Icon key={i} name="star" size={size} color={i < Math.round(value) ? '#222222' : '#dddddd'} />)}</span>
+      <span className="stars">{[0,1,2,3,4].map(i => <Icon key={i} name="star" size={size} color={i < Math.round(value) ? '#F5A623' : 'var(--line)'} />)}</span>
       {showValue && value > 0 && (
         <span className="cap" style={{ fontSize: size }}>
           {value.toFixed(1)}{count ? ` · ${count}` : ''}

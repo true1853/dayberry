@@ -1,25 +1,33 @@
 /* ============================================================
-   Дай бери — design system (Airbnb-inspired, Rausch #ff385c)
+   Дайбери — design system (фирменный фиолетовый #4B2BC9)
    ============================================================ */
 
 :root {
-  /* Rausch (Airbnb primary) */
-  --berry-900: #a90a33;
-  --berry-700: #e00b41;   /* primary-active */
-  --berry:     #ff385c;   /* primary */
-  --berry-500: #ff5c77;
-  --berry-200: #ffd1da;   /* primary-disabled tint */
-  --berry-100: #ffe6eb;
-  --berry-50:  #fff0f3;
+  /* Бренд. Пять ступеней из фирменной палитры, две светлые (100 и 50)
+     выведены из primary: в палитре самый светлый — #B7B5F8, он слишком
+     насыщенный для фоновых заливок чипов и пустых состояний. */
+  --berry-900: #2C1975;   /* тёмный якорь для градиентов */
+  --berry-700: #3E22B5;   /* primary-strong, нажатое состояние */
+  --berry:     #4B2BC9;   /* primary */
+  --berry-500: #5B35E6;   /* violet */
+  --berry-200: #B7B5F8;   /* lavender-soft, disabled-заливка */
+  --berry-100: #E9E6F9;
+  --berry-50:  #F4F2FC;
 
-  /* Airbnb neutrals */
-  --ink:    #222222;
-  --ink-2:  #6a6a6a;   /* muted */
-  --ink-3:  #929292;   /* muted-soft */
-  --line:   #dddddd;   /* hairline */
-  --line-2: #ebebeb;   /* hairline-soft */
-  --bg:     #ffffff;   /* canvas */
-  --card:   #ffffff;
+  /* Лаванда — только декор: 2.86:1 на белом, текстом и иконками нельзя */
+  --lavender:  #9A8AF7;
+  --brand-gradient: linear-gradient(135deg, #4B2BC9 0%, #5B35E6 52%, #9A8AF7 100%);
+
+  /* Нейтрали с фиолетовым подтоном — из фирменной палитры.
+     --ink-3 и --line-2 в палитре не заданы, выведены в тон:
+     #8F8BA3 даёт 3.29:1 на карточке (как прежний #929292 — 3.11). */
+  --ink:    #17152A;
+  --ink-2:  #6E6A82;   /* muted */
+  --ink-3:  #8F8BA3;   /* muted-soft */
+  --line:   #E7E5F2;   /* hairline */
+  --line-2: #F0EFF7;   /* hairline-soft */
+  --bg:     #F8F8FC;   /* canvas */
+  --card:   #FFFFFF;   /* карточки остаются белыми — иначе не отделятся от фона */
 
   /* Semantics */
   --ok:      #1f8a5b;
@@ -28,9 +36,12 @@
   --warn-soft:#fbf0dd;
   --info:    #428bff;
 
-  /* Category accents (soft, for placeholders/tags) */
-  --c-digital: #6a4ad6;
-  --c-digital-soft: #efeaff;
+  /* Category accents (soft, for placeholders/tags).
+     «Услуги» были фиолетовыми (#6a4ad6) — в 9° от нового бренда, тег
+     переставал читаться как категория. Уведены в оранжевый: до бренда
+     114°, до техники 173°, до эко 91°. */
+  --c-digital: #c2410c;
+  --c-digital-soft: #ffede5;
   --c-gadget:  #1f7a8c;
   --c-gadget-soft: #e4f2f4;
   --c-eco:     #4b8b3b;
@@ -203,7 +214,7 @@ button { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 .tab-fab {
   width: 50px; height: 38px; border-radius: 13px; background: var(--berry);
   display: flex; align-items: center; justify-content: center; color: #fff;
-  box-shadow: 0 6px 14px rgba(255,56,92,0.34); margin-bottom: 2px;
+  box-shadow: 0 6px 14px rgba(75,43,201,0.30); margin-bottom: 2px;
 }
 
 /* ---------- misc ---------- */

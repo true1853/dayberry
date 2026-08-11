@@ -11,7 +11,7 @@ import { ChatThread } from './screen-chat.jsx';
 const FOOTER_COLS = [
   { h: 'Поддержка', links: ['Справка', 'Безопасность', 'Центр доверия', 'Правила сообщества', 'Связь с нами'] },
   { h: 'Размещение', links: ['Стать участником', 'Арендовать на день', 'Бартер-бизнес', 'Гиды и промо', 'Опыт соседей'] },
-  { h: 'Дай бери', links: ['Новости', 'Карьера', 'Блог', 'Благотворительность', 'Контакты'] },
+  { h: 'Дайбери', links: ['Новости', 'Карьера', 'Блог', 'Благотворительность', 'Контакты'] },
 ];
 
 function fmtDate(iso) {
@@ -45,7 +45,7 @@ function WebNav({ view, setView, user, avatar, query, setQuery, onLogout, onCrea
     <nav className="web-nav">
       <div className="web-nav-inner">
         <div className="web-logo" onClick={() => goTab('home')}>
-          <Logo size={30} />Дай бери
+          <Logo size={30} />Дайбери
         </div>
         <div className="web-tabs">
           {tabs.map(t => (
@@ -104,7 +104,7 @@ function WebFooter() {
         ))}
       </div>
       <div className="web-legal">
-        <span>© 2026 Дай бери, Inc. · Условия · Конфиденциальность</span>
+        <span>© 2026 Дайбери, Inc. · Условия · Конфиденциальность</span>
         <div className="web-legal-right">
           <span>🌐 Русский (RU)</span>
           <span>₽ RUB</span>
