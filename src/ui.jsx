@@ -154,9 +154,9 @@ export function IconBtn({ name, onClick, badge, color = 'var(--ink)', bg = '#fff
 // ---- bottom tab bar ----
 export function TabBar({ tab, setTab, unread }) {
   const items = [
-    { id: 'search',    icon: 'search', label: 'Поиск' },
     { id: 'favorites', icon: 'heart',  label: 'Избранное' },
-    { id: 'home',      icon: 'home',   label: 'Объявления' },
+    { id: 'mylots',    icon: 'grid',   label: 'Объявления' },
+    { id: 'search',    icon: 'search', label: 'Поиск' },
     { id: 'deals',     icon: 'chat',   label: 'Сообщения', badge: unread },
     { id: 'profile',   icon: 'user',   label: 'Профиль' },
   ];

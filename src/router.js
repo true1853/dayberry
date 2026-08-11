@@ -10,13 +10,13 @@ export function readPath() {
 
 export function parseRoute(path) {
   const segs = String(path || '/').split('/').filter(Boolean);
-  if (!segs.length) return { tab: 'home', stack: [] };
+  if (!segs.length) return { tab: 'search', stack: [] };
   const [a, b] = segs;
   switch (a) {
-    case 'search':
-      return { tab: 'search', stack: [] };
     case 'favorites':
       return { tab: 'favorites', stack: [] };
+    case 'mylots':
+      return { tab: 'mylots', stack: [] };
     case 'deals':
       return { tab: 'deals', stack: [] };
     case 'wallet':
@@ -25,20 +25,20 @@ export function parseRoute(path) {
       if (b === 'settings') return { tab: 'profile', stack: [{ name: 'settings' }] };
       return { tab: 'profile', stack: [] };
     case 'lot':
-      return { tab: 'home', stack: [{ name: 'lot', params: { lotId: b } }] };
+      return { tab: 'search', stack: [{ name: 'lot', params: { lotId: b } }] };
     case 'deal':
       return { tab: 'deals', stack: [{ name: 'deal', params: { id: b } }] };
     case 'chat':
       return { tab: 'deals', stack: [{ name: 'chat', params: { id: b } }] };
     case 'chains':
-      return { tab: 'home', stack: [{ name: 'chainfeed' }] };
+      return { tab: 'search', stack: [{ name: 'chainfeed' }] };
     default:
-      return { tab: 'home', stack: [] };
+      return { tab: 'search', stack: [] };
   }
 }
 
 export function tabPath(id) {
-  if (!id || id === 'home') return '/';
+  if (!id || id === 'search' || id === 'home') return '/';
   return '/' + id;
 }
 

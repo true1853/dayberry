@@ -1,7 +1,7 @@
 // screen-profile.jsx — user profile screen
 import React from 'react';
 import { Icon } from './icons.jsx';
-import { Credit, AppBar, IconBtn, TabBar, Photo, Sheet } from './ui.jsx';
+import { Credit, AppBar, IconBtn, TabBar, Photo, Sheet, LotCard } from './ui.jsx';
 import { updateProfileAction, updateAvatarAction, changePasswordAction, updateSettingsAction, askWantsAction } from './server/actions.js';
 import { PhoneField, CityField } from './fields.jsx';
 
@@ -550,6 +550,41 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, 
 
       <TabBar tab={tab} setTab={setTab} onCreate={onCreate} unread={0} />
       <EditProfileSheet user={profile || user} open={editing} onClose={() => setEditing(false)} onSaved={onProfileSaved} />
+    </div>
+  );
+}
+
+export function MyLotsScreen({ myLots = [], go, onEdit, onCreate }) {
+  return (
+    <div className="app-scroll">
+      <div className="appbar" style={{ paddingBottom: 10 }}>
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="col gap2">
+            <span className="h2">Мои объявления</span>
+            <span className="cap">{myLots.length} активных</span>
+          </div>
+          <IconBtn name="plusCircle" onClick={onCreate} />
+        </div>
+      </div>
+      <div className="px" style={{ paddingBottom: 20 }}>
+        {myLots.length ? (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            {myLots.map(l => (
+              <div key={l.id} className="col gap6">
+                <LotCard lot={l} compact onClick={() => go('lot', { lotId: l.id })} />
+                <button className="btn btn-soft" style={{ padding: '9px', justifyContent: 'center' }} onClick={() => onEdit(l)}><Icon name="edit" size={15} color="var(--berry)" />Редактировать</button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="col gap10" style={{ alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
+            <div className="avatar" style={{ width: 56, height: 56, background: 'var(--berry-50)' }}><Icon name="plusCircle" size={26} color="var(--berry)" /></div>
+            <span className="title">Пока нет объявлений</span>
+            <span className="sub" style={{ maxWidth: 260 }}>Создайте первое — и начните обмениваться без денег</span>
+            <button className="btn btn-primary" style={{ marginTop: 4 }} onClick={onCreate}><Icon name="plus" size={18} color="#fff" />Создать объявление</button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

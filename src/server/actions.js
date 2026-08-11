@@ -173,8 +173,11 @@ export async function updateAvatarAction(avatar) {
 }
 
 export async function listLots() {
+  const user = await getCurrentUser();
+  const where = { status: 'active' };
+  if (user) where.ownerId = { not: user.id };
   const lots = await prisma.lot.findMany({
-    where: { status: 'active' },
+    where,
     include: { owner: { select: { city: true, name: true, avatar: true, rating: true, dealsCount: true } }, lotPhotos: { orderBy: { order: 'asc' } } },
     orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
   });

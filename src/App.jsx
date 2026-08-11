@@ -10,11 +10,11 @@ import { DealsList, ChatThread } from './screen-chat.jsx';
 import { Wallet, CreditsInfo } from './screen-wallet.jsx';
 import { Onboarding, CreateListing } from './screen-onboarding.jsx';
 import { AuthScreen } from './screen-auth.jsx';
-import { ProfileScreen, SettingsScreen } from './screen-profile.jsx';
+import { ProfileScreen, SettingsScreen, MyLotsScreen } from './screen-profile.jsx';
 import WebApp from './web-app.jsx';
 import { parseRoute, tabPath, screenPath, readPath } from './router.js';
 
-import { AppBar, IconBtn, TabBar, LotCard } from './ui.jsx';
+import { AppBar, IconBtn, TabBar } from './ui.jsx';
 import { Icon } from './icons.jsx';
 import { useTweaks } from './tweaks-panel.jsx';
 
@@ -177,7 +177,7 @@ export default function App() {
   };
 
   const guardedTab = (t) => {
-    if (!authed && (t === 'deals' || t === 'wallet' || t === 'profile' || t === 'favorites')) {
+    if (!authed && (t === 'deals' || t === 'wallet' || t === 'profile' || t === 'favorites' || t === 'mylots')) {
       requireAuth('Войдите, чтобы открыть этот раздел', () => { navigate(tabPath(t)); });
       return;
     }
@@ -315,13 +315,18 @@ export default function App() {
   };
 
   const tabRoot = () => {
-    if (tab === 'home') {
+    if (tab === 'search') {
       return <HomeTab t={t} go={go} tab={tab} setTab={guardedTab} onCreate={onCreate} lots={lots} myLots={myLots} matches={matches} chains={chains} />;
     }
-    if (tab === 'search') return <SearchScreen go={go} tab={tab} setTab={guardedTab} onCreate={onCreate} lots={lots} />;
     if (tab === 'favorites') return (
       <div className="app"><div className="safe-top" />
         <FavoritesScreen lots={favorites} go={go} />
+        <TabBar tab={tab} setTab={guardedTab} onCreate={onCreate} unread={0} />
+      </div>
+    );
+    if (tab === 'mylots') return (
+      <div className="app"><div className="safe-top" />
+        <MyLotsScreen myLots={myLots} go={go} onCreate={onCreate} onEdit={(L) => requireAuth('Редактировать объявление можно после регистрации', () => setEditingLot(L))} />
         <TabBar tab={tab} setTab={guardedTab} onCreate={onCreate} unread={0} />
       </div>
     );
@@ -524,6 +529,8 @@ const VIEW_MODES = [
 function HomeTab({ t, go, tab, setTab, onCreate, lots, matches, chains, myLots }) {
   const [cat, setCat] = React.useState('all');
   const [view, setView] = React.useState(t.mechanic || 'list');
+  const [q, setQ] = React.useState('');
+  const shown = lots.filter(l => (!q.trim() || l.title.toLowerCase().includes(q.trim().toLowerCase())));
 
   return (
     <div className="app">
@@ -533,6 +540,13 @@ function HomeTab({ t, go, tab, setTab, onCreate, lots, matches, chains, myLots }
         left={<div className="logo" style={{ width: 38, height: 38, fontSize: 17 }}>ДБ</div>}
         right={<div className="row gap8"><IconBtn name="plusCircle" onClick={onCreate} /><IconBtn name="bell" badge={0} /></div>}
       />
+      <div className="appbar" style={{ paddingBottom: 8 }}>
+        <div className="row gap8 grow" style={{ background: '#fff', border: '1px solid var(--line)', borderRadius: 14, padding: '11px 14px', boxShadow: 'var(--sh-1)' }}>
+          <Icon name="search" size={20} color="var(--ink-3)" />
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Что ищете для обмена?" style={{ border: 'none', outline: 'none', flex: 1, fontSize: 15, fontFamily: 'var(--font)', background: 'transparent' }} />
+          {q ? <button onClick={() => setQ('')} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}><Icon name="close" size={18} color="var(--ink-3)" /></button> : null}
+        </div>
+      </div>
       {/* view switcher */}
       <div className="row gap6" style={{ padding: '0 18px 10px', overflowX: 'auto', scrollbarWidth: 'none', flexShrink: 0 }}>
         {VIEW_MODES.map(m => (
@@ -546,36 +560,9 @@ function HomeTab({ t, go, tab, setTab, onCreate, lots, matches, chains, myLots }
       </div>
       {view !== 'chain' && <CatRow active={cat} setActive={setCat} />}
       <div className="app-scroll">
-        {view === 'list' && <FeedList cat={cat} lots={lots} matches={matches} hints={t.matchHints} myLot={myLots && myLots[0]} onOpen={(id) => go('lot', { lotId: id })} onChains={() => setView('chain')} />}
-        {view === 'swipe' && <FeedSwipe cat={cat} lots={lots} myLot={myLots && myLots[0]} onOpen={(id) => go('lot', { lotId: id })} />}
+        {view === 'list' && <FeedList cat={cat} lots={shown} matches={matches} hints={t.matchHints} myLot={myLots && myLots[0]} onOpen={(id) => go('lot', { lotId: id })} onChains={() => setView('chain')} />}
+        {view === 'swipe' && <FeedSwipe cat={cat} lots={shown} myLot={myLots && myLots[0]} onOpen={(id) => go('lot', { lotId: id })} />}
         {view === 'chain' && <FeedChain chains={chains} onOpenChain={(id) => go('chain', { id })} />}
-      </div>
-      <TabBar tab={tab} setTab={setTab} onCreate={onCreate} unread={0} />
-    </div>
-  );
-}
-
-function SearchScreen({ go, tab, setTab, onCreate, lots }) {
-  const [q, setQ] = React.useState('');
-  const [cat, setCat] = React.useState('all');
-  const items = lots.filter(l => (cat === 'all' || l.cat === cat) && (!q || l.title.toLowerCase().includes(q.toLowerCase())));
-  return (
-    <div className="app"><div className="safe-top" />
-      <div className="appbar" style={{ paddingBottom: 8 }}>
-        <div className="row gap8 grow" style={{ background: '#fff', border: '1px solid var(--line)', borderRadius: 14, padding: '11px 14px', boxShadow: 'var(--sh-1)' }}>
-          <Icon name="search" size={20} color="var(--ink-3)" />
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Что ищете для обмена?" style={{ border: 'none', outline: 'none', flex: 1, fontSize: 15, fontFamily: 'var(--font)', background: 'transparent' }} />
-        </div>
-        <IconBtn name="filter" />
-      </div>
-      <div className="row gap8" style={{ overflowX: 'auto', padding: '2px 18px 8px', scrollbarWidth: 'none' }}>
-        {[['all', 'Всё'], ['gadget', 'Техника'], ['digital', 'Услуги'], ['eco', 'Вещи и эко']].map(([id, l]) => <div key={id} className={'chip chip-berry' + (cat === id ? ' is-on' : '')} onClick={() => setCat(id)}>{l}</div>)}
-      </div>
-      <div className="app-scroll px" style={{ paddingTop: 4, paddingBottom: 20 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          {items.map(l => <LotCard key={l.id} lot={l} compact onClick={() => go('lot', { lotId: l.id })} />)}
-        </div>
-        {!items.length && <div className="col gap8" style={{ alignItems: 'center', padding: '50px 20px', textAlign: 'center' }}><Icon name="search" size={32} color="var(--ink-3)" /><span className="sub">Ничего не нашлось — попробуйте другой запрос</span></div>}
       </div>
       <TabBar tab={tab} setTab={setTab} onCreate={onCreate} unread={0} />
     </div>
