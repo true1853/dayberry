@@ -11,7 +11,9 @@ services:
       - "3010:80"
     environment:
       DATABASE_URL: file:/app/data/dayberry.db
-      AUTH_SECRET: ${AUTH_SECRET:-dev-secret-change-me-in-prod}
+      # обязателен: приложение не стартует с пустым или дефолтным секретом.
+      # сгенерировать: openssl rand -hex 32
+      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET is required}
       AI_API_KEY: ${AI_API_KEY:-}
       AI_BASE_URL: ${AI_BASE_URL:-https://routerai.ru/api/v1}
       AI_MODEL: ${AI_MODEL:-qwen/qwen3-vl-30b-a3b-instruct}
