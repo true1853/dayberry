@@ -1,6 +1,6 @@
 // ui.jsx — shared presentational components
 import React from 'react';
-import { CAT } from './data.js';
+import { catOf } from './data.js';
 import { Icon } from './icons.jsx';
 
 export const fmt = (n) => Math.round(n).toLocaleString('ru-RU').replace(/,/g, ' ');
@@ -48,8 +48,8 @@ export function thumbUrl(url) {
 // ---- photo placeholder or real image ----
 // По умолчанию показывается превью: почти везде картинка рендерится мелко
 // (сетки, аватарки лотов, строки сделок). full нужен галерее и свайпу.
-export function Photo({ label, url, cat = 'gadget', style, rounded = 0, badge, children, full = false }) {
-  const c = CAT[cat] || CAT.gadget;
+export function Photo({ label, url, cat = 'other', style, rounded = 0, badge, children, full = false }) {
+  const c = catOf(cat);
   const src = full ? url : thumbUrl(url);
   if (url) {
     return (
@@ -104,7 +104,7 @@ export function Stars({ value, size = 12, count, showValue = false }) {
 }
 
 export function CatTag({ cat }) {
-  const c = CAT[cat] || CAT.gadget;
+  const c = catOf(cat);
   return <span className="tag" style={{ background: c.soft, color: c.color }}>{c.label}</span>;
 }
 

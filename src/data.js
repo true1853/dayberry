@@ -1,7 +1,37 @@
-// data.js — константы категорий (без мок-контента; все данные — из БД)
+// data.js — категории обмена (без мок-контента; все данные — из БД)
+//
+// Цвета разнесены по кругу так, чтобы соседние категории не путались и ни одна
+// не сливалась с фирменным фиолетовым: минимум 37° между категориями и 32° до
+// бренда. Контраст текста на своей заливке — не ниже 4.26:1.
+//
+// Ключи пишутся в БД как строка, поэтому старые (gadget/digital/eco) остаются
+// валидными и разложены по новым ниже.
 
 export const CAT = {
-  digital: { label: 'Услуги и цифра', short: 'Digital', color: 'var(--c-digital)', soft: 'var(--c-digital-soft)' },
-  gadget:  { label: 'Техника',        short: 'Gadgets', color: 'var(--c-gadget)',  soft: 'var(--c-gadget-soft)' },
-  eco:     { label: 'Вещи и эко',     short: 'Eco',     color: 'var(--c-eco)',     soft: 'var(--c-eco-soft)' },
+  tech:    { label: 'Техника',       hint: 'электроника, бытовая техника, инструмент',        color: '#257A9D', soft: '#E5F4FA' },
+  service: { label: 'Услуги',        hint: 'работы, аренда, digital, перевозки',              color: '#AE3F29', soft: '#FAE9E5' },
+  home:    { label: 'Дом',           hint: 'мебель, интерьер, посуда, текстиль',              color: '#1F8423', soft: '#E5FAE6' },
+  kids:    { label: 'Детям',         hint: 'игрушки, коляски, детская мебель и транспорт',    color: '#AE2966', soft: '#FAE5EF' },
+  sport:   { label: 'Спорт и отдых', hint: 'велосипеды, лыжи, туризм, мангалы',               color: '#1F8462', soft: '#E5FAF3' },
+  auto:    { label: 'Авто',          hint: 'машины, запчасти, шины, аксессуары',              color: '#846F1F', soft: '#FAF6E5' },
+  fashion: { label: 'Одежда',        hint: 'одежда, обувь, сумки, украшения',                 color: '#A229AE', soft: '#F9E5FA' },
+  hobby:   { label: 'Хобби',         hint: 'книги, коллекционное, творчество, животные',      color: '#547C1D', soft: '#F1FAE5' },
+  other:   { label: 'Разное',        hint: 'всё, что не подошло к остальным',                 color: '#6E6A82', soft: '#F0EFF7' },
 };
+
+export const CAT_IDS = Object.keys(CAT);
+
+// Старые ключи из первых версий. «eco» был свалкой («Вещи и эко»), поэтому
+// честно уводится в «Разное» — угадывать за пользователя не нужно.
+const LEGACY = { gadget: 'tech', digital: 'service', eco: 'other' };
+
+/** Приводит любой ключ категории к актуальному. Неизвестное — в «Разное». */
+export function normalizeCat(cat) {
+  if (CAT[cat]) return cat;
+  return LEGACY[cat] || 'other';
+}
+
+/** Категория для отрисовки — всегда существующая запись. */
+export function catOf(cat) {
+  return CAT[normalizeCat(cat)];
+}

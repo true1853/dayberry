@@ -3,6 +3,7 @@ import React from 'react';
 import { Icon } from './icons.jsx';
 import { Logo, fmt, Photo, IconBtn, Coin } from './ui.jsx';
 import { analyzeListingAction } from './server/actions.js';
+import { CAT, CAT_IDS, normalizeCat } from './data.js';
 
 const SLIDES = [
   {
@@ -96,14 +97,11 @@ const KIND_OPTIONS = [
   { id: 'service', label: 'Услуга', icon: 'spark' },
 ];
 
+// Список берётся из общего справочника: раньше форма знала только три
+// категории и расходилась с тем, что мог вернуть ИИ.
 const CATS = {
-  item: [
-    ['gadget', 'Техника'],
-    ['eco', 'Вещи и эко'],
-  ],
-  service: [
-    ['digital', 'Услуги и цифра'],
-  ],
+  item: CAT_IDS.filter(id => id !== 'service').map(id => [id, CAT[id].label]),
+  service: [['service', CAT.service.label]],
 };
 
 const MAX_PHOTOS = 6;
@@ -115,8 +113,8 @@ const inputStyle = {
 };
 
 export function CreateListing({ onClose, onPublish, initialWants = '', editLot = null }) {
-  const [kind, setKind] = React.useState(editLot ? (editLot.cat === 'digital' ? 'service' : 'item') : 'item'); // 'item' | 'service'
-  const [cat, setCat] = React.useState(editLot ? editLot.cat : 'gadget');
+  const [kind, setKind] = React.useState(editLot ? (normalizeCat(editLot.cat) === 'service' ? 'service' : 'item') : 'item'); // 'item' | 'service'
+  const [cat, setCat] = React.useState(editLot ? normalizeCat(editLot.cat) : 'tech');
   const [condition, setCondition] = React.useState(editLot ? (editLot.condition || 'Новое или Б/У') : 'Новое или Б/У');
   const [title, setTitle] = React.useState(editLot ? editLot.title : '');
   const [value, setValue] = React.useState(editLot ? String(editLot.value) : '');
@@ -143,7 +141,7 @@ export function CreateListing({ onClose, onPublish, initialWants = '', editLot =
 
   const chooseKind = (k) => {
     setKind(k);
-    setCat(k === 'service' ? 'digital' : 'gadget');
+    setCat(k === 'service' ? 'service' : 'tech');
     setCondition(k === 'service' ? 'Услуга' : 'Новое или Б/У');
   };
 
@@ -175,12 +173,17 @@ export function CreateListing({ onClose, onPublish, initialWants = '', editLot =
       const d = res.draft || {};
       setWantsHints((d.wants || '').split(',').map(s => s.trim()).filter(Boolean));
       if (d.aiLow > 0 && d.aiHigh > d.aiLow) setAiRange({ low: d.aiLow, high: d.aiHigh });
+      // модель сама помечает, знает ли она реальную цену — не выдаём догадку
+      // за рыночную оценку
+      const shaky = d.confident === false || d.ai === false;
       if (mode === 'price') {
         if (d.value > 0) setValue(String(d.value));
-        setAiNote(`AI-оценка: ${fmt(d.value)} Б · диапазон ${fmt(d.aiLow)}–${fmt(d.aiHigh)} Б. ${d.reasoning || ''}`);
+        setAiNote(shaky
+          ? `Точной цены на это ИИ не знает — ${fmt(d.value)} Б это грубый ориентир, проверьте сами. ${d.reasoning || ''}`
+          : `AI-оценка: ${fmt(d.value)} Б · диапазон ${fmt(d.aiLow)}–${fmt(d.aiHigh)} Б. ${d.reasoning || ''}`);
       } else {
         if (d.title && !title.trim()) setTitle(d.title);
-        if (d.cat) setCat(d.cat);
+        if (d.cat && CAT[normalizeCat(d.cat)]) setCat(normalizeCat(d.cat));
         if (d.condition && kind === 'item') setCondition(d.condition);
         if (d.desc && (!desc.trim() || desc.trim().startsWith('Готов(а)'))) setDesc(d.desc);
         if (d.wants && !wants.trim()) setWants(d.wants);
@@ -246,7 +249,7 @@ export function CreateListing({ onClose, onPublish, initialWants = '', editLot =
     if (!valueNum || valueNum <= 0) return setError('Укажите оценку в баллах');
     if (!wants.trim()) return setError('Укажите, на что хотите обменять');
     setError('');
-    const placeholder = kind === 'service' ? 'УСЛУГА' : (cat === 'gadget' ? 'ТЕХНИКА' : 'ВЕЩЬ');
+    const placeholder = kind === 'service' ? 'УСЛУГА' : (CAT[cat] ? CAT[cat].label.toUpperCase() : 'ВЕЩЬ');
     const main = photos[mainIdx];
     const lot = {
       id: editLot ? editLot.id : undefined,
@@ -397,7 +400,7 @@ export function CreateListing({ onClose, onPublish, initialWants = '', editLot =
             <input
               type="number" inputMode="numeric" min="0" step="500"
               value={value}
-              onChange={e => setValue(e.target.value)}
+              onChange={e => { setValue(e.target.value); setAiRange(null); setAiNote(''); }}
               placeholder="Например: 45000"
               style={{ flex: 1, padding: '13px 16px', border: 'none', outline: 'none', fontSize: 15, fontFamily: 'var(--font)', background: 'transparent' }}
             />

@@ -1,12 +1,12 @@
 // screen-feed.jsx — home feed + discovery mechanics (list / swipe / chain)
 import React from 'react';
-import { CAT } from './data.js';
+import { CAT, CAT_IDS, catOf, normalizeCat } from './data.js';
 import { Icon } from './icons.jsx';
 import { AIBadge, Photo, Credit, LotCard, Sheet } from './ui.jsx';
 
 // ---------- shared: category filter row ----------
 export function CatRow({ active, setActive }) {
-  const cats = [['all', 'Всё'], ['gadget', 'Техника'], ['digital', 'Услуги'], ['eco', 'Вещи и эко']];
+  const cats = [['all', 'Всё'], ...CAT_IDS.map(id => [id, CAT[id].label])];
   return (
     <div className="row gap8" style={{ overflowX: 'auto', padding: '2px 18px 4px', scrollbarWidth: 'none' }}>
       {cats.map(([id, label]) => (
@@ -65,7 +65,7 @@ function MatchStrip({ onOpen, onChains, matches = [], lots = [], myLot = null })
 // VARIANT A — LIST / FEED
 // ===========================================================
 export function FeedList({ cat, onOpen, onChains, hints = true, limit, lots = [], matches = [], myLot = null, loading = false, favIds, onToggleFav }) {
-  let items = lots.filter(l => cat === 'all' || l.cat === cat);
+  let items = lots.filter(l => cat === 'all' || normalizeCat(l.cat) === cat);
   if (limit) items = items.slice(0, limit);
   return (
     <div className="col gap16" style={{ paddingBottom: 20 }}>
@@ -104,7 +104,7 @@ export function LotCardSkeleton() {
 // VARIANT B — SWIPE
 // ===========================================================
 export function FeedSwipe({ cat, onOpen, lots = [], myLot = null }) {
-  const deck = React.useMemo(() => lots.filter(l => cat === 'all' || l.cat === cat), [lots, cat]);
+  const deck = React.useMemo(() => lots.filter(l => cat === 'all' || normalizeCat(l.cat) === cat), [lots, cat]);
   const [idx, setIdx] = React.useState(0);
   const [drag, setDrag] = React.useState(0);
   const [liked, setLiked] = React.useState(null);
@@ -205,7 +205,7 @@ function SwipeCard({ lot, drag = 0, onDown, onMove, onUp, onTap, style }) {
       )}
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '40px 16px 16px', background: 'linear-gradient(to top, rgba(0,0,0,0.82), transparent)' }}>
         <div className="row gap6" style={{ marginBottom: 8 }}>
-          <span className="tag" style={{ background: 'rgba(255,255,255,0.2)', color: '#fff', backdropFilter: 'blur(6px)' }}>{CAT[lot.cat].label}</span>
+          <span className="tag" style={{ background: 'rgba(255,255,255,0.2)', color: '#fff', backdropFilter: 'blur(6px)' }}>{catOf(lot.cat).label}</span>
           <span className="tag" style={{ background: 'rgba(255,255,255,0.2)', color: '#fff', backdropFilter: 'blur(6px)' }}>{lot.condition}</span>
         </div>
         <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-end', gap: 10 }}>

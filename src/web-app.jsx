@@ -1,6 +1,7 @@
 // web-app.jsx — desktop web layout (Airbnb-inspired)
 import React from 'react';
 import { CITIES, REMOTE } from './cities.js';
+import { CAT, CAT_IDS, normalizeCat } from './data.js';
 import { Icon } from './icons.jsx';
 import { fmt, Logo, Credit, Photo, Avatar, Stars, CatTag, AIBadge } from './ui.jsx';
 import { EditProfileSheet, resizeImage } from './screen-profile.jsx';
@@ -115,8 +116,9 @@ function WebFooter() {
 }
 
 // ---------------- home ----------------
-const CATS = [['all', 'Всё'], ['gadget', 'Техника'], ['digital', 'Услуги'], ['eco', 'Вещи и эко']];
-const CAT_ICON = { all: 'spark', gadget: 'tag', digital: 'spark', eco: 'heart' };
+const CATS = [['all', 'Всё'], ...CAT_IDS.map(id => [id, CAT[id].label])];
+// иконку оставляем одну: девять разных значков в строке фильтров только шумят
+const CAT_ICON = {};
 
 const bigInputStyle = {
   display: 'block',
@@ -182,7 +184,7 @@ function HomeView({ lots, lotsLoading = false, myLots = [], matches = [], query,
   const [cityOpen, setCityOpen] = React.useState(false);
   const q = (query || '').toLowerCase();
   const items = lots.filter(l => {
-    const matchesCat = cat === 'all' || l.cat === cat;
+    const matchesCat = cat === 'all' || normalizeCat(l.cat) === cat;
     const matchesQ = !q || l.title.toLowerCase().includes(q);
     const lc = (l.city || '').toLowerCase();
     const matchesCity = city === 'all' || (city === REMOTE ? lc === REMOTE : (lc === city.toLowerCase() || lc === REMOTE || !lc));
@@ -230,7 +232,7 @@ function HomeView({ lots, lotsLoading = false, myLots = [], matches = [], query,
         <div className="web-cats">
           {CATS.map(([id, label]) => (
             <button key={id} className={'web-cat' + (cat === id ? ' is-on' : '')} onClick={() => setCat(id)}>
-              <Icon name={CAT_ICON[id]} size={15} color={cat === id ? '#fff' : 'var(--ink-3)'} />{label}
+              <Icon name={CAT_ICON[id] || 'tag'} size={15} color={cat === id ? '#fff' : 'var(--ink-3)'} />{label}
             </button>
           ))}
         </div>
