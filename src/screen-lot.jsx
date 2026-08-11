@@ -41,6 +41,7 @@ export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, lots, fav = fal
     city: L.ownerCity || '',
     avatar: L.ownerAvatar || '',
     rating: L.ownerRating ?? 0,
+    reviews: L.ownerReviews ?? 0,
     deals: L.ownerDeals ?? 0,
   };
 
@@ -94,7 +95,7 @@ export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, lots, fav = fal
             <Avatar user={owner.name} url={owner.avatar} size={46} />
             <div className="grow col" style={{ gap: 3 }}>
               <span className="title">{owner.name}</span>
-              <span className="row gap6"><Stars value={owner.rating} /><span className="cap">{owner.rating} · {owner.deals} сделок</span></span>
+              <span className="row gap6"><Stars value={owner.rating} count={owner.reviews} />{owner.reviews > 0 && <span className="cap">{owner.rating.toFixed(1)} · {owner.deals} сделок</span>}</span>
             </div>
             <Icon name="chevR" size={20} color="var(--ink-3)" />
           </div>

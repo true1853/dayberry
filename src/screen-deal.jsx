@@ -1,7 +1,7 @@
 // screen-deal.jsx — escrow deal status + confirm-receipt
 import React from 'react';
 import { Icon } from './icons.jsx';
-import { fmt, Credit, Photo, Avatar, Stars, AppBar, IconBtn, Sheet } from './ui.jsx';
+import { fmt, Credit, Photo, Avatar, AppBar, IconBtn, Sheet } from './ui.jsx';
 
 const DEAL_STEPS = [
   { id: 'created', label: 'Сделка создана', sub: 'Баллы заморожены в эскроу' },
@@ -35,7 +35,7 @@ function Stepper({ active }) {
   );
 }
 
-export function DealStatus({ deal, onBack, onConfirm, onCancel, onChat, onDone }) {
+export function DealStatus({ deal, onBack, onConfirm, onCancel, onChat, onDone, onRate }) {
   if (!deal) return null;
   const L = deal.lot || {};
   const { credits, stage, role } = deal;
@@ -43,7 +43,7 @@ export function DealStatus({ deal, onBack, onConfirm, onCancel, onChat, onDone }
   const [confirming, setConfirming] = React.useState(false);
   const [cancelling, setCancelling] = React.useState(false);
 
-  if (stage === 'done') return <DealDone deal={deal} onDone={onDone} />;
+  if (stage === 'done') return <DealDone deal={deal} onDone={onDone} onRate={onRate} />;
 
   const isPartner = role === 'partner';
   const my = deal.myLot || { title: '', photo: '', photoUrl: '', cat: 'gadget' };
@@ -156,11 +156,76 @@ export function DealStatus({ deal, onBack, onConfirm, onCancel, onChat, onDone }
   );
 }
 
-function DealDone({ deal, onDone }) {
+// Оценка партнёра после обмена. Без этого экрана рейтинг остаётся нулевым
+// у всех: отзыв больше негде оставить.
+export function RateSheet({ open, onClose, partnerName, onSubmit }) {
+  const [stars, setStars] = React.useState(0);
+  const [text, setText] = React.useState('');
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState('');
+
+  React.useEffect(() => {
+    if (open) { setStars(0); setText(''); setError(''); setBusy(false); }
+  }, [open]);
+
+  const HINTS = ['', 'Всё плохо', 'Так себе', 'Нормально', 'Хорошо', 'Отлично'];
+
+  const send = async () => {
+    if (!stars) return setError('Поставьте оценку');
+    setBusy(true); setError('');
+    const res = await onSubmit(stars, text);
+    setBusy(false);
+    if (res && !res.ok) return setError(res.error || 'Не удалось сохранить отзыв');
+    onClose();
+  };
+
+  return (
+    <Sheet open={open} onClose={onClose} title={`Как прошёл обмен с ${partnerName || 'партнёром'}?`}>
+      <div className="px col gap14" style={{ paddingBottom: 10 }}>
+        <div className="col gap6" style={{ alignItems: 'center' }}>
+          <div className="row gap8">
+            {[1, 2, 3, 4, 5].map(s => (
+              <button
+                key={s}
+                aria-label={`${s} из 5`}
+                onClick={() => { setStars(s); setError(''); }}
+                style={{ border: 'none', background: 'none', padding: 4, cursor: 'pointer', lineHeight: 0 }}
+              >
+                <Icon name="star" size={34} color={s <= stars ? '#f5a623' : 'var(--line)'} />
+              </button>
+            ))}
+          </div>
+          <span className="cap" style={{ minHeight: 16 }}>{HINTS[stars]}</span>
+        </div>
+
+        <textarea
+          value={text}
+          onChange={e => setText(e.target.value)}
+          placeholder="Пара слов о партнёре — необязательно"
+          rows={3}
+          style={{
+            width: '100%', resize: 'none', padding: '12px 14px', borderRadius: 14,
+            border: '1px solid var(--line)', fontFamily: 'var(--font)', fontSize: 15,
+            outline: 'none', background: '#fff', color: 'var(--ink)', boxSizing: 'border-box',
+          }}
+        />
+
+        {error && <span className="cap" style={{ color: 'var(--berry)' }}>{error}</span>}
+
+        <button className="btn btn-primary btn-block btn-lg" disabled={busy} onClick={send}>
+          {busy ? 'Отправляем…' : 'Отправить отзыв'}
+        </button>
+      </div>
+    </Sheet>
+  );
+}
+
+function DealDone({ deal, onDone, onRate }) {
   const { credits, role } = deal;
   const L = deal.lot || {};
   const my = deal.myLot || { title: '' };
   const receiveTitle = role === 'partner' ? my.title : L.title;
+  const [rating, setRating] = React.useState(false);
   return (
     <div className="app-scroll" style={{ display: 'flex', flexDirection: 'column' }}>
       <div className="grow col" style={{ alignItems: 'center', justifyContent: 'center', padding: '40px 30px', textAlign: 'center', gap: 16 }}>
@@ -176,13 +241,27 @@ function DealDone({ deal, onDone }) {
         <div className="card fade-in" style={{ padding: 14, width: '100%', maxWidth: 320 }}>
           <div className="row" style={{ justifyContent: 'space-between' }}><span className="sub">Эскроу разморожен</span><Credit n={credits} size={15} coin={14} /></div>
           <div className="divider" style={{ margin: '10px 0' }} />
-          <div className="row" style={{ justifyContent: 'space-between' }}><span className="sub">Ваш рейтинг</span><span className="row gap6"><Stars value={5} /><span className="title" style={{ fontSize: 13 }}>+1 сделка</span></span></div>
+          <div className="row" style={{ justifyContent: 'space-between' }}><span className="sub">Сделок в профиле</span><span className="title" style={{ fontSize: 13 }}>+1</span></div>
         </div>
       </div>
       <div className="px col gap10" style={{ paddingBottom: 'calc(20px + env(safe-area-inset-bottom))' }}>
-        <button className="btn btn-primary btn-block btn-lg" onClick={() => onDone('rate')}><Icon name="star" size={18} color="#fff" />Оценить партнёра</button>
+        {deal.reviewed ? (
+          <div className="card row gap8" style={{ padding: 14, alignItems: 'center', justifyContent: 'center', background: 'var(--ok-soft)' }}>
+            <Icon name="checkCircle" size={18} color="var(--ok)" />
+            <span className="sub" style={{ color: '#15663f' }}>Спасибо, вы оценили партнёра</span>
+          </div>
+        ) : (
+          <button className="btn btn-primary btn-block btn-lg" onClick={() => setRating(true)}><Icon name="star" size={18} color="#fff" />Оценить партнёра</button>
+        )}
         <button className="btn btn-soft btn-block" onClick={() => onDone('home')}>Вернуться в ленту</button>
       </div>
+
+      <RateSheet
+        open={rating}
+        onClose={() => setRating(false)}
+        partnerName={deal.partnerName}
+        onSubmit={(stars, text) => onRate(deal, stars, text)}
+      />
     </div>
   );
 }

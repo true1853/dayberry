@@ -338,6 +338,7 @@ function LotView({ L, onBack, onOffer, onOwnerChat }) {
     city: L.ownerCity || '',
     avatar: L.ownerAvatar || '',
     rating: L.ownerRating ?? 0,
+    reviews: L.ownerReviews ?? 0,
     deals: L.ownerDeals ?? 0,
   };
   const amenities = [
@@ -439,10 +440,26 @@ const fmtChatTime = (iso) => {
 function DealsView({ onBack, chats = [], deals = [], onOpenDeal, onOpenChat }) {
   const sorted = [...chats].sort((a, b) => (b.messages?.[b.messages.length - 1]?.t || b.createdAt || '') < (a.messages?.[a.messages.length - 1]?.t || a.createdAt || '') ? -1 : 1);
   const activeDeals = deals.filter(d => d.status === 'active' && d.stage !== 'done');
+  // подтвердивший первым не увидит экран завершения — даём ему вход в оценку отсюда
+  const toRate = deals.filter(d => d.stage === 'done' && !d.reviewed);
   return (
     <div className="web-container web-section">
       <button className="web-back" onClick={onBack}><Icon name="back" size={16} color="var(--ink-2)" />На главную</button>
       <div className="web-head" style={{ marginTop: 16 }}><h2>Сделки</h2></div>
+      {toRate.length > 0 && (
+        <div className="card" style={{ overflow: 'hidden', maxWidth: 720, marginBottom: 16 }}>
+          {toRate.map((d, i) => (
+            <div key={d.id} className="row gap14" style={{ padding: '16px 20px', borderTop: i ? '1px solid var(--line-2)' : 'none', cursor: 'pointer', alignItems: 'center' }} onClick={() => onOpenDeal(d.id)}>
+              <div className="avatar" style={{ width: 44, height: 44, background: '#fff7e6', flex: 'none' }}><Icon name="star" size={20} color="#f5a623" /></div>
+              <div className="grow col" style={{ gap: 3 }}>
+                <span style={{ fontSize: 15, fontWeight: 600 }}>Оцените {d.partnerName || 'партнёра'}</span>
+                <span className="sub ellipsis">Обмен «{(d.lot?.title || '').split(',')[0]}» завершён</span>
+              </div>
+              <Icon name="chevR" size={18} color="var(--ink-3)" />
+            </div>
+          ))}
+        </div>
+      )}
       {activeDeals.length > 0 && (
         <div className="card" style={{ overflow: 'hidden', maxWidth: 720 }}>
           {activeDeals.map((d, i) => {
@@ -505,6 +522,7 @@ function ProfileView({ user, profile, myLots, onOpenLot, onLogout, onProfileSave
   const name = (user && user.name) || '';
   const city = (user && user.city) || '';
   const rating = user ? (user.rating ?? 0) : 0;
+  const reviewsCount = (profile && profile.reviewsCount) ?? (user && user.reviewsCount) ?? 0;
   const deals = user ? (user.dealsCount ?? 0) : 0;
   const balance = (user && user.balance) || 0;
   const bio = (profile && profile.bio) || (user && user.bio) || '';
@@ -547,7 +565,9 @@ function ProfileView({ user, profile, myLots, onOpenLot, onLogout, onProfileSave
             <div className="col" style={{ alignItems: 'center', gap: 4 }}>
               <span style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em' }}>{name}</span>
               <span className="sub"><Icon name="map" size={13} color="var(--ink-3)" /> {city}</span>
-              <span className="web-rating-row"><Icon name="star" size={14} color="var(--ink)" /> {rating} · {deals} сделок</span>
+              <span className="web-rating-row">{reviewsCount > 0
+                ? <><Icon name="star" size={14} color="var(--ink)" /> {rating.toFixed(1)} · {reviewsCount} отзывов · {deals} сделок</>
+                : <>Оценок пока нет · {deals} сделок</>}</span>
             </div>
             <button className="btn btn-soft" style={{ padding: '11px 18px', fontSize: 14 }} onClick={() => setEditing(true)}><Icon name="user" size={16} color="var(--ink)" />Редактировать</button>
             <div className="card row" style={{ width: '100%', padding: '14px 8px' }}>
@@ -596,7 +616,7 @@ function ProfileView({ user, profile, myLots, onOpenLot, onLogout, onProfileSave
 }
 
 // ---------------- root ----------------
-export default function WebApp({ lots, lotsLoading = false, myLots, user, profile, onLogout, onProfileSaved, onOffer, onCreate, onEditLot, matches = [], chats = [], chains = [], deals = [], onConfirmDeal, onCancelDeal, authed = true, onAuthRequired, onOwnerChat }) {
+export default function WebApp({ lots, lotsLoading = false, myLots, user, profile, onLogout, onProfileSaved, onOffer, onCreate, onEditLot, matches = [], chats = [], chains = [], deals = [], onConfirmDeal, onCancelDeal, onRateDeal, authed = true, onAuthRequired, onOwnerChat }) {
   const [view, setView] = React.useState('home');
   const [cat, setCat] = React.useState('all');
   const [city, setCity] = React.useState('all');
@@ -633,6 +653,7 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
               onCancel={async () => { const ok = await onCancelDeal(dealOpen); if (ok) setSelDeal(null); }}
               onChat={() => { const c = chats.find(x => x.deal && x.deal.id === selDeal); if (c) { setSelChat(c.id); setSelDeal(null); } }}
               onDone={() => setSelDeal(null)}
+              onRate={onRateDeal}
             />
           </div>
         </div>

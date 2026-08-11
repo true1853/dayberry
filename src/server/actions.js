@@ -127,6 +127,78 @@ export async function getProfileAction() {
   return profileOf(await getCurrentUser());
 }
 
+// ---------- отзывы и рейтинг ----------
+
+const MAX_REVIEW_TEXT = 600;
+
+// Пересчитывает рейтинг получателя по всем его отзывам. Считаем агрегатом в БД,
+// а не инкрементально: так значение не разъезжается, если отзыв удалят вручную.
+async function recalcRating(tx, targetId) {
+  const agg = await tx.review.aggregate({
+    where: { targetId },
+    _avg: { rating: true },
+    _count: { _all: true },
+  });
+  await tx.user.update({
+    where: { id: targetId },
+    data: {
+      // округляем до десятых — в интерфейсе всё равно показываем «4.8»
+      rating: Math.round((agg._avg.rating || 0) * 10) / 10,
+      reviewsCount: agg._count._all,
+    },
+  });
+}
+
+export async function createReviewAction(input) {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: 'Требуется вход' };
+
+  const { dealId, rating, text } = input || {};
+  const stars = Math.round(Number(rating));
+  if (!(stars >= 1 && stars <= 5)) return { ok: false, error: 'Поставьте оценку от 1 до 5' };
+
+  const deal = await prisma.deal.findUnique({
+    where: { id: dealId },
+    select: { id: true, userId: true, status: true, lot: { select: { ownerId: true } } },
+  });
+  if (!deal) return { ok: false, error: 'Сделка не найдена' };
+
+  // оценивать можно только завершённый обмен и только его участнику
+  const partnerId = deal.lot?.ownerId;
+  const isInitiator = deal.userId === user.id;
+  const isPartner = partnerId === user.id;
+  if (!isInitiator && !isPartner) return { ok: false, error: 'Вы не участвовали в этой сделке' };
+  if (deal.status !== 'done') return { ok: false, error: 'Оценить можно только завершённый обмен' };
+
+  const targetId = isInitiator ? partnerId : deal.userId;
+  if (!targetId || targetId === user.id) return { ok: false, error: 'Некого оценивать' };
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.review.create({
+        data: {
+          authorId: user.id,
+          targetId,
+          dealId: deal.id,
+          rating: stars,
+          text: (text || '').trim().slice(0, MAX_REVIEW_TEXT),
+        },
+      });
+      await recalcRating(tx, targetId);
+    });
+  } catch (e) {
+    // @@unique([dealId, authorId]) — второй отзыв по той же сделке
+    if (e.code === 'P2002') return { ok: false, error: 'Вы уже оценили этот обмен' };
+    throw e;
+  }
+
+  const target = await prisma.user.findUnique({
+    where: { id: targetId },
+    select: { rating: true, reviewsCount: true },
+  });
+  return { ok: true, rating: target.rating, reviewsCount: target.reviewsCount };
+}
+
 async function profileOf(user) {
   if (!user) return null;
   const reviews = await prisma.review.findMany({
@@ -230,7 +302,7 @@ async function lotsFeed(user) {
   if (user) where.ownerId = { not: user.id };
   const lots = await prisma.lot.findMany({
     where,
-    include: { owner: { select: { city: true, name: true, avatar: true, rating: true, dealsCount: true } }, lotPhotos: { orderBy: { order: 'asc' } } },
+    include: { owner: { select: { city: true, name: true, avatar: true, rating: true, reviewsCount: true, dealsCount: true } }, lotPhotos: { orderBy: { order: 'asc' } } },
     orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
   });
   return lots.map(l => mapLot(l, l.owner?.city || ''));
@@ -244,7 +316,7 @@ async function myLotsOf(user) {
   if (!user) return [];
   const lots = await prisma.lot.findMany({
     where: { ownerId: user.id, status: 'active' },
-    include: { owner: { select: { city: true, name: true, avatar: true, rating: true, dealsCount: true } }, lotPhotos: { orderBy: { order: 'asc' } } },
+    include: { owner: { select: { city: true, name: true, avatar: true, rating: true, reviewsCount: true, dealsCount: true } }, lotPhotos: { orderBy: { order: 'asc' } } },
     orderBy: { createdAt: 'desc' },
   });
   return lots.map(l => mapLot(l, l.owner?.city || ''));
@@ -281,7 +353,7 @@ async function favoritesOf(user) {
     include: {
       lot: {
         include: {
-          owner: { select: { city: true, name: true, avatar: true, rating: true, dealsCount: true } },
+          owner: { select: { city: true, name: true, avatar: true, rating: true, reviewsCount: true, dealsCount: true } },
           lotPhotos: { orderBy: { order: 'asc' } },
         },
       },
@@ -337,7 +409,7 @@ export async function createLotAction(input) {
   });
   const withOwner = await prisma.lot.findUnique({
     where: { id: lot.id },
-    include: { owner: { select: { city: true, name: true, avatar: true, rating: true, dealsCount: true } }, lotPhotos: { orderBy: { order: 'asc' } } },
+    include: { owner: { select: { city: true, name: true, avatar: true, rating: true, reviewsCount: true, dealsCount: true } }, lotPhotos: { orderBy: { order: 'asc' } } },
   });
   return { ok: true, lot: mapLot(withOwner || lot, user.city) };
 }
@@ -402,7 +474,7 @@ export async function updateLotAction(lotId, input) {
   });
   const withOwner = await prisma.lot.findUnique({
     where: { id: lotId },
-    include: { owner: { select: { city: true, name: true, avatar: true, rating: true, dealsCount: true } }, lotPhotos: { orderBy: { order: 'asc' } } },
+    include: { owner: { select: { city: true, name: true, avatar: true, rating: true, reviewsCount: true, dealsCount: true } }, lotPhotos: { orderBy: { order: 'asc' } } },
   });
   return { ok: true, lot: mapLot(withOwner || updated, user.city) };
 }
@@ -417,8 +489,11 @@ class DealClosed extends Error {}
 
 function dealWith() {
   return {
-    lot: { include: { owner: { select: { name: true, city: true } }, lotPhotos: { orderBy: { order: 'asc' } } } },
+    lot: { include: { owner: { select: { id: true, name: true, city: true } }, lotPhotos: { orderBy: { order: 'asc' } } } },
     myLot: { include: { lotPhotos: { orderBy: { order: 'asc' } } } },
+    // достаточно авторов, чтобы понять, оценил ли текущий пользователь обмен
+    reviews: { select: { authorId: true } },
+    user: { select: { name: true } },
   };
 }
 
@@ -436,6 +511,9 @@ async function serializeDeal(d, currentUserId) {
     role: d.userId === currentUserId ? 'initiator' : 'partner',
     initiatorConfirmed: d.initiatorConfirmed,
     partnerConfirmed: d.partnerConfirmed,
+    // кого оцениваем и оценивали ли уже — экран завершения решает по этим полям
+    partnerName: (d.userId === currentUserId ? d.lot?.owner?.name : d.user?.name) || 'партнёр',
+    reviewed: (d.reviews || []).some(r => r.authorId === currentUserId),
   };
 }
 

@@ -1,7 +1,7 @@
 'use client';
 // App.jsx — root: navigation, phone frame scaling, tweaks
 import React from 'react';
-import { bootstrapAction, loadAuthedDataAction, logoutAction, createLotAction, updateLotAction, getWalletAction, listDealsAction, listChatsAction, getMatchesAction, createDealAction, confirmReceiptAction, confirmPartnerAction, cancelDealAction, topUpAction, joinChainAction, startChatAction, getDealChatAction, toggleFavoriteAction } from './server/actions.js';
+import { bootstrapAction, loadAuthedDataAction, logoutAction, createLotAction, updateLotAction, getWalletAction, listDealsAction, listChatsAction, getMatchesAction, createDealAction, confirmReceiptAction, confirmPartnerAction, cancelDealAction, createReviewAction, topUpAction, joinChainAction, startChatAction, getDealChatAction, toggleFavoriteAction } from './server/actions.js';
 import { FeedList, FeedSwipe, CatRow, FavoritesScreen } from './screen-feed.jsx';
 import { FeedChain, ChainDetail } from './screen-chain.jsx';
 import { LotDetail, OfferSheet } from './screen-lot.jsx';
@@ -327,6 +327,24 @@ export default function App() {
     }
   };
 
+  // Отзыв о партнёре: после успеха помечаем сделку оценённой, чтобы экран
+  // завершения сразу перестал предлагать оценить, и подтягиваем свой профиль —
+  // в нём мог измениться собственный рейтинг, если партнёр оценил параллельно.
+  const submitReview = async (target, stars, text) => {
+    if (!target) return { ok: false, error: 'Сделка не найдена' };
+    try {
+      const res = await createReviewAction({ dealId: target.id, rating: stars, text });
+      if (!res.ok) return res;
+      setDeals(ds => ds.map(d => (d.id === target.id ? { ...d, reviewed: true } : d)));
+      setDeal(d => (d && d.id === target.id ? { ...d, reviewed: true } : d));
+      showSnack('Спасибо! Отзыв сохранён');
+      return res;
+    } catch (e) {
+      console.error('review failed', e);
+      return { ok: false, error: 'Не удалось сохранить отзыв — попробуйте ещё раз' };
+    }
+  };
+
   const onCreate = () => requireAuth('Создать объявление можно после регистрации', () => { setAuthOpen(false); setCreating(true); });
 
   const openChatWith = async (L) => {
@@ -444,7 +462,7 @@ export default function App() {
       if (!d) return null;
       return (
         <div className="app"><div className="safe-top" />
-          <DealStatus deal={d} onBack={back} onConfirm={() => confirmDeal(d)} onCancel={async () => { const ok = await cancelDeal(d); if (ok) resetTo('deals'); }} onChat={() => openDealChat(d)} onDone={(where) => { setDeal(null); resetTo(where === 'home' ? 'home' : 'deals'); }} />
+          <DealStatus deal={d} onBack={back} onConfirm={() => confirmDeal(d)} onCancel={async () => { const ok = await cancelDeal(d); if (ok) resetTo('deals'); }} onChat={() => openDealChat(d)} onDone={(where) => { setDeal(null); resetTo(where === 'home' ? 'home' : 'deals'); }} onRate={submitReview} />
         </div>
       );
     }
@@ -502,6 +520,7 @@ export default function App() {
           deals={deals}
           onConfirmDeal={confirmDeal}
           onCancelDeal={cancelDeal}
+          onRateDeal={submitReview}
         />
       ) : (
         <>

@@ -360,6 +360,7 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, 
   const email = (user && user.email) || '';
   const city = (user && user.city) || '';
   const rating = user ? (user.rating ?? 0) : 0;
+  const reviewsCount = (profile && profile.reviewsCount) ?? (user && user.reviewsCount) ?? 0;
   const deals = user ? (user.dealsCount ?? 0) : 0;
   const balance = (user && user.balance) || 0;
   const bio = (profile && profile.bio) || (user && user.bio) || '';
@@ -430,10 +431,17 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, 
               <span className="sub">{city}</span>
             </div>
             <div className="row gap4" style={{ marginTop: 2 }}>
-              {[1,2,3,4,5].map(i => (
-                <Icon key={i} name="star" size={14} color={i <= Math.round(rating) ? '#222222' : 'var(--line)'} />
-              ))}
-              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', marginLeft: 4 }}>{rating}</span>
+              {reviewsCount > 0 ? (
+                <>
+                  {[1,2,3,4,5].map(i => (
+                    <Icon key={i} name="star" size={14} color={i <= Math.round(rating) ? '#222222' : 'var(--line)'} />
+                  ))}
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', marginLeft: 4 }}>{rating.toFixed(1)}</span>
+                  <span className="cap" style={{ marginLeft: 2 }}>· {reviewsCount}</span>
+                </>
+              ) : (
+                <span className="cap">Оценок пока нет</span>
+              )}
             </div>
           </div>
 

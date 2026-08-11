@@ -77,10 +77,20 @@ export function Avatar({ user, size = 40, url = '' }) {
   );
 }
 
-export function Stars({ value, size = 12 }) {
+// count — сколько отзывов получено. Ноль отзывов и оценка 0 — разные вещи:
+// новичок не должен выглядеть как человек с плохой репутацией.
+export function Stars({ value, size = 12, count, showValue = false }) {
+  if (count === 0) {
+    return <span className="cap" style={{ fontSize: size }}>нет оценок</span>;
+  }
   return (
     <span className="row gap4">
       <span className="stars">{[0,1,2,3,4].map(i => <Icon key={i} name="star" size={size} color={i < Math.round(value) ? '#222222' : '#dddddd'} />)}</span>
+      {showValue && value > 0 && (
+        <span className="cap" style={{ fontSize: size }}>
+          {value.toFixed(1)}{count ? ` · ${count}` : ''}
+        </span>
+      )}
     </span>
   );
 }

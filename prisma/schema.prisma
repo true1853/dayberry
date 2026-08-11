@@ -21,6 +21,7 @@ model User {
   notifyDeals  Boolean       @default(true)
   passwordHash String
   rating       Float         @default(0)
+  reviewsCount Int           @default(0)
   dealsCount   Int           @default(0)
   balance      Int           @default(0)
   createdAt    DateTime      @default(now())
@@ -65,10 +66,14 @@ model Review {
   author    User     @relation("reviewAuthor", fields: [authorId], references: [id], onDelete: Cascade)
   targetId  String
   target    User     @relation("reviewTarget", fields: [targetId], references: [id], onDelete: Cascade)
+  dealId    String?
+  deal      Deal?    @relation(fields: [dealId], references: [id], onDelete: SetNull)
   rating    Int
   text      String
   createdAt DateTime @default(now())
 
+  // один отзыв на сделку от каждого участника
+  @@unique([dealId, authorId])
   @@index([targetId, createdAt])
 }
 
@@ -137,6 +142,7 @@ model Deal {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
   chat               Chat?
+  reviews            Review[]
 
   @@index([status])
   @@index([userId])

@@ -24,6 +24,10 @@ function fmtDate(iso) {
 
 export function DealsList({ chats = [], deals = [], onOpen, onOpenDeal }) {
   const activeDeals = deals.filter(d => d.status === 'active' && d.stage !== 'done');
+  // Тот, кто подтвердил получение первым, экран завершения не увидит:
+  // к моменту закрытия сделки он уже ушёл со страницы. Без этого блока
+  // половина участников не может оставить отзыв вообще.
+  const toRate = deals.filter(d => d.stage === 'done' && !d.reviewed);
   return (
     <div className="app-scroll">
       <AppBar title="Сделки" big sub="Чаты и активные обмены" right={<IconBtn name="filter" />} />
@@ -49,6 +53,24 @@ export function DealsList({ chats = [], deals = [], onOpen, onOpenDeal }) {
             </div>
           );
         })}
+
+        {toRate.length > 0 && (
+          <>
+            <span className="over" style={{ padding: '6px 2px 0' }}>Ждут вашей оценки</span>
+            {toRate.map(d => (
+              <div key={d.id} className="card" style={{ padding: 14, cursor: 'pointer', border: '1px solid var(--line)' }} onClick={() => onOpenDeal(d.id)}>
+                <div className="row gap10" style={{ alignItems: 'center' }}>
+                  <div className="avatar" style={{ width: 42, height: 42, background: '#fff7e6' }}><Icon name="star" size={20} color="#f5a623" /></div>
+                  <div className="col grow" style={{ gap: 2 }}>
+                    <span className="title">Оцените {d.partnerName || 'партнёра'}</span>
+                    <span className="sub ellipsis">Обмен «{(d.lot?.title || '').split(',')[0]}» завершён</span>
+                  </div>
+                  <Icon name="chevR" size={20} color="var(--ink-3)" />
+                </div>
+              </div>
+            ))}
+          </>
+        )}
 
         <span className="over" style={{ padding: '6px 2px 0' }}>Переписки</span>
         <div className="card" style={{ overflow: 'hidden' }}>
