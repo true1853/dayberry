@@ -106,6 +106,14 @@ export default function App() {
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
 
+  // Serve over HTTPS: bounce http -> https (unless local dev).
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (window.location.protocol === 'http:' && !['localhost', '127.0.0.1'].includes(window.location.hostname)) {
+      window.location.replace('https://' + window.location.host + window.location.pathname + window.location.hash);
+    }
+  }, []);
+
   const navigate = (to, opts = {}) => {
     if (typeof window === 'undefined') return;
     const hash = to === '/' ? '' : '#' + to;

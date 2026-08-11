@@ -121,7 +121,8 @@ export function AuthScreen({ onDone, onClose, message = '' }) {
     setLoading(true);
     setError('');
     try {
-      const res = await getOAuthUrlAction(provider, typeof window !== 'undefined' ? window.location.origin : '');
+      const origin = (typeof window !== 'undefined' ? window.location.origin : '').replace(/^http:/, 'https:');
+      const res = await getOAuthUrlAction(provider, origin);
       if (!res.ok) { setError(res.error); setLoading(false); return; }
       window.location.href = res.url;
     } catch (e) {
