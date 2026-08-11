@@ -25,7 +25,10 @@ async function upsertUser(profile) {
 export async function GET(req, { params }) {
   const { provider } = await params;
   const url = new URL(req.url);
-  const base = url.origin || APP_URL();
+  // NPM terminates TLS and proxies over http internally, so the scheme must
+  // come from X-Forwarded-Proto to keep the OAuth redirect_uri on https.
+  const proto = (req.headers.get('x-forwarded-proto') || url.protocol.replace(/:$/, '') || 'https').split(',')[0].trim();
+  const base = `${proto}://${url.host}`;
 
   // On any OAuth failure redirect to the clean origin (no query params),
   // and signal the error via a short-lived cookie the client can read + clear.
