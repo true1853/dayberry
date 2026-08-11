@@ -79,14 +79,19 @@ export function ChatThread({ chatId, onBack, onOpenDeal }) {
   const [chat, setChat] = React.useState(null);
   const [text, setText] = React.useState('');
   const [loading, setLoading] = React.useState(true);
+  const [sendError, setSendError] = React.useState('');
   const scroller = React.useRef(null);
 
   React.useEffect(() => {
     (async () => {
       if (!chatId) return;
       setLoading(true);
-      const c = await getChatAction(chatId);
-      setChat(c);
+      try {
+        const c = await getChatAction(chatId);
+        setChat(c);
+      } catch (e) {
+        setSendError('Не удалось загрузить чат — обновите страницу');
+      }
       setLoading(false);
     })();
   }, [chatId]);
@@ -95,10 +100,16 @@ export function ChatThread({ chatId, onBack, onOpenDeal }) {
 
   const send = async () => {
     if (!text.trim()) return;
-    const res = await sendMessageAction(chatId, text.trim());
-    if (res.ok) {
+    const msg = text.trim();
+    setText('');
+    setSendError('');
+    try {
+      const res = await sendMessageAction(chatId, msg);
+      if (!res.ok) { setSendError(res.error || 'Не удалось отправить'); return; }
       setChat(c => c ? { ...c, messages: [...c.messages, res.message] } : c);
-      setText('');
+    } catch (e) {
+      console.error('send message failed', e);
+      setSendError('Не удалось отправить — обновите страницу и попробуйте ещё раз');
     }
   };
 
@@ -153,6 +164,7 @@ export function ChatThread({ chatId, onBack, onOpenDeal }) {
         <input value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()} placeholder="Сообщение…" style={{ flex: 1, border: '1px solid var(--line)', borderRadius: 999, padding: '11px 16px', fontSize: 15, fontFamily: 'var(--font)', outline: 'none', background: 'var(--bg)' }} />
         <button onClick={send} style={{ width: 40, height: 40, borderRadius: 999, border: 'none', background: 'var(--berry)', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none', cursor: 'pointer' }}><Icon name="send" size={20} color="#fff" /></button>
       </div>
+      {sendError && <div style={{ padding: '8px 14px', background: 'var(--warn-soft)', color: '#7a5410', fontSize: 12.5, fontWeight: 600, borderTop: '1px solid var(--warn-soft)' }}>{sendError}</div>}
     </div>
   );
 }

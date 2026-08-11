@@ -85,7 +85,15 @@ export default function App() {
   const [chats, setChats] = React.useState([]);
   const [chains, setChains] = React.useState([]);
   const [matches, setMatches] = React.useState([]);
+  const [snack, setSnack] = React.useState('');
+  const snackTimer = React.useRef(null);
   const isDesktop = useMediaQuery('(min-width: 1128px)');
+
+  const showSnack = (msg) => {
+    setSnack(msg);
+    if (snackTimer.current) clearTimeout(snackTimer.current);
+    snackTimer.current = setTimeout(() => setSnack(''), 8000);
+  };
 
   React.useEffect(() => { applyAccent(t.accent); }, [t.accent]);
 
@@ -155,20 +163,28 @@ export default function App() {
       const res = lotData && lotData.id
         ? await updateLotAction(lotData.id, lotData)
         : await createLotAction(lotData);
-      if (res.ok) {
-        if (lotData && lotData.id) {
-          setLots(ls => ls.map(x => x.id === res.lot.id ? res.lot : x));
-          setMyLots(ms => ms.map(x => x.id === res.lot.id ? res.lot : x));
-        } else {
-          setLots(ls => [res.lot, ...ls]);
-          setMyLots(ms => [res.lot, ...ms]);
-        }
+      if (!res.ok) {
+        showSnack(res.error || 'Не удалось сохранить объявление');
+        throw new Error(res.error || 'Не удалось сохранить объявление');
       }
-    } finally {
-      publishingRef.current = false;
+      if (lotData && lotData.id) {
+        setLots(ls => ls.map(x => x.id === res.lot.id ? res.lot : x));
+        setMyLots(ms => ms.map(x => x.id === res.lot.id ? res.lot : x));
+      } else {
+        setLots(ls => [res.lot, ...ls]);
+        setMyLots(ms => [res.lot, ...ms]);
+      }
       setCreating(false);
       setEditingLot(null);
       resetTo('home');
+    } catch (e) {
+      console.error('publish failed', e);
+      if (!(e && e.message && e.message.indexOf('Не удалось сохранить объявление') === 0)) {
+        showSnack('Не удалось сохранить объявление — обновите страницу и попробуйте ещё раз');
+      }
+      throw e;
+    } finally {
+      publishingRef.current = false;
     }
   };
 
@@ -187,12 +203,16 @@ export default function App() {
   const confirmDeal = async (d) => {
     const target = d || deal;
     if (!target) return;
-    const res = target.role === 'partner' ? await confirmPartnerAction(target.id) : await confirmReceiptAction(target.id);
-    if (res.ok) {
+    try {
+      const res = target.role === 'partner' ? await confirmPartnerAction(target.id) : await confirmReceiptAction(target.id);
+      if (!res.ok) { showSnack(res.error || 'Не удалось подтвердить'); return; }
       setDeal(res.deal);
       setDeals(ds => ds.map(x => x.id === res.deal.id ? res.deal : x));
       const wa = await getWalletAction();
       if (wa) setWallet(wa);
+    } catch (e) {
+      console.error('confirm failed', e);
+      showSnack('Не удалось подтвердить — обновите страницу и попробуйте ещё раз');
     }
   };
 
@@ -321,8 +341,9 @@ export default function App() {
       {(creating || editingLot) && <div className="overlay-layer"><CreateListing onClose={() => { setCreating(false); setEditingLot(null); }} onPublish={publishLot} initialWants={currentUser && currentUser.wants} editLot={editingLot} /></div>}
       <OfferSheet L={offerLot} myLots={myLots || []} balance={wallet ? wallet.balance : 0} open={!!offerLot} onClose={() => setOfferLot(null)} onConfirm={async (L, credits, myLotId) => {
         setOfferLot(null);
-        const res = await createDealAction({ lotId: L.id, credits, myLotId });
-        if (res.ok) {
+        try {
+          const res = await createDealAction({ lotId: L.id, credits, myLotId });
+          if (!res.ok) { showSnack(res.error || 'Не удалось создать сделку'); return; }
           const de = await listDealsAction();
           setDeals(de || []);
           const d = de.find(x => x.id === res.deal.id) || res.deal;
@@ -332,9 +353,13 @@ export default function App() {
           const ch = await listChatsAction();
           setChats(ch || []);
           go('deal');
+        } catch (e) {
+          console.error('createDealAction failed', e);
+          showSnack('Не удалось создать сделку — обновите страницу и попробуйте ещё раз');
         }
       }} />
       <CreditsInfo open={infoOpen} onClose={() => setInfoOpen(false)} />
+      {snack && <div className="snack" role="alert" onClick={() => setSnack('')}><Icon name="info" size={16} color="#fff" />{snack}</div>}
     </>
   );
 
