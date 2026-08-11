@@ -195,7 +195,7 @@ export default function App() {
     }
   };
 
-  const onCreate = () => requireAuth('Создать объявление можно после регистрации', () => setCreating(true));
+  const onCreate = () => requireAuth('Создать объявление можно после регистрации', () => { setAuthOpen(false); setCreating(true); });
 
   const tabRoot = () => {
     if (tab === 'home') {
