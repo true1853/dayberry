@@ -473,18 +473,21 @@ export async function getWalletAction() {
 
 const chatWith = {
   partner: { select: { id: true, name: true, city: true, avatar: true } },
+  user: { select: { id: true, name: true, city: true, avatar: true } },
   deal: { select: { id: true, stage: true, credits: true, status: true, lot: { include: { owner: { select: { name: true } } } } } },
   messages: { orderBy: { createdAt: 'asc' } },
 };
 
-async function serializeChat(c) {
+async function serializeChat(c, currentUserId) {
+  const ownerSide = c.userId === currentUserId;
+  const u = ownerSide ? c.partner : c.user;
   return {
     id: c.id,
     partner: {
-      id: c.partner?.id || '',
-      name: c.partner?.name || '',
-      city: c.partner?.city || '',
-      avatar: c.partner?.avatar || '',
+      id: u?.id || '',
+      name: u?.name || '',
+      city: u?.city || '',
+      avatar: u?.avatar || '',
     },
     deal: c.deal ? {
       id: c.deal.id,
@@ -495,8 +498,8 @@ async function serializeChat(c) {
     } : null,
     messages: c.messages.map(m => ({
       id: m.id,
-      from: m.fromId ? 'them' : 'sys',
-      me: m.fromId ? (m.fromId === c.userId) : false,
+      from: !m.fromId ? 'sys' : (m.fromId === currentUserId ? 'me' : 'them'),
+      me: m.fromId ? m.fromId === currentUserId : false,
       text: m.text,
       t: m.createdAt.toISOString(),
     })),
@@ -508,11 +511,11 @@ export async function listChatsAction() {
   const user = await getCurrentUser();
   if (!user) return [];
   const chats = await prisma.chat.findMany({
-    where: { userId: user.id },
+    where: { OR: [{ userId: user.id }, { partnerId: user.id }] },
     include: chatWith,
     orderBy: { createdAt: 'desc' },
   });
-  return Promise.all(chats.map(serializeChat));
+  return Promise.all(chats.map(c => serializeChat(c, user.id)));
 }
 
 export async function startChatAction(lotId) {
@@ -524,7 +527,12 @@ export async function startChatAction(lotId) {
   if (lot.ownerId === user.id) return { ok: false, error: 'Это ваше объявление' };
 
   let chat = await prisma.chat.findFirst({
-    where: { userId: user.id, partnerId: lot.ownerId },
+    where: {
+      OR: [
+        { userId: user.id, partnerId: lot.ownerId },
+        { userId: lot.ownerId, partnerId: user.id },
+      ],
+    },
     include: chatWith,
   });
   if (!chat) {
@@ -533,17 +541,17 @@ export async function startChatAction(lotId) {
       include: chatWith,
     });
   }
-  return { ok: true, chat: await serializeChat(chat) };
+  return { ok: true, chat: await serializeChat(chat, user.id) };
 }
 
 export async function getChatAction(chatId) {
   const user = await getCurrentUser();
   if (!user) return null;
   const chat = await prisma.chat.findFirst({
-    where: { id: chatId, userId: user.id },
+    where: { id: chatId, OR: [{ userId: user.id }, { partnerId: user.id }] },
     include: chatWith,
   });
-  return chat ? serializeChat(chat) : null;
+  return chat ? serializeChat(chat, user.id) : null;
 }
 
 export async function sendMessageAction(chatId, text) {
@@ -551,12 +559,14 @@ export async function sendMessageAction(chatId, text) {
   if (!user) return { ok: false, error: 'Требуется вход' };
   const msg = (text || '').trim();
   if (!msg) return { ok: false, error: 'Пустое сообщение' };
-  const chat = await prisma.chat.findFirst({ where: { id: chatId, userId: user.id } });
+  const chat = await prisma.chat.findFirst({
+    where: { id: chatId, OR: [{ userId: user.id }, { partnerId: user.id }] },
+  });
   if (!chat) return { ok: false, error: 'Чат не найден' };
   const saved = await prisma.message.create({
     data: { chatId: chat.id, fromId: user.id, text: msg },
   });
-  return { ok: true, message: { id: saved.id, me: true, from: 'them', text: msg, t: saved.createdAt.toISOString() } };
+  return { ok: true, message: { id: saved.id, me: true, from: 'me', text: msg, t: saved.createdAt.toISOString() } };
 }
 
 // ---------- chains ----------
