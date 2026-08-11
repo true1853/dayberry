@@ -33,6 +33,10 @@ model User {
   sentMessages Message[]     @relation("messageFrom")
   transactions Transaction[]
   favorites    Favorite[]
+  
+  @@index([email])
+  @@index([city])
+  @@index([createdAt])
 }
 
 model Favorite {
@@ -92,6 +96,12 @@ model Lot {
   favorites Favorite[]
   deals     Deal[]   @relation("dealTarget")
   myDeals   Deal[]   @relation("dealMyLot")
+  
+  @@index([status])
+  @@index([ownerId])
+  @@index([createdAt])
+  @@index([sortOrder])
+  @@index([cat])
 }
 
 model LotPhoto {
@@ -119,6 +129,11 @@ model Deal {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   chat      Chat?
+  
+  @@index([status])
+  @@index([userId])
+  @@index([lotId])
+  @@index([createdAt])
 }
 
 model Transaction {
@@ -143,6 +158,11 @@ model Chat {
   deal      Deal?     @relation(fields: [dealId], references: [id], onDelete: SetNull)
   createdAt DateTime  @default(now())
   messages  Message[]
+  
+  @@index([userId])
+  @@index([partnerId])
+  @@index([dealId])
+  @@index([createdAt])
 }
 
 model Message {
