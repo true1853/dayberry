@@ -1,6 +1,7 @@
 // screen-auth.jsx — login + registration
 import React from 'react';
 import { Icon } from './icons.jsx';
+import { Logo } from './ui.jsx';
 import { loginAction, registerAction, getOAuthUrlAction } from './server/actions.js';
 import { PhoneField, CityField } from './fields.jsx';
 
@@ -142,9 +143,9 @@ export function AuthScreen({ onDone, onClose, message = '' }) {
             <Icon name="close" size={18} color="var(--ink-2)" />
           </button>
         )}
-        <div className="logo" style={{ width: 56, height: 56, fontSize: 26 }}>ДБ</div>
+        <Logo size={56} />
         <div className="col" style={{ alignItems: 'center', gap: 4 }}>
-          <span className="h2">Дай бери</span>
+          <span className="h2">Дайбери</span>
           <span className="sub" style={{ textAlign: 'center' }}>
             {isLogin ? 'Войдите в аккаунт' : 'Создайте аккаунт'}
           </span>

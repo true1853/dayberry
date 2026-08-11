@@ -1,7 +1,7 @@
 // screen-onboarding.jsx — onboarding + create listing
 import React from 'react';
 import { Icon } from './icons.jsx';
-import { fmt, Photo, IconBtn, Coin } from './ui.jsx';
+import { Logo, fmt, Photo, IconBtn, Coin } from './ui.jsx';
 import { analyzeListingAction } from './server/actions.js';
 
 const SLIDES = [
@@ -64,7 +64,7 @@ export function Onboarding({ onDone }) {
     <div className="app" style={{ position: 'absolute', background: 'var(--bg)' }}>
       <div className="safe-top" />
       <div className="row" style={{ justifyContent: 'space-between', padding: '4px 18px 0' }}>
-        <span className="row gap8"><div className="logo" style={{ width: 26, height: 26, fontSize: 12 }}>ДБ</div><span className="h3">Дай бери</span></span>
+        <span className="row gap8"><Logo size={26} /><span className="h3">Дайбери</span></span>
         <button className="cap" style={{ border: 'none', background: 'none', color: 'var(--ink-3)', cursor: 'pointer' }} onClick={onDone}>Пропустить</button>
       </div>
 
