@@ -15,6 +15,8 @@ export function parseRoute(path) {
   switch (a) {
     case 'search':
       return { tab: 'search', stack: [] };
+    case 'favorites':
+      return { tab: 'favorites', stack: [] };
     case 'deals':
       return { tab: 'deals', stack: [] };
     case 'wallet':

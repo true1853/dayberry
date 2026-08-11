@@ -212,3 +212,30 @@ function Stamp({ text, color, show, side, rot }) {
     <div style={{ position: 'absolute', top: 24, [side]: 20, padding: '6px 14px', border: `3px solid ${color}`, borderRadius: 10, color, fontWeight: 800, fontSize: 22, letterSpacing: '0.05em', transform: `rotate(${rot}deg)`, opacity: show ? 1 : 0, transition: 'opacity .12s', background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(2px)' }}>{text}</div>
   );
 }
+
+// ---------- favorites ----------
+export function FavoritesScreen({ lots = [], go }) {
+  return (
+    <div className="app-scroll">
+      <div className="appbar" style={{ paddingBottom: 10 }}>
+        <div className="col gap2">
+          <span className="h2">Избранное</span>
+          <span className="cap">Сохранённые объявления</span>
+        </div>
+      </div>
+      <div className="px" style={{ paddingBottom: 20 }}>
+        {lots.length ? (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            {lots.map(l => <LotCard key={l.id} lot={l} compact onClick={() => go('lot', { lotId: l.id })} />)}
+          </div>
+        ) : (
+          <div className="col gap8" style={{ alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
+            <div className="avatar" style={{ width: 56, height: 56, background: 'var(--berry-50)' }}><Icon name="heart" size={26} color="var(--berry)" /></div>
+            <span className="title">Пока пусто</span>
+            <span className="sub" style={{ maxWidth: 240, textAlign: 'center' }}>Нажимайте на сердечко в объявлении, чтобы сохранить его сюда</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

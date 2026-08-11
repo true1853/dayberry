@@ -192,6 +192,41 @@ export async function getMyLots() {
   return lots.map(l => mapLot(l, l.owner?.city || ''));
 }
 
+export async function toggleFavoriteAction(lotId) {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: 'Требуется вход' };
+  const lot = await prisma.lot.findUnique({ where: { id: lotId } });
+  if (!lot) return { ok: false, error: 'Объявление не найдено' };
+
+  const existing = await prisma.favorite.findUnique({
+    where: { userId_lotId: { userId: user.id, lotId } },
+  });
+  if (existing) {
+    await prisma.favorite.delete({ where: { id: existing.id } });
+    return { ok: true, fav: false };
+  }
+  await prisma.favorite.create({ data: { userId: user.id, lotId } });
+  return { ok: true, fav: true };
+}
+
+export async function listFavoritesAction() {
+  const user = await getCurrentUser();
+  if (!user) return [];
+  const favs = await prisma.favorite.findMany({
+    where: { userId: user.id },
+    include: {
+      lot: {
+        include: {
+          owner: { select: { city: true, name: true, avatar: true, rating: true, dealsCount: true } },
+          lotPhotos: { orderBy: { order: 'asc' } },
+        },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+  return favs.map(f => mapLot(f.lot, f.lot.owner?.city));
+}
+
 export async function createLotAction(input) {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: 'Требуется вход' };

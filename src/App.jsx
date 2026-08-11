@@ -1,8 +1,8 @@
 'use client';
 // App.jsx — root: navigation, phone frame scaling, tweaks
 import React from 'react';
-import { sessionAction, listLots, logoutAction, createLotAction, updateLotAction, getMyLots, getProfileAction, listDealsAction, getWalletAction, listChatsAction, listChainsAction, getMatchesAction, createDealAction, confirmReceiptAction, confirmPartnerAction, cancelDealAction, topUpAction, joinChainAction, startChatAction, getDealChatAction } from './server/actions.js';
-import { FeedList, FeedSwipe, CatRow } from './screen-feed.jsx';
+import { sessionAction, listLots, logoutAction, createLotAction, updateLotAction, getMyLots, getProfileAction, listDealsAction, getWalletAction, listChatsAction, listChainsAction, getMatchesAction, createDealAction, confirmReceiptAction, confirmPartnerAction, cancelDealAction, topUpAction, joinChainAction, startChatAction, getDealChatAction, listFavoritesAction, toggleFavoriteAction } from './server/actions.js';
+import { FeedList, FeedSwipe, CatRow, FavoritesScreen } from './screen-feed.jsx';
 import { FeedChain, ChainDetail } from './screen-chain.jsx';
 import { LotDetail, OfferSheet } from './screen-lot.jsx';
 import { DealStatus } from './screen-deal.jsx';
@@ -85,9 +85,12 @@ export default function App() {
   const [chats, setChats] = React.useState([]);
   const [chains, setChains] = React.useState([]);
   const [matches, setMatches] = React.useState([]);
+  const [favorites, setFavorites] = React.useState([]);
   const [snack, setSnack] = React.useState('');
   const snackTimer = React.useRef(null);
   const isDesktop = useMediaQuery('(min-width: 1128px)');
+
+  const favIds = React.useMemo(() => new Set(favorites.map(f => f.id)), [favorites]);
 
   const showSnack = (msg) => {
     setSnack(msg);
@@ -147,6 +150,7 @@ export default function App() {
         setChats(ch || []);
         setChains(cn || []);
         setMatches(ma || []);
+        if (u) { const fv = await listFavoritesAction(); setFavorites(fv || []); }
       } catch (e) {
         console.error('bootstrap failed', e);
       } finally {
@@ -173,11 +177,26 @@ export default function App() {
   };
 
   const guardedTab = (t) => {
-    if (!authed && (t === 'deals' || t === 'wallet' || t === 'profile')) {
+    if (!authed && (t === 'deals' || t === 'wallet' || t === 'profile' || t === 'favorites')) {
       requireAuth('Войдите, чтобы открыть этот раздел', () => { navigate(tabPath(t)); });
       return;
     }
     navigate(tabPath(t));
+  };
+
+  const toggleFav = async (L) => {
+    if (!L) return;
+    requireAuth('Войдите, чтобы добавлять в избранное', async () => {
+      try {
+        const res = await toggleFavoriteAction(L.id);
+        if (res.ok) {
+          setFavorites(fs => (res.fav ? (fs.some(x => x.id === L.id) ? fs : [L, ...fs]) : fs.filter(x => x.id !== L.id)));
+        }
+      } catch (e) {
+        console.error('toggle fav failed', e);
+        showSnack('Не удалось сохранить в избранное — обновите страницу');
+      }
+    });
   };
 
   const handleLogout = () => {
@@ -300,6 +319,12 @@ export default function App() {
       return <HomeTab t={t} go={go} tab={tab} setTab={guardedTab} onCreate={onCreate} lots={lots} myLots={myLots} matches={matches} chains={chains} />;
     }
     if (tab === 'search') return <SearchScreen go={go} tab={tab} setTab={guardedTab} onCreate={onCreate} lots={lots} />;
+    if (tab === 'favorites') return (
+      <div className="app"><div className="safe-top" />
+        <FavoritesScreen lots={favorites} go={go} />
+        <TabBar tab={tab} setTab={guardedTab} onCreate={onCreate} unread={0} />
+      </div>
+    );
     if (tab === 'deals') return (
       <div className="app"><div className="safe-top" />
         <DealsList chats={chats} deals={deals} onOpen={(id) => go('chat', { id })} onOpenDeal={(id) => openDeal(id)} />
@@ -349,7 +374,7 @@ export default function App() {
     if (!top) return null;
     if (top.name === 'lot') return (
       <div className="app"><div className="safe-top" />
-        <LotDetail lots={lots} myLots={myLots} lotId={top.params.lotId} onBack={back} onOffer={(L) => requireAuth('Предложить обмен можно после регистрации', () => setOfferLot(L))} onOwnerChat={() => handleOwnerChat(lots.find(x => x.id === top.params.lotId))} />
+        <LotDetail lots={lots} myLots={myLots} lotId={top.params.lotId} fav={favIds.has(top.params.lotId)} onToggleFav={() => toggleFav(lots.find(x => x.id === top.params.lotId))} onBack={back} onOffer={(L) => requireAuth('Предложить обмен можно после регистрации', () => setOfferLot(L))} onOwnerChat={() => handleOwnerChat(lots.find(x => x.id === top.params.lotId))} />
       </div>
     );
     if (top.name === 'chainfeed') return (
@@ -506,7 +531,7 @@ function HomeTab({ t, go, tab, setTab, onCreate, lots, matches, chains, myLots }
       <AppBar
         big sub="Обмен без денег" title="Дай бери"
         left={<div className="logo" style={{ width: 38, height: 38, fontSize: 17 }}>ДБ</div>}
-        right={<IconBtn name="bell" badge={0} />}
+        right={<div className="row gap8"><IconBtn name="plusCircle" onClick={onCreate} /><IconBtn name="bell" badge={0} /></div>}
       />
       {/* view switcher */}
       <div className="row gap6" style={{ padding: '0 18px 10px', overflowX: 'auto', scrollbarWidth: 'none', flexShrink: 0 }}>

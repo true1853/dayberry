@@ -32,6 +32,18 @@ model User {
   chatsWith    Chat[]        @relation("chatPartner")
   sentMessages Message[]     @relation("messageFrom")
   transactions Transaction[]
+  favorites    Favorite[]
+}
+
+model Favorite {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lotId     String
+  lot       Lot      @relation(fields: [lotId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, lotId])
 }
 
 model AiCache {
@@ -77,6 +89,7 @@ model Lot {
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
   lotPhotos LotPhoto[]
+  favorites Favorite[]
   deals     Deal[]   @relation("dealTarget")
   myDeals   Deal[]   @relation("dealMyLot")
 }

@@ -142,34 +142,30 @@ export function AppBar({ title, sub, left, right, big }) {
   );
 }
 
-export function IconBtn({ name, onClick, badge, color = 'var(--ink)', bg = '#fff' }) {
+export function IconBtn({ name, onClick, badge, color = 'var(--ink)', bg = '#fff', fill = 'none' }) {
   return (
     <button className="row" onClick={onClick} style={{ position: 'relative', width: 42, height: 42, borderRadius: 13, border: '1px solid var(--line)', background: bg, justifyContent: 'center', flex: 'none', cursor: 'pointer', boxShadow: 'var(--sh-1)' }}>
-      <Icon name={name} size={21} color={color} />
+      <Icon name={name} size={21} color={color} fill={fill} />
       {badge ? <span style={{ position: 'absolute', top: -5, right: -5, minWidth: 18, height: 18, padding: '0 5px', borderRadius: 999, background: 'var(--berry)', color: '#fff', fontSize: 10.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid var(--bg)' }}>{badge}</span> : null}
     </button>
   );
 }
 
 // ---- bottom tab bar ----
-export function TabBar({ tab, setTab, onCreate, unread }) {
+export function TabBar({ tab, setTab, unread }) {
   const items = [
-    { id: 'home',    icon: 'home',   label: 'Лента' },
-    { id: 'search',  icon: 'search', label: 'Поиск' },
-    { id: 'create',  icon: 'plus',   label: '', fab: true },
-    { id: 'deals',   icon: 'chat',   label: 'Сделки', badge: unread },
-    { id: 'profile', icon: 'user',   label: 'Профиль' },
+    { id: 'search',    icon: 'search', label: 'Поиск' },
+    { id: 'favorites', icon: 'heart',  label: 'Избранное' },
+    { id: 'home',      icon: 'home',   label: 'Объявления' },
+    { id: 'deals',     icon: 'chat',   label: 'Сообщения', badge: unread },
+    { id: 'profile',   icon: 'user',   label: 'Профиль' },
   ];
   return (
     <div className="tabbar">
-      {items.map(it => it.fab ? (
-        <div key={it.id} className="tab" onClick={onCreate}>
-          <div className="tab-fab"><Icon name="plus" size={24} color="#fff" sw={2.6} /></div>
-        </div>
-      ) : (
+      {items.map(it => (
         <div key={it.id} className={'tab' + (tab === it.id ? ' is-on' : '')} onClick={() => setTab(it.id)}>
           <div style={{ position: 'relative' }}>
-            <Icon name={it.icon} size={24} color={tab === it.id ? 'var(--berry)' : 'var(--ink-3)'} fill={tab === it.id && it.icon === 'heart' ? 'heart' : 'none'} />
+            <Icon name={it.icon} size={24} color={tab === it.id ? 'var(--berry)' : 'var(--ink-3)'} fill={tab === it.id && it.icon === 'heart' ? 'currentColor' : 'none'} />
             {it.badge ? <span style={{ position: 'absolute', top: -4, right: -8, minWidth: 16, height: 16, padding: '0 4px', borderRadius: 999, background: 'var(--berry)', color: '#fff', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{it.badge}</span> : null}
           </div>
           <span className="tab-label">{it.label}</span>

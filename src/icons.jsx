@@ -47,7 +47,7 @@ const MAP = {
   settings:    Settings,
 };
 
-export function Icon({ name, size = 22, sw = 1.9, color = 'currentColor', style }) {
+export function Icon({ name, size = 22, sw = 1.9, color = 'currentColor', fill = 'none', style }) {
   const Comp = MAP[name];
   if (!Comp) return null;
   return (
@@ -55,6 +55,7 @@ export function Icon({ name, size = 22, sw = 1.9, color = 'currentColor', style 
       size={size}
       strokeWidth={sw}
       color={color}
+      fill={fill}
       style={{ display: 'block', flex: 'none', ...style }}
     />
   );

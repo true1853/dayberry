@@ -30,7 +30,7 @@ function AIValuation({ L }) {
   );
 }
 
-export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, lots }) {
+export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, lots, fav = false, onToggleFav }) {
   const L = (lots || []).find(l => l.id === lotId) || null;
   const [g, setG] = React.useState(0);
   if (!L) return null;
@@ -54,7 +54,7 @@ export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, lots }) {
           <IconBtn name="back" onClick={onBack} />
           <div className="grow" />
           <div className="row gap8">
-            <IconBtn name="heart" />
+            <IconBtn name="heart" fill={fav ? 'currentColor' : 'none'} onClick={onToggleFav} />
             <IconBtn name="send" />
           </div>
         </div>
