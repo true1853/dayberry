@@ -35,7 +35,7 @@ export function Photo({ label, url, cat = 'gadget', style, rounded = 0, badge, c
   if (url) {
     return (
       <div className="photo" style={{ background: c.soft, borderRadius: rounded, ...style, overflow: 'hidden', position: 'relative' }}>
-        <img src={url} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} loading="lazy" />
+        <img src={url} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} loading="lazy" decoding="async" />
         {badge}
         {children}
       </div>
@@ -57,7 +57,7 @@ export function Avatar({ user, size = 40, url = '' }) {
     <div style={{ position: 'relative', width: size, height: size, flex: 'none' }}>
       {url ? (
         <div className="avatar" style={{ width: size, height: size, overflow: 'hidden' }}>
-          <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+          <img src={url} alt="" width={size} height={size} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} loading="lazy" decoding="async" />
         </div>
       ) : (
         <div className="avatar" style={{ width: size, height: size, fontSize: size * 0.42 }}>{initials}</div>
