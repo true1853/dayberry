@@ -1,7 +1,7 @@
 'use client';
 // App.jsx — root: navigation, phone frame scaling, tweaks
 import React from 'react';
-import { sessionAction, listLots, logoutAction, createLotAction, updateLotAction, getMyLots, getProfileAction, listDealsAction, getWalletAction, listChatsAction, listChainsAction, getMatchesAction, createDealAction, confirmReceiptAction, confirmPartnerAction, joinChainAction, startChatAction, getDealChatAction } from './server/actions.js';
+import { sessionAction, listLots, logoutAction, createLotAction, updateLotAction, getMyLots, getProfileAction, listDealsAction, getWalletAction, listChatsAction, listChainsAction, getMatchesAction, createDealAction, confirmReceiptAction, confirmPartnerAction, cancelDealAction, topUpAction, joinChainAction, startChatAction, getDealChatAction } from './server/actions.js';
 import { FeedList, FeedSwipe, CatRow } from './screen-feed.jsx';
 import { FeedChain, ChainDetail } from './screen-chain.jsx';
 import { LotDetail, OfferSheet } from './screen-lot.jsx';
@@ -216,6 +216,24 @@ export default function App() {
     }
   };
 
+  const cancelDeal = async (d) => {
+    const target = d || deal;
+    if (!target) return false;
+    try {
+      const res = await cancelDealAction(target.id);
+      if (!res.ok) { showSnack(res.error || 'Не удалось отменить сделку'); return false; }
+      setDeal(res.deal);
+      setDeals(ds => ds.map(x => x.id === res.deal.id ? res.deal : x));
+      const wa = await getWalletAction();
+      if (wa) setWallet(wa);
+      return true;
+    } catch (e) {
+      console.error('cancel deal failed', e);
+      showSnack('Не удалось отменить — обновите страницу и попробуйте ещё раз');
+      return false;
+    }
+  };
+
   const onCreate = () => requireAuth('Создать объявление можно после регистрации', () => { setAuthOpen(false); setCreating(true); });
 
   const openChatWith = async (L) => {
@@ -262,7 +280,21 @@ export default function App() {
     );
     if (tab === 'wallet') return (
       <div className="app"><div className="safe-top" />
-        <Wallet wallet={wallet} onInfo={() => setInfoOpen(true)} />
+        <Wallet wallet={wallet} onInfo={() => setInfoOpen(true)} onTopUp={async (amt) => {
+          try {
+            const res = await topUpAction(amt);
+            if (res.ok) {
+              setCurrentUser(u => (u ? { ...u, balance: res.user.balance } : u));
+              setProfile(p => (p ? { ...p, balance: res.user.balance } : p));
+              const wa = await getWalletAction();
+              if (wa) setWallet(wa);
+            }
+            return res;
+          } catch (e) {
+            console.error('top up failed', e);
+            return { ok: false, error: 'Не удалось пополнить — обновите страницу и попробуйте ещё раз' };
+          }
+        }} />
         <TabBar tab={tab} setTab={guardedTab} onCreate={onCreate} unread={0} />
       </div>
     );
@@ -310,7 +342,7 @@ export default function App() {
     );
     if (top.name === 'deal') return (
       <div className="app"><div className="safe-top" />
-        <DealStatus deal={deal} onBack={back} onConfirm={() => confirmDeal()} onChat={() => openDealChat(deal)} onDone={(where) => { setDeal(null); resetTo(where === 'home' ? 'home' : 'deals'); }} />
+        <DealStatus deal={deal} onBack={back} onConfirm={() => confirmDeal()} onCancel={async () => { const ok = await cancelDeal(deal); if (ok) resetTo('deals'); }} onChat={() => openDealChat(deal)} onDone={(where) => { setDeal(null); resetTo(where === 'home' ? 'home' : 'deals'); }} />
       </div>
     );
     if (top.name === 'chat') return (
@@ -350,6 +382,7 @@ export default function App() {
           chains={chains}
           deals={deals}
           onConfirmDeal={confirmDeal}
+          onCancelDeal={cancelDeal}
         />
       ) : (
         <>

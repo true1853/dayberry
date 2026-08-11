@@ -578,7 +578,7 @@ function ProfileView({ user, profile, myLots, onOpenLot, onLogout, onProfileSave
 }
 
 // ---------------- root ----------------
-export default function WebApp({ lots, myLots, user, profile, onLogout, onProfileSaved, onOffer, onCreate, onEditLot, matches = [], chats = [], chains = [], deals = [], onConfirmDeal, authed = true, onAuthRequired, onOwnerChat }) {
+export default function WebApp({ lots, myLots, user, profile, onLogout, onProfileSaved, onOffer, onCreate, onEditLot, matches = [], chats = [], chains = [], deals = [], onConfirmDeal, onCancelDeal, authed = true, onAuthRequired, onOwnerChat }) {
   const [view, setView] = React.useState('home');
   const [cat, setCat] = React.useState('all');
   const [city, setCity] = React.useState('all');
@@ -612,6 +612,7 @@ export default function WebApp({ lots, myLots, user, profile, onLogout, onProfil
               deal={dealOpen}
               onBack={() => setSelDeal(null)}
               onConfirm={() => onConfirmDeal(dealOpen)}
+              onCancel={async () => { const ok = await onCancelDeal(dealOpen); if (ok) setSelDeal(null); }}
               onChat={() => { const c = chats.find(x => x.deal && x.deal.id === selDeal); if (c) { setSelChat(c.id); setSelDeal(null); } }}
               onDone={() => setSelDeal(null)}
             />

@@ -349,6 +349,10 @@ export async function createDealAction(input) {
   if (lot.ownerId === user.id) return { ok: false, error: 'Это ваше объявление' };
 
   const num = Math.max(0, Math.round(Number(credits) || 0));
+  if (num > 0 && user.balance < num) {
+    return { ok: false, error: 'Недостаточно баллов — пополните кошелёк' };
+  }
+
   const deal = await prisma.deal.create({
     data: {
       userId: user.id,
@@ -361,6 +365,7 @@ export async function createDealAction(input) {
   });
 
   if (num > 0) {
+    await prisma.user.update({ where: { id: user.id }, data: { balance: { decrement: num } } });
     await prisma.transaction.create({
       data: {
         userId: user.id,
@@ -439,7 +444,57 @@ export async function confirmPartnerAction(dealId) {
   return { ok: true, deal: await serializeDeal(updated, user.id) };
 }
 
+export async function cancelDealAction(dealId) {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: 'Требуется вход' };
+  const deal = await prisma.deal.findUnique({ where: { id: dealId }, include: dealWith() });
+  if (!deal || (deal.userId !== user.id && deal.lot?.ownerId !== user.id)) return { ok: false, error: 'Сделка не найдена' };
+  if (deal.status !== 'active') return { ok: false, error: 'Сделка уже закрыта' };
+  if (deal.initiatorConfirmed || deal.partnerConfirmed) return { ok: false, error: 'Сделка подтверждена — отменить нельзя' };
+
+  if (deal.credits > 0) {
+    await prisma.user.update({ where: { id: deal.userId }, data: { balance: { increment: deal.credits } } });
+    const held = await prisma.transaction.findFirst({
+      where: { userId: deal.userId, kind: 'escrow-in', status: 'held' },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (held) await prisma.transaction.update({ where: { id: held.id }, data: { status: 'refunded' } });
+  }
+
+  const updated = await prisma.deal.update({
+    where: { id: deal.id },
+    data: { status: 'cancelled' },
+    include: dealWith(),
+  });
+  return { ok: true, deal: await serializeDeal(updated, user.id) };
+}
+
 // ---------- wallet ----------
+
+export async function topUpAction(amount) {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: 'Требуется вход' };
+
+  const num = Math.max(0, Math.round(Number(amount) || 0));
+  if (num <= 0) return { ok: false, error: 'Укажите сумму' };
+  if (num > 200000) return { ok: false, error: 'Слишком большая сумма' };
+
+  const updated = await prisma.user.update({
+    where: { id: user.id },
+    data: { balance: { increment: num } },
+  });
+  await prisma.transaction.create({
+    data: {
+      userId: user.id,
+      kind: 'bonus',
+      title: 'Пополнение кошелька',
+      sub: 'Баллы начислены',
+      amt: num,
+      status: 'done',
+    },
+  });
+  return { ok: true, user: serializeUser(updated) };
+}
 
 export async function getWalletAction() {
   const user = await getCurrentUser();

@@ -35,12 +35,13 @@ function Stepper({ active }) {
   );
 }
 
-export function DealStatus({ deal, onBack, onConfirm, onChat, onDone }) {
+export function DealStatus({ deal, onBack, onConfirm, onCancel, onChat, onDone }) {
   if (!deal) return null;
   const L = deal.lot || {};
   const { credits, stage, role } = deal;
   const owner = { name: deal.ownerName || '' };
   const [confirming, setConfirming] = React.useState(false);
+  const [cancelling, setCancelling] = React.useState(false);
 
   if (stage === 'done') return <DealDone deal={deal} onDone={onDone} />;
 
@@ -137,7 +138,18 @@ export function DealStatus({ deal, onBack, onConfirm, onChat, onDone }) {
             <span className="row gap8 sub" style={{ color: '#7a5410' }}><Icon name="shield" size={18} color="var(--warn)" />Что-то не так? Откройте спор — баллы останутся замороженными до решения.</span>
           </div>
           <button className="btn btn-primary btn-block btn-lg" onClick={() => { setConfirming(false); onConfirm(); }}><Icon name="check" size={20} color="#fff" />Да, всё получил(а)</button>
-          <button className="btn btn-soft btn-block" onClick={() => setConfirming(false)}>Открыть спор</button>
+          <button className="btn btn-soft btn-block" onClick={() => { setConfirming(false); setCancelling(true); }}>Отменить сделку</button>
+        </div>
+      </Sheet>
+
+      <Sheet open={cancelling} onClose={() => setCancelling(false)} title="Отменить сделку?">
+        <div className="px col gap14" style={{ paddingBottom: 8 }}>
+          <span className="body">Отмена возможна, пока никто не подтвердил получение. {credits > 0 ? <>Замороженные <b className="amount">{fmt(credits)} Б</b> вернутся на ваш баланс.</> : 'Доплаты нет — сделка просто закроется.'}</span>
+          <div className="card" style={{ padding: 12, background: 'var(--warn-soft)' }}>
+            <span className="row gap8 sub" style={{ color: '#7a5410' }}><Icon name="shield" size={18} color="var(--warn)" />Если вещь уже передана — лучше договориться в чате, а не отменять сделку.</span>
+          </div>
+          <button className="btn btn-primary btn-block btn-lg" onClick={() => { setCancelling(false); onCancel(); }}><Icon name="close" size={20} color="#fff" />Да, отменить</button>
+          <button className="btn btn-soft btn-block" onClick={() => setCancelling(false)}>Оставить сделку</button>
         </div>
       </Sheet>
     </div>

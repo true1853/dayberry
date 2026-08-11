@@ -10,7 +10,8 @@ const TX_ICON = {
   bonus: { icon: 'gift', c: 'var(--c-digital)', bg: 'var(--c-digital-soft)' },
 };
 
-export function Wallet({ wallet, onInfo }) {
+export function Wallet({ wallet, onInfo, onTopUp }) {
+  const [topUpOpen, setTopUpOpen] = React.useState(false);
   const w = wallet || { balance: 0, escrow: 0, delta30: 0, demurrageInDays: 0, tx: [] };
   return (
     <div className="app-scroll">
@@ -40,7 +41,7 @@ export function Wallet({ wallet, onInfo }) {
         </div>
 
         <div className="row gap10">
-          <button className="btn btn-soft grow" style={{ flexDirection: 'column', gap: 6, padding: '13px' }}><Icon name="plusCircle" size={22} color="var(--berry)" /><span style={{ fontSize: 12.5 }}>Пополнить</span></button>
+          <button className="btn btn-soft grow" style={{ flexDirection: 'column', gap: 6, padding: '13px' }} onClick={() => setTopUpOpen(true)}><Icon name="plusCircle" size={22} color="var(--berry)" /><span style={{ fontSize: 12.5 }}>Пополнить</span></button>
           <button className="btn btn-soft grow" style={{ flexDirection: 'column', gap: 6, padding: '13px' }}><Icon name="send" size={22} color="var(--berry)" /><span style={{ fontSize: 12.5 }}>Перевести</span></button>
           <button className="btn btn-soft grow" style={{ flexDirection: 'column', gap: 6, padding: '13px' }}><Icon name="gift" size={22} color="var(--berry)" /><span style={{ fontSize: 12.5 }}>Пригласить</span></button>
         </div>
@@ -80,7 +81,68 @@ export function Wallet({ wallet, onInfo }) {
           </div>
         </div>
       </div>
+      <TopUpSheet open={topUpOpen} onClose={() => setTopUpOpen(false)} onTopUp={onTopUp} balance={w.balance} />
     </div>
+  );
+}
+
+const TOPUP_CHIPS = [5000, 10000, 25000, 50000];
+
+export function TopUpSheet({ open, onClose, onTopUp, balance }) {
+  const [amount, setAmount] = React.useState(10000);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState('');
+
+  React.useEffect(() => { if (open) { setError(''); setBusy(false); } }, [open]);
+
+  const submit = async () => {
+    if (busy) return;
+    const n = Math.max(0, Math.round(Number(amount) || 0));
+    if (n <= 0) return setError('Укажите сумму');
+    setBusy(true);
+    setError('');
+    try {
+      const res = await onTopUp(n);
+      if (!res || !res.ok) { setError((res && res.error) || 'Не удалось пополнить'); setBusy(false); return; }
+      onClose();
+    } catch (e) {
+      console.error('top up failed', e);
+      setError('Не удалось пополнить — обновите страницу и попробуйте ещё раз');
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Sheet open={open} onClose={onClose} title="Пополнить кошелёк">
+      <div className="px col gap14" style={{ paddingBottom: 10 }}>
+        <div className="row" style={{ alignItems: 'baseline', gap: 6 }}>
+          <span className="amount" style={{ fontSize: 34, fontWeight: 700, color: 'var(--ink)', letterSpacing: '-0.03em' }}>{fmt(Number(amount) || 0)}</span>
+          <span style={{ fontSize: 15, color: 'var(--ink-3)', fontWeight: 600 }}>Б ≈ ₽{fmt(Number(amount) || 0)}</span>
+        </div>
+        <div className="row gap8" style={{ flexWrap: 'wrap' }}>
+          {TOPUP_CHIPS.map(c => (
+            <div key={c} className={'chip chip-berry' + (Number(amount) === c ? ' is-on' : '')} onClick={() => { setAmount(String(c)); setError(''); }}>{fmt(c)} Б</div>
+          ))}
+        </div>
+        <div className="col gap6">
+          <label className="cap">Своя сумма</label>
+          <input
+            type="number" inputMode="numeric" min="0" step="500"
+            value={amount}
+            onChange={e => setAmount(e.target.value)}
+            placeholder="Например: 20000"
+            style={{ width: '100%', padding: '13px 16px', border: '1.5px solid var(--line)', borderRadius: 14, fontSize: 15, fontFamily: 'var(--font)', background: '#fff', color: 'var(--ink)', outline: 'none', boxSizing: 'border-box' }}
+          />
+        </div>
+        <div className="card" style={{ padding: 12, background: 'var(--berry-50)' }}>
+          <span className="sub">Сейчас баллы начисляются сразу (тестовый режим). Подключение реальной оплаты — позже. Баланс после пополнения: <b className="amount">{fmt(balance + (Number(amount) || 0))} Б</b></span>
+        </div>
+        {error && <div style={{ padding: '10px 14px', borderRadius: 12, background: 'var(--berry-50)', border: '1px solid var(--berry-200)', color: 'var(--berry-700)', fontSize: 13.5, fontWeight: 500 }}>{error}</div>}
+        <button className="btn btn-primary btn-block btn-lg" onClick={submit} disabled={busy} style={{ opacity: busy ? 0.7 : 1 }}>
+          {busy ? <><span className="spin" />Пополняем…</> : <><Icon name="plus" size={18} color="#fff" />Пополнить</>}
+        </button>
+      </div>
+    </Sheet>
   );
 }
 

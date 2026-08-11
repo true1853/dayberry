@@ -124,6 +124,8 @@ export function OfferSheet({ L, myLots = [], balance = 0, open, onClose, onConfi
   if (!L) return null;
   const balanced = (MY ? MY.value : 0) + credits;
   const ok = Math.abs(balanced - L.value) <= L.value * 0.12;
+  const enough = credits <= balance;
+  const canConfirm = enough && ok;
 
   return (
     <Sheet open={open} onClose={onClose} title="Предложить обмен">
@@ -184,18 +186,21 @@ export function OfferSheet({ L, myLots = [], balance = 0, open, onClose, onConfi
           </div>
           <div className="row" style={{ justifyContent: 'space-between', marginTop: 10 }}>
             <span className="cap">Ваш баланс: <b className="amount">{fmt(balance)} Б</b></span>
-            <span className="cap" style={{ color: ok ? 'var(--ok)' : 'var(--warn)' }}>{ok ? '✓ обмен сбалансирован' : 'разница великовата'}</span>
+            <span className="cap" style={{ color: enough ? (ok ? 'var(--ok)' : 'var(--warn)') : 'var(--warn)' }}>
+              {!enough ? 'недостаточно баллов' : (ok ? '✓ обмен сбалансирован' : 'разница великовата')}
+            </span>
           </div>
         </div>
 
         <div className="row gap10" style={{ padding: '0 2px' }}>
           <Icon name="lock" size={18} color="var(--ink-3)" />
-          <span className="sub">Ваши <b className="amount">{fmt(credits)} Б</b> заморозятся в эскроу. Партнёр получит их только после того, как вы подтвердите получение вещи.</span>
+          <span className="sub">Ваши <b className="amount">{fmt(credits)} Б</b> спишутся с баланса и заморозятся в эскроу. Партнёр получит их только после подтверждения обеих сторон.</span>
         </div>
 
-        <button className="btn btn-primary btn-block btn-lg" onClick={() => onConfirm(L, credits, MY ? MY.id : null)}>
+        <button className="btn btn-primary btn-block btn-lg" disabled={!canConfirm} onClick={() => onConfirm(L, credits, MY ? MY.id : null)} style={{ opacity: canConfirm ? 1 : 0.5 }}>
           <Icon name="shield" size={20} color="#fff" />Открыть сделку · заморозить <Credit n={credits} size={15} coin={14} color="#fff" />
         </button>
+        {!enough && <span className="cap" style={{ textAlign: 'center', color: 'var(--warn)' }}>Пополните кошелёк, чтобы заблокировать доплату</span>}
       </div>
     </Sheet>
   );
