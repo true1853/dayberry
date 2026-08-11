@@ -1,7 +1,7 @@
 'use client';
 // App.jsx — root: navigation, phone frame scaling, tweaks
 import React from 'react';
-import { sessionAction, listLots, logoutAction, createLotAction, updateLotAction, getMyLots, getProfileAction, listDealsAction, getWalletAction, listChatsAction, listChainsAction, getMatchesAction, createDealAction, confirmReceiptAction, confirmPartnerAction, joinChainAction, startChatAction } from './server/actions.js';
+import { sessionAction, listLots, logoutAction, createLotAction, updateLotAction, getMyLots, getProfileAction, listDealsAction, getWalletAction, listChatsAction, listChainsAction, getMatchesAction, createDealAction, confirmReceiptAction, confirmPartnerAction, joinChainAction, startChatAction, getDealChatAction } from './server/actions.js';
 import { FeedList, FeedSwipe, CatRow } from './screen-feed.jsx';
 import { FeedChain, ChainDetail } from './screen-chain.jsx';
 import { LotDetail, OfferSheet } from './screen-lot.jsx';
@@ -230,6 +230,25 @@ export default function App() {
   };
   const handleOwnerChat = (L) => requireAuth('Войдите, чтобы написать владельцу', () => openChatWith(L));
 
+  const openDealChat = async (d) => {
+    const target = d || deal;
+    if (!target) return;
+    const ch = chats.find(c => c.deal && c.deal.id === target.id);
+    if (ch) { go('chat', { id: ch.id }); return; }
+    try {
+      const res = await getDealChatAction(target.id);
+      if (res && res.id) {
+        setChats(cs => (cs.some(x => x.id === res.id) ? cs : [res, ...cs]));
+        go('chat', { id: res.id });
+      } else {
+        showSnack('Чат пока недоступен — обновите страницу и попробуйте ещё раз');
+      }
+    } catch (e) {
+      console.error('deal chat open failed', e);
+      showSnack('Не удалось открыть чат — обновите страницу и попробуйте ещё раз');
+    }
+  };
+
   const tabRoot = () => {
     if (tab === 'home') {
       return <HomeTab t={t} go={go} tab={tab} setTab={guardedTab} onCreate={onCreate} lots={lots} myLots={myLots} matches={matches} chains={chains} />;
@@ -291,7 +310,7 @@ export default function App() {
     );
     if (top.name === 'deal') return (
       <div className="app"><div className="safe-top" />
-        <DealStatus deal={deal} onBack={back} onConfirm={() => confirmDeal()} onChat={() => { const ch = chats.find(c => c.deal && c.deal.id === deal.id); go('chat', { id: ch ? ch.id : undefined }); }} onDone={(where) => { setDeal(null); resetTo(where === 'home' ? 'home' : 'deals'); }} />
+        <DealStatus deal={deal} onBack={back} onConfirm={() => confirmDeal()} onChat={() => openDealChat(deal)} onDone={(where) => { setDeal(null); resetTo(where === 'home' ? 'home' : 'deals'); }} />
       </div>
     );
     if (top.name === 'chat') return (

@@ -84,7 +84,7 @@ export function ChatThread({ chatId, onBack, onOpenDeal }) {
 
   React.useEffect(() => {
     (async () => {
-      if (!chatId) return;
+      if (!chatId) { setLoading(false); return; }
       setLoading(true);
       try {
         const c = await getChatAction(chatId);

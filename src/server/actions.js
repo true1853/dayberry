@@ -554,6 +554,16 @@ export async function getChatAction(chatId) {
   return chat ? serializeChat(chat, user.id) : null;
 }
 
+export async function getDealChatAction(dealId) {
+  const user = await getCurrentUser();
+  if (!user) return null;
+  const chat = await prisma.chat.findFirst({
+    where: { dealId, OR: [{ userId: user.id }, { partnerId: user.id }] },
+    include: chatWith,
+  });
+  return chat ? serializeChat(chat, user.id) : null;
+}
+
 export async function sendMessageAction(chatId, text) {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: 'Требуется вход' };
