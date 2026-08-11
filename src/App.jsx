@@ -154,6 +154,19 @@ export default function App() {
     setFavorites(d.favorites || []);
   };
 
+  // Баланс живёт в трёх местах: кошелёк, карточка пользователя и профиль.
+  // Экраны читают его из разных источников (профиль — из currentUser), поэтому
+  // после любой операции с баллами синхронизируем все три, иначе профиль
+  // показывает сумму до списания, пока страницу не перезагрузят.
+  const refreshWallet = async () => {
+    const wa = await getWalletAction();
+    if (!wa) return null;
+    setWallet(wa);
+    setCurrentUser(u => (u && u.balance !== wa.balance ? { ...u, balance: wa.balance } : u));
+    setProfile(p => (p && p.balance !== wa.balance ? { ...p, balance: wa.balance } : p));
+    return wa;
+  };
+
   // Мэтчинг ходит во внешний AI — держим его вне критического пути загрузки.
   const loadMatches = async () => {
     try {
@@ -290,8 +303,7 @@ export default function App() {
       if (!res.ok) { showSnack(res.error || 'Не удалось подтвердить'); return; }
       setDeal(res.deal);
       setDeals(ds => ds.map(x => x.id === res.deal.id ? res.deal : x));
-      const wa = await getWalletAction();
-      if (wa) setWallet(wa);
+      await refreshWallet();
     } catch (e) {
       console.error('confirm failed', e);
       showSnack('Не удалось подтвердить — обновите страницу и попробуйте ещё раз');
@@ -306,8 +318,7 @@ export default function App() {
       if (!res.ok) { showSnack(res.error || 'Не удалось отменить сделку'); return false; }
       setDeal(res.deal);
       setDeals(ds => ds.map(x => x.id === res.deal.id ? res.deal : x));
-      const wa = await getWalletAction();
-      if (wa) setWallet(wa);
+      await refreshWallet();
       return true;
     } catch (e) {
       console.error('cancel deal failed', e);
@@ -376,12 +387,7 @@ export default function App() {
         <Wallet wallet={wallet} onInfo={() => setInfoOpen(true)} onTopUp={async (amt) => {
           try {
             const res = await topUpAction(amt);
-            if (res.ok) {
-              setCurrentUser(u => (u ? { ...u, balance: res.user.balance } : u));
-              setProfile(p => (p ? { ...p, balance: res.user.balance } : p));
-              const wa = await getWalletAction();
-              if (wa) setWallet(wa);
-            }
+            if (res.ok) await refreshWallet();
             return res;
           } catch (e) {
             console.error('top up failed', e);
@@ -427,8 +433,7 @@ export default function App() {
       <div className="app"><div className="safe-top" />
         <ChainDetail chainId={top.params.id} chains={chains} onBack={back} onJoin={(ch) => requireAuth('Вступить в цепочку можно после регистрации', async () => {
           const res = await joinChainAction(ch.id);
-          const wa = await getWalletAction();
-          if (wa) setWallet(wa);
+          await refreshWallet();
           back();
           if (res.ok) { const de = await listDealsAction(); setDeals(de || []); const dl = de.find(x => x.id === res.dealId); setDeal(dl); go('deal', { id: res.dealId }); }
         })} />
@@ -514,8 +519,7 @@ export default function App() {
           setDeals(de || []);
           const d = de.find(x => x.id === res.deal.id) || res.deal;
           setDeal(d);
-          const wa = await getWalletAction();
-          if (wa) setWallet(wa);
+          await refreshWallet();
           const ch = await listChatsAction();
           setChats(ch || []);
           go('deal', { id: d.id });
