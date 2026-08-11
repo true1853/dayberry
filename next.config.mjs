@@ -3,7 +3,7 @@ const nextConfig = {
   images: { unoptimized: true },
   experimental: {
     serverActions: {
-      bodySizeLimit: '5mb',
+      bodySizeLimit: '10mb',
     },
   },
   async headers() {

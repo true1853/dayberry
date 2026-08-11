@@ -188,8 +188,28 @@ export function CreateListing({ onClose, onPublish, initialWants = '', editLot =
   const onFile = (e) => {
     const f = e.target.files && e.target.files[0];
     if (!f) return;
+    setPhotoName(f.name);
     const reader = new FileReader();
-    reader.onload = () => { setPhoto(reader.result); setPhotoName(f.name); };
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        // сжимаем фото, чтобы не превысить лимит тела запроса (5 МБ)
+        const MAX = 1600;
+        let { width, height } = img;
+        if (width > MAX || height > MAX) {
+          const r = Math.min(MAX / width, MAX / height);
+          width = Math.round(width * r);
+          height = Math.round(height * r);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        setPhoto(canvas.toDataURL('image/jpeg', 0.75));
+      };
+      img.onerror = () => setPhoto(reader.result);
+      img.src = reader.result;
+    };
     reader.readAsDataURL(f);
   };
 
