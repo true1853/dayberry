@@ -100,23 +100,60 @@ export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, lots }) {
   );
 }
 
-export function OfferSheet({ L, myLot, balance = 0, open, onClose, onConfirm }) {
-  const MY = myLot || { value: 0, title: '', photo: '', photoUrl: '', cat: 'gadget' };
-  const diff = L ? L.value - MY.value : 0;
+export function OfferSheet({ L, myLots = [], balance = 0, open, onClose, onConfirm }) {
+  const [selId, setSelId] = React.useState(null);
+  const MY = (myLots || []).find(x => x.id === selId) || myLots[0] || null;
+  const diff = L ? L.value - (MY ? MY.value : 0) : 0;
   const [credits, setCredits] = React.useState(0);
-  React.useEffect(() => { if (L) setCredits(Math.max(0, diff)); }, [L]);
+  React.useEffect(() => {
+    if (L) {
+      if (myLots.length && !myLots.some(x => x.id === selId)) setSelId(myLots[0].id);
+      setCredits(Math.max(0, diff));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [L, MY && MY.value, myLots]);
   if (!L) return null;
-  const balanced = MY.value + credits;
+  const balanced = (MY ? MY.value : 0) + credits;
   const ok = Math.abs(balanced - L.value) <= L.value * 0.12;
 
   return (
     <Sheet open={open} onClose={onClose} title="Предложить обмен">
       <div className="px col gap14" style={{ paddingBottom: 8 }}>
+
+        {myLots.length > 1 && (
+          <div className="col gap6">
+            <span className="cap">Чем меняетесь</span>
+            <div className="row gap8" style={{ overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
+              {myLots.map(x => (
+                <div key={x.id} onClick={() => { setSelId(x.id); setCredits(Math.max(0, L.value - x.value)); }}
+                  style={{
+                    flex: 'none', width: 84, borderRadius: 12, overflow: 'hidden', cursor: 'pointer',
+                    border: '1.5px solid ' + (MY && MY.id === x.id ? 'var(--berry)' : 'var(--line)'),
+                    background: MY && MY.id === x.id ? 'var(--berry-50)' : '#fff', transition: 'all .15s',
+                  }}>
+                  <Photo label={x.photo} url={x.photoUrl} cat={x.cat} style={{ width: '100%', aspectRatio: '1/1' }} />
+                  <div className="col" style={{ padding: '6px 7px', gap: 2 }}>
+                    <span className="cap ellipsis" style={{ fontSize: 10.5 }}>{x.title}</span>
+                    <Credit n={x.value} size={12} coin={11} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="row" style={{ alignItems: 'center', gap: 8 }}>
           <div className="card-line grow col gap6" style={{ padding: 10, alignItems: 'center' }}>
-            <Photo label={MY.photo} url={MY.photoUrl} cat={MY.cat} style={{ width: '100%', aspectRatio: '4/3', borderRadius: 10 }} />
+            {MY ? (
+              <Photo label={MY.photo} url={MY.photoUrl} cat={MY.cat} style={{ width: '100%', aspectRatio: '4/3', borderRadius: 10 }} />
+            ) : (
+              <div className="col" style={{ width: '100%', aspectRatio: '4/3', borderRadius: 10, background: 'var(--line-2)', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                <Icon name="plus" size={22} color="var(--ink-3)" />
+                <span className="cap" style={{ textAlign: 'center', padding: '0 8px' }}>нет своего объявления</span>
+              </div>
+            )}
             <span className="cap" style={{ textAlign: 'center' }}>Вы отдаёте</span>
-            <span className="title" style={{ fontSize: 12.5, textAlign: 'center' }}>{MY.title}</span>
+            <span className="title" style={{ fontSize: 12.5, textAlign: 'center' }}>{MY ? MY.title : '—'}</span>
           </div>
           <div className="avatar" style={{ width: 34, height: 34, background: 'var(--berry-50)', flex: 'none' }}><Icon name="swap" size={18} color="var(--berry)" /></div>
           <div className="card-line grow col gap6" style={{ padding: 10, alignItems: 'center' }}>
@@ -147,7 +184,7 @@ export function OfferSheet({ L, myLot, balance = 0, open, onClose, onConfirm }) 
           <span className="sub">Ваши <b className="amount">{fmt(credits)} Б</b> заморозятся в эскроу. Партнёр получит их только после того, как вы подтвердите получение вещи.</span>
         </div>
 
-        <button className="btn btn-primary btn-block btn-lg" onClick={() => onConfirm(L, credits)}>
+        <button className="btn btn-primary btn-block btn-lg" onClick={() => onConfirm(L, credits, MY ? MY.id : null)}>
           <Icon name="shield" size={20} color="#fff" />Открыть сделку · заморозить <Credit n={credits} size={15} coin={14} color="#fff" />
         </button>
       </div>

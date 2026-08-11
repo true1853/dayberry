@@ -316,9 +316,9 @@ export default function App() {
         </>
       )}
       {(creating || editingLot) && <div className="overlay-layer"><CreateListing onClose={() => { setCreating(false); setEditingLot(null); }} onPublish={publishLot} initialWants={currentUser && currentUser.wants} editLot={editingLot} /></div>}
-      <OfferSheet L={offerLot} myLot={(myLots && myLots[0]) || null} balance={wallet ? wallet.balance : 0} open={!!offerLot} onClose={() => setOfferLot(null)} onConfirm={async (L, credits) => {
+      <OfferSheet L={offerLot} myLots={myLots || []} balance={wallet ? wallet.balance : 0} open={!!offerLot} onClose={() => setOfferLot(null)} onConfirm={async (L, credits, myLotId) => {
         setOfferLot(null);
-        const res = await createDealAction({ lotId: L.id, credits });
+        const res = await createDealAction({ lotId: L.id, credits, myLotId });
         if (res.ok) {
           const de = await listDealsAction();
           setDeals(de || []);
