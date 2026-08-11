@@ -79,6 +79,16 @@ export function AuthScreen({ onDone }) {
   const [error, setError] = React.useState('');
   const [loading, setLoading] = React.useState(false);
 
+  React.useEffect(() => {
+    try {
+      const m = document.cookie.match(/(?:^|;\s*)oauth_error=([^;]*)/);
+      if (m) {
+        setError(decodeURIComponent(m[1]));
+        document.cookie = 'oauth_error=; Max-Age=0; path=/';
+      }
+    } catch {}
+  }, []);
+
   const isLogin = mode === 'login';
 
   const validate = () => {

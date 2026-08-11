@@ -26,7 +26,14 @@ export async function GET(req, { params }) {
   const { provider } = await params;
   const url = new URL(req.url);
   const base = APP_URL() || url.origin;
-  const fail = (msg) => NextResponse.redirect(`${base}/?oauth=error${msg ? '&m=' + encodeURIComponent(msg) : ''}`);
+
+  // On any OAuth failure redirect to the clean origin (no query params),
+  // and signal the error via a short-lived cookie the client can read + clear.
+  const fail = (msg) => {
+    const res = NextResponse.redirect(`${base}/`);
+    res.cookies.set('oauth_error', msg, { maxAge: 60, path: '/' });
+    return res;
+  };
 
   try {
     if (provider === 'vk') {
