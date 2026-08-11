@@ -34,6 +34,8 @@ export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, lots }) {
   const L = (lots || []).find(l => l.id === lotId) || null;
   const [g, setG] = React.useState(0);
   if (!L) return null;
+  const urls = (L.photoUrls || []).filter(Boolean);
+  const shownUrl = urls[Math.min(g, Math.max(0, urls.length - 1))] || L.photoUrl;
   const owner = {
     name: L.ownerName || '',
     city: L.ownerCity || '',
@@ -45,7 +47,9 @@ export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, lots }) {
   return (
     <div className="app-scroll">
       <div style={{ position: 'relative' }}>
-        <Photo label={L.photo} url={L.photoUrl} cat={L.cat} style={{ aspectRatio: '1/1' }} />
+        <div style={{ cursor: urls.length > 1 ? 'pointer' : 'default' }} onClick={() => urls.length > 1 && setG(x => (x + 1) % urls.length)}>
+          <Photo label={L.photo} url={shownUrl} cat={L.cat} style={{ aspectRatio: '1/1' }} />
+        </div>
         <div style={{ position: 'absolute', top: 'calc(8px + 48px)', left: 14, right: 14 }} className="row" >
           <IconBtn name="back" onClick={onBack} />
           <div className="grow" />
@@ -54,11 +58,16 @@ export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, lots }) {
             <IconBtn name="send" />
           </div>
         </div>
-        <div className="row gap6" style={{ position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)' }}>
-          {Array.from({ length: Math.min(L.photos, 6) }).map((_, i) => (
-            <span key={i} style={{ width: i === g ? 18 : 6, height: 6, borderRadius: 999, background: i === g ? 'var(--berry)' : 'rgba(255,255,255,0.8)', transition: 'all .2s', cursor: 'pointer' }} onClick={() => setG(i)} />
-          ))}
-        </div>
+        {urls.length > 1 && (
+          <div className="row gap6" style={{ position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)' }}>
+            {urls.map((_, i) => (
+              <span key={i} style={{ width: i === g ? 18 : 6, height: 6, borderRadius: 999, background: i === g ? 'var(--berry)' : 'rgba(255,255,255,0.8)', transition: 'all .2s', cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); setG(i); }} />
+            ))}
+          </div>
+        )}
+        {urls.length > 1 && (
+          <span style={{ position: 'absolute', bottom: 12, right: 14, padding: '3px 9px', borderRadius: 999, background: 'rgba(28,12,18,0.55)', color: '#fff', fontSize: 11.5, fontWeight: 700, backdropFilter: 'blur(4px)' }}>{g + 1} / {urls.length}</span>
+        )}
       </div>
 
       <div className="px col gap16" style={{ paddingTop: 16, paddingBottom: 30 }}>

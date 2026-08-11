@@ -326,6 +326,8 @@ function LotView({ L, onBack, onOffer, onOwnerChat }) {
     ['Услуги', 'Лендинги, фото, таргет, ремонт'],
     ['Хобби', 'Велосипед, настолки, книги'],
   ];
+  const urls = (L.photoUrls || []).filter(Boolean);
+  const webPhotos = Array.from({ length: 3 }, (_, i) => (urls[i] !== undefined ? urls[i] : (urls[0] || L.photoUrl)));
   return (
     <>
       <div className="web-detail-hero">
@@ -341,9 +343,9 @@ function LotView({ L, onBack, onOffer, onOwnerChat }) {
       </div>
 
       <div className="web-detail-photos">
-        <div className="ph"><Photo label={L.photo} url={L.photoUrl} cat={L.cat} /></div>
-        <div className="ph"><Photo label={L.photo} url={L.photoUrl} cat={L.cat} /></div>
-        <div className="ph"><Photo label={L.photo} url={L.photoUrl} cat={L.cat} /></div>
+        {webPhotos.map((u, i) => (
+          <div key={i} className="ph"><Photo label={L.photo} url={u} cat={L.cat} /></div>
+        ))}
       </div>
 
       <div className="web-detail-main">

@@ -14,6 +14,9 @@ import {
   verifyPassword,
 } from '../../lib/auth';
 
+const MAX_LOT_PHOTOS = 6;
+const MAX_PHOTOS_CHARS = 8_000_000;
+
 export async function registerAction(input) {
   const { name, email, phone, password, city } = input || {};
   const key = (email || '').trim().toLowerCase();
@@ -172,7 +175,7 @@ export async function updateAvatarAction(avatar) {
 export async function listLots() {
   const lots = await prisma.lot.findMany({
     where: { status: 'active' },
-    include: { owner: { select: { city: true, name: true, avatar: true, rating: true, dealsCount: true } } },
+    include: { owner: { select: { city: true, name: true, avatar: true, rating: true, dealsCount: true } }, lotPhotos: { orderBy: { order: 'asc' } } },
     orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
   });
   return lots.map(l => mapLot(l, l.owner?.city || ''));
@@ -183,7 +186,7 @@ export async function getMyLots() {
   if (!user) return [];
   const lots = await prisma.lot.findMany({
     where: { ownerId: user.id, status: 'active' },
-    include: { owner: { select: { city: true, name: true, avatar: true, rating: true, dealsCount: true } } },
+    include: { owner: { select: { city: true, name: true, avatar: true, rating: true, dealsCount: true } }, lotPhotos: { orderBy: { order: 'asc' } } },
     orderBy: { createdAt: 'desc' },
   });
   return lots.map(l => mapLot(l, l.owner?.city || ''));
@@ -193,10 +196,15 @@ export async function createLotAction(input) {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: 'Требуется вход' };
 
-  const { title, cat, value, aiLow, aiHigh, photo, photoUrl, wants, desc, kind, condition, valuationSource } = input || {};
+  const { title, cat, value, aiLow, aiHigh, photo, photoUrl, photos, wants, desc, kind, condition, valuationSource } = input || {};
   if (!title || !title.trim()) return { ok: false, error: 'Введите название' };
   if (!value || value <= 0) return { ok: false, error: 'Укажите оценку в баллах' };
   if (!wants || !wants.trim()) return { ok: false, error: 'Укажите, на что хотите обменять' };
+
+  const photoList = Array.isArray(photos) ? photos.filter(u => typeof u === 'string' && u.startsWith('data:image/')) : [];
+  if (photoList.length > MAX_LOT_PHOTOS) return { ok: false, error: `Можно добавить не больше ${MAX_LOT_PHOTOS} фото` };
+  const totalChars = photoList.reduce((n, u) => n + u.length, 0);
+  if (totalChars > MAX_PHOTOS_CHARS) return { ok: false, error: 'Фото слишком тяжёлые — добавьте меньше или выберите файлы поменьше' };
 
   const num = Math.round(Number(value));
   const lot = await prisma.lot.create({
@@ -211,17 +219,22 @@ export async function createLotAction(input) {
       aiHigh: aiHigh || Math.round(num * 1.08),
       valuationSource: valuationSource === 'ai' ? 'ai' : 'manual',
       photo: photo || '',
-      photoUrl: photoUrl || '',
+      photoUrl: photoUrl || photoList[0] || '',
       wants: wants.trim(),
       desc: desc || '',
       condition: condition || (kind === 'service' ? 'Услуга' : 'Новое или Б/У'),
       posted: 'только что',
       sortOrder: 0,
+      ...(photoList.length ? {
+        lotPhotos: {
+          create: photoList.map((url, i) => ({ url, label: '', order: i })),
+        },
+      } : {}),
     },
   });
   const withOwner = await prisma.lot.findUnique({
     where: { id: lot.id },
-    include: { owner: { select: { city: true, name: true, avatar: true, rating: true, dealsCount: true } } },
+    include: { owner: { select: { city: true, name: true, avatar: true, rating: true, dealsCount: true } }, lotPhotos: { orderBy: { order: 'asc' } } },
   });
   return { ok: true, lot: mapLot(withOwner || lot, user.city) };
 }
@@ -234,10 +247,15 @@ export async function updateLotAction(lotId, input) {
   if (!lot) return { ok: false, error: 'Объявление не найдено' };
   if (lot.ownerId !== user.id) return { ok: false, error: 'Это не ваше объявление' };
 
-  const { title, cat, value, aiLow, aiHigh, wants, desc, condition, valuationSource } = input || {};
+  const { title, cat, value, aiLow, aiHigh, wants, desc, condition, valuationSource, photo, photoUrl, photos } = input || {};
   if (!title || !title.trim()) return { ok: false, error: 'Введите название' };
   if (!value || value <= 0) return { ok: false, error: 'Укажите оценку в баллах' };
   if (!wants || !wants.trim()) return { ok: false, error: 'Укажите, на что хотите обменять' };
+
+  const photoList = Array.isArray(photos) ? photos.filter(u => typeof u === 'string' && u.startsWith('data:image/')) : [];
+  if (photoList.length > MAX_LOT_PHOTOS) return { ok: false, error: `Можно добавить не больше ${MAX_LOT_PHOTOS} фото` };
+  const totalChars = photoList.reduce((n, u) => n + u.length, 0);
+  if (totalChars > MAX_PHOTOS_CHARS) return { ok: false, error: 'Фото слишком тяжёлые — добавьте меньше или выберите файлы поменьше' };
 
   const num = Math.round(Number(value));
   const updated = await prisma.lot.update({
@@ -252,11 +270,19 @@ export async function updateLotAction(lotId, input) {
       wants: wants.trim(),
       desc: desc || '',
       condition: condition || lot.condition,
+      photo: photo !== undefined ? photo : lot.photo,
+      photoUrl: photoUrl !== undefined ? photoUrl : (photoList[0] || ''),
+      ...(Array.isArray(photos) ? {
+        lotPhotos: {
+          deleteMany: {},
+          create: photoList.map((url, i) => ({ url, label: '', order: i })),
+        },
+      } : {}),
     },
   });
   const withOwner = await prisma.lot.findUnique({
     where: { id: lotId },
-    include: { owner: { select: { city: true, name: true, avatar: true, rating: true, dealsCount: true } } },
+    include: { owner: { select: { city: true, name: true, avatar: true, rating: true, dealsCount: true } }, lotPhotos: { orderBy: { order: 'asc' } } },
   });
   return { ok: true, lot: mapLot(withOwner || updated, user.city) };
 }
@@ -267,8 +293,8 @@ const DEAL_STAGE_ORDER = ['created', 'meet', 'confirm', 'done'];
 
 function dealWith() {
   return {
-    lot: { include: { owner: { select: { name: true, city: true } } } },
-    myLot: true,
+    lot: { include: { owner: { select: { name: true, city: true } }, lotPhotos: { orderBy: { order: 'asc' } } } },
+    myLot: { include: { lotPhotos: { orderBy: { order: 'asc' } } } },
   };
 }
 
@@ -620,7 +646,7 @@ export async function getMatchesAction() {
   const user = await getCurrentUser();
   const lots = await prisma.lot.findMany({
     where: { status: 'active' },
-    include: { owner: { select: { name: true, city: true, avatar: true, rating: true, dealsCount: true } } },
+    include: { owner: { select: { name: true, city: true, avatar: true, rating: true, dealsCount: true } }, lotPhotos: { orderBy: { order: 'asc' } } },
     orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
   });
   const myLots = user ? lots.filter(l => l.ownerId === user.id) : [];

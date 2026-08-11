@@ -76,8 +76,18 @@ model Lot {
   status    String   @default("active")
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
+  lotPhotos LotPhoto[]
   deals     Deal[]   @relation("dealTarget")
   myDeals   Deal[]   @relation("dealMyLot")
+}
+
+model LotPhoto {
+  id     String @id @default(cuid())
+  lotId  String
+  lot    Lot    @relation(fields: [lotId], references: [id], onDelete: Cascade)
+  url    String
+  label  String @default("")
+  order  Int    @default(0)
 }
 
 model Deal {

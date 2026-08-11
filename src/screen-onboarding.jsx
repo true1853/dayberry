@@ -106,6 +106,8 @@ const CATS = {
   ],
 };
 
+const MAX_PHOTOS = 6;
+
 const inputStyle = {
   width: '100%', padding: '13px 16px', border: '1.5px solid var(--line)', borderRadius: 14, fontSize: 15,
   fontFamily: 'var(--font)', background: '#fff', color: 'var(--ink)', outline: 'none', boxSizing: 'border-box',
@@ -120,8 +122,15 @@ export function CreateListing({ onClose, onPublish, initialWants = '', editLot =
   const [value, setValue] = React.useState(editLot ? String(editLot.value) : '');
   const [wants, setWants] = React.useState(editLot ? editLot.wants : (initialWants || ''));
   const [desc, setDesc] = React.useState('');
-  const [photo, setPhoto] = React.useState('');
-  const [photoName, setPhotoName] = React.useState('');
+  const [photos, setPhotos] = React.useState(() =>
+    (editLot && Array.isArray(editLot.photoUrls) ? editLot.photoUrls : []).map(u => ({ url: u, name: '' }))
+  );
+  const [mainIdx, setMainIdx] = React.useState(() => {
+    if (!editLot) return 0;
+    const urls = Array.isArray(editLot.photoUrls) ? editLot.photoUrls : [];
+    const i = urls.indexOf(editLot.photoUrl);
+    return i >= 0 ? i : 0;
+  });
   const [error, setError] = React.useState('');
   const [aiBusy, setAiBusy] = React.useState(false);
   const aiBusyRef = React.useRef(false);
@@ -139,6 +148,7 @@ export function CreateListing({ onClose, onPublish, initialWants = '', editLot =
   };
 
   const valueNum = Number(value);
+  const mainPhoto = photos[mainIdx];
   const aiLow = valueNum > 0 ? Math.round(valueNum * 0.92) : 0;
   const aiHigh = valueNum > 0 ? Math.round(valueNum * 1.08) : 0;
 
@@ -150,7 +160,7 @@ export function CreateListing({ onClose, onPublish, initialWants = '', editLot =
     const call = () => analyzeListingAction({
       kind,
       title: title.trim(),
-      photo: photo && photo.length <= 3500000 ? photo : '',
+      photo: mainPhoto && mainPhoto.url.length <= 3500000 ? mainPhoto.url : '',
       value: valueNum,
       wants: wants.trim(),
     });
@@ -185,16 +195,13 @@ export function CreateListing({ onClose, onPublish, initialWants = '', editLot =
     }
   };
 
-  const onFile = (e) => {
-    const f = e.target.files && e.target.files[0];
-    if (!f) return;
-    setPhotoName(f.name);
+  const compressFile = (f) => new Promise((resolve) => {
     const reader = new FileReader();
     reader.onload = () => {
       const img = new Image();
       img.onload = () => {
-        // сжимаем фото, чтобы не превысить лимит тела запроса (5 МБ)
-        const MAX = 1600;
+        // сжимаем фото, чтобы несколько снимков не превысили лимит тела запроса (10 МБ)
+        const MAX = 1280;
         let { width, height } = img;
         if (width > MAX || height > MAX) {
           const r = Math.min(MAX / width, MAX / height);
@@ -205,12 +212,32 @@ export function CreateListing({ onClose, onPublish, initialWants = '', editLot =
         canvas.width = width;
         canvas.height = height;
         canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-        setPhoto(canvas.toDataURL('image/jpeg', 0.75));
+        resolve({ url: canvas.toDataURL('image/jpeg', 0.72), name: f.name || '' });
       };
-      img.onerror = () => setPhoto(reader.result);
+      img.onerror = () => resolve({ url: reader.result, name: f.name || '' });
       img.src = reader.result;
     };
     reader.readAsDataURL(f);
+  });
+
+  const onFiles = async (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (!files.length) return;
+    const room = Math.max(0, MAX_PHOTOS - photos.length);
+    if (room <= 0) return setError(`Можно добавить не больше ${MAX_PHOTOS} фото`);
+    try {
+      const added = await Promise.all(files.slice(0, room).map(compressFile));
+      setPhotos(ps => [...ps, ...added]);
+      setError('');
+    } catch {
+      setError('Не удалось обработать фото — попробуйте другие файлы');
+    }
+  };
+
+  const removePhoto = (i) => {
+    setPhotos(ps => ps.filter((_, k) => k !== i));
+    setMainIdx(m => (i === m ? 0 : (i < m ? m - 1 : m)));
   };
 
   const submit = async () => {
@@ -220,6 +247,7 @@ export function CreateListing({ onClose, onPublish, initialWants = '', editLot =
     if (!wants.trim()) return setError('Укажите, на что хотите обменять');
     setError('');
     const placeholder = kind === 'service' ? 'УСЛУГА' : (cat === 'gadget' ? 'ТЕХНИКА' : 'ВЕЩЬ');
+    const main = photos[mainIdx];
     const lot = {
       id: editLot ? editLot.id : undefined,
       title: title.trim(),
@@ -228,9 +256,9 @@ export function CreateListing({ onClose, onPublish, initialWants = '', editLot =
       aiLow: aiRange ? aiRange.low : (valueNum > 0 ? Math.round(valueNum * 0.92) : 0),
       aiHigh: aiRange ? aiRange.high : (valueNum > 0 ? Math.round(valueNum * 1.08) : 0),
       valuationSource: aiRange ? 'ai' : 'manual',
-      photo: photoName || placeholder,
-      photoUrl: photo || undefined,
-      photos: 1,
+      photo: main ? (main.name || placeholder) : placeholder,
+      photoUrl: main ? main.url : undefined,
+      photos: photos.map(p => p.url),
       condition: condition || (kind === 'service' ? 'Услуга' : 'Новое или Б/У'),
       posted: 'только что',
       owner: 'me',
@@ -281,25 +309,41 @@ export function CreateListing({ onClose, onPublish, initialWants = '', editLot =
         </div>
 
         <div className="col gap8">
-          <span className="over">Фото</span>
-          <div className="row gap10" style={{ overflowX: 'auto' }}>
-            {photo ? (
-              <div className="photo" style={{ width: 96, height: 96, flex: 'none', borderRadius: 16, position: 'relative' }}>
-                <img src={photo} alt="фото" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                <button onClick={() => setPhoto('')} style={{ position: 'absolute', top: 6, right: 6, width: 24, height: 24, borderRadius: 999, border: 'none', background: 'rgba(28,12,18,0.6)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+          <span className="over">Фото · до {MAX_PHOTOS}</span>
+          <div className="row gap10" style={{ overflowX: 'auto', scrollbarWidth: 'none' }}>
+            {photos.map((p, i) => (
+              <div key={i} className="photo" style={{ width: 96, height: 96, flex: 'none', borderRadius: 16, position: 'relative', overflow: 'hidden' }}>
+                <img src={p.url} alt="фото" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                <button
+                  title={i === mainIdx ? 'Главное фото' : 'Сделать главным'}
+                  onClick={() => setMainIdx(i)}
+                  style={{
+                    position: 'absolute', top: 6, left: 6, width: 26, height: 26, borderRadius: 999, border: 'none',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                    background: i === mainIdx ? 'var(--berry)' : 'rgba(255,255,255,0.85)',
+                    boxShadow: 'var(--sh-1)',
+                  }}
+                >
+                  <Icon name="star" size={14} color={i === mainIdx ? '#fff' : 'var(--berry)'} />
+                </button>
+                <button
+                  title="Удалить"
+                  onClick={() => removePhoto(i)}
+                  style={{ position: 'absolute', top: 6, right: 6, width: 24, height: 24, borderRadius: 999, border: 'none', background: 'rgba(28,12,18,0.6)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                >
                   <Icon name="close" size={13} color="#fff" />
                 </button>
               </div>
-            ) : (
+            ))}
+            {photos.length < MAX_PHOTOS && (
               <label className="col gap6" style={{ width: 96, height: 96, flex: 'none', borderRadius: 16, border: '2px dashed var(--berry-200)', background: 'var(--berry-50)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                 <Icon name="camera" size={24} color="var(--berry)" />
                 <span className="cap" style={{ color: 'var(--berry)' }}>Добавить</span>
-                <input type="file" accept="image/*" onChange={onFile} style={{ display: 'none' }} />
+                <input type="file" accept="image/*" multiple onChange={onFiles} style={{ display: 'none' }} />
               </label>
             )}
-            <Photo label={photoName || (kind === 'service' ? 'УСЛУГА' : (cat === 'gadget' ? 'ТЕХНИКА' : 'ВЕЩЬ'))} cat={cat} style={{ width: 96, height: 96, flex: 'none', borderRadius: 16 }} />
           </div>
-          <span className="cap">Можно без фото — подставится заглушка категории.</span>
+          <span className="cap">{photos.length ? 'Нажмите ★, чтобы сделать фото главным — оно попадёт в ленту.' : 'Можно без фото — подставится заглушка категории.'}</span>
         </div>
 
         <div className="card" style={{ padding: 12, background: 'var(--berry-50)', border: '1px dashed var(--berry-200)' }}>
