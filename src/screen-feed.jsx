@@ -19,7 +19,7 @@ export function CatRow({ active, setActive }) {
 // ---------- "ready matches" carousel ----------
 function MatchStrip({ onOpen, onChains, matches = [], lots = [], myLot = null }) {
   return (
-    <div className="col gap10" style={{ padding: '4px 0 2px' }}>
+    <div className="col gap8" style={{ padding: '0 0 2px' }}>
       <div className="px row" style={{ justifyContent: 'space-between' }}>
         <span className="row gap6"><AIBadge>Умный мэтчинг</AIBadge></span>
         <span className="cap" onClick={onChains} style={{ color: 'var(--berry)', cursor: 'pointer' }}>Цепочки →</span>
@@ -30,8 +30,8 @@ function MatchStrip({ onOpen, onChains, matches = [], lots = [], myLot = null })
           if (!L) return null;
           const mine = myLot;
           return (
-            <div key={m.id} className="card" style={{ width: 230, flex: 'none', overflow: 'hidden', cursor: 'pointer' }} onClick={() => onOpen(L.id)}>
-              <div className="row" style={{ alignItems: 'stretch', height: 96 }}>
+            <div key={m.id} className="card" style={{ width: 196, flex: 'none', overflow: 'hidden', cursor: 'pointer' }} onClick={() => onOpen(L.id)}>
+              <div className="row" style={{ alignItems: 'stretch', height: 74 }}>
                 {mine ? (
                   <Photo label={mine.photo} url={mine.photoUrl} cat={mine.cat} style={{ flex: 1 }} />
                 ) : (
@@ -42,12 +42,12 @@ function MatchStrip({ onOpen, onChains, matches = [], lots = [], myLot = null })
                 </div>
                 <Photo label={L.photo} url={L.photoUrl} cat={L.cat} style={{ flex: 1 }} />
               </div>
-              <div className="col gap6" style={{ padding: '10px 12px 12px' }}>
+              <div className="col gap5" style={{ padding: '8px 10px 10px' }}>
                 <div className="row" style={{ justifyContent: 'space-between' }}>
                   <span className="tag" style={{ background: 'var(--berry)', color: '#fff' }}>{m.score}% совпадение</span>
                   <span className="title clamp2" style={{ fontSize: 13 }} />
                 </div>
-                <div className="sub clamp2" style={{ minHeight: 36 }}>{m.why}</div>
+                <div className="sub clamp2" style={{ minHeight: 32, fontSize: 12.5 }}>{m.why}</div>
                 <div className="row gap6" style={{ justifyContent: 'space-between' }}>
                   <span className="cap">{m.dir === 'you-pay' ? 'Ваша доплата' : 'Вам доплатят'}</span>
                   <Credit n={m.topup} size={13} coin={13} color={m.dir === 'you-pay' ? 'var(--ink)' : 'var(--ok)'} />
@@ -91,7 +91,7 @@ export function LotCardSkeleton() {
   return (
     <div className="card skel-card" aria-hidden="true">
       <div className="skel" style={{ aspectRatio: '1 / 1', borderRadius: 0 }} />
-      <div className="col gap6" style={{ padding: '10px 12px 12px' }}>
+      <div className="col gap5" style={{ padding: '8px 10px 10px' }}>
         <div className="skel" style={{ height: 13, width: '85%', borderRadius: 4 }} />
         <div className="skel" style={{ height: 11, width: '55%', borderRadius: 4 }} />
         <div className="skel" style={{ height: 15, width: '40%', borderRadius: 4, marginTop: 2 }} />

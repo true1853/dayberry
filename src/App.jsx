@@ -14,7 +14,7 @@ import { ProfileScreen, SettingsScreen, MyLotsScreen } from './screen-profile.js
 import WebApp from './web-app.jsx';
 import { parseRoute, tabPath, screenPath, readPath } from './router.js';
 
-import { AppBar, IconBtn, TabBar } from './ui.jsx';
+import { Logo, AppBar, IconBtn, TabBar } from './ui.jsx';
 import { Icon } from './icons.jsx';
 import { useTweaks } from './tweaks-panel.jsx';
 
@@ -32,21 +32,21 @@ const useMediaQuery = (query) => {
 
 const TWEAK_DEFAULTS = {
   mechanic: 'list',
-  accent: '#ff385c',
+  accent: '#4b2bc9',
   matchHints: true,
 };
 
 const ONBOARDED_KEY = 'dayberry_onboarded';
 
 const ACCENTS = {
-  '#ff385c': { berry900: '#a90a33', berry700: '#e00b41', berry: '#ff385c', berry500: '#ff5c77', b200: '#ffd1da', b100: '#ffe6eb', b50: '#fff0f3' },
-  '#6a4ad6': { berry900: '#2c1e5e', berry700: '#4a30a8', berry: '#6a4ad6', berry500: '#7d5fe0', b200: '#cbbcf2', b100: '#ece6fb', b50: '#f6f3fe' },
+  // фирменный — совпадает со значениями в design.css
+  '#4b2bc9': { berry900: '#2c1975', berry700: '#3e22b5', berry: '#4b2bc9', berry500: '#5b35e6', b200: '#b7b5f8', b100: '#e9e6f9', b50: '#f4f2fc' },
   '#1f8a5b': { berry900: '#0d3a26', berry700: '#176844', berry: '#1f8a5b', berry500: '#2aa56e', b200: '#aedcc4', b100: '#dcf0e6', b50: '#f1faf5' },
   '#e8541e': { berry900: '#6e2408', berry700: '#b53c12', berry: '#e8541e', berry500: '#f06a38', b200: '#f7c3aa', b100: '#fde6da', b50: '#fff6f1' },
 };
 
 function applyAccent(hex) {
-  const a = ACCENTS[hex] || ACCENTS['#ff385c'];
+  const a = ACCENTS[hex] || ACCENTS['#4b2bc9'];
   const r = document.documentElement.style;
   r.setProperty('--berry-900', a.berry900);
   r.setProperty('--berry-700', a.berry700);
@@ -497,7 +497,7 @@ export default function App() {
   if (booting) {
     return (
       <div className="app-root col" style={{ alignItems: 'center', justifyContent: 'center' }}>
-        <div className="logo pop" style={{ width: 56, height: 56, fontSize: 26 }}>ДБ</div>
+        <div className="pop"><Logo size={56} /></div>
       </div>
     );
   }
@@ -604,31 +604,32 @@ function HomeTab({ t, go, tab, setTab, onCreate, lots, lotsLoading, matches, cha
   return (
     <div className="app">
       <div className="safe-top" />
-      <AppBar
-        big sub="Обмен без денег" title="Дай бери"
-        left={<div className="logo" style={{ width: 38, height: 38, fontSize: 17 }}>ДБ</div>}
-        right={<div className="row gap8"><IconBtn name="plusCircle" onClick={onCreate} /><IconBtn name="bell" badge={0} /></div>}
-      />
-      <div className="appbar" style={{ paddingBottom: 8 }}>
-        <div className="row gap8 grow" style={{ background: '#fff', border: '1px solid var(--line)', borderRadius: 14, padding: '11px 14px', boxShadow: 'var(--sh-1)' }}>
-          <Icon name="search" size={20} color="var(--ink-3)" />
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Что ищете для обмена?" style={{ border: 'none', outline: 'none', flex: 1, fontSize: 15, fontFamily: 'var(--font)', background: 'transparent' }} />
+      {/* Шапка и поиск сведены в одну строку: заголовок «Дайбери» на всю ширину
+          съедал 71px постоянного места на каждом экране, а кнопка «+» дублировала
+          центральную кнопку таббара. */}
+      <div className="appbar" style={{ paddingBottom: 10, gap: 10 }}>
+        <Logo size={34} />
+        <div className="row gap8 grow" style={{ background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 14, padding: '10px 13px', boxShadow: 'var(--sh-1)', minWidth: 0 }}>
+          <Icon name="search" size={19} color="var(--ink-3)" />
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Что ищете для обмена?" style={{ border: 'none', outline: 'none', flex: 1, minWidth: 0, fontSize: 15, fontFamily: 'var(--font)', background: 'transparent', color: 'var(--ink)' }} />
           {q ? <button onClick={() => setQ('')} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}><Icon name="close" size={18} color="var(--ink-3)" /></button> : null}
         </div>
-      </div>
-      {/* view switcher */}
-      <div className="row gap6" style={{ padding: '0 18px 10px', overflowX: 'auto', scrollbarWidth: 'none', flexShrink: 0 }}>
-        {VIEW_MODES.map(m => (
-          <button key={m.id} onClick={() => setView(m.id)} style={{
-            padding: '7px 16px', borderRadius: 20, border: 'none', cursor: 'pointer', fontFamily: 'var(--font)',
-            fontSize: 13.5, fontWeight: 600, whiteSpace: 'nowrap', transition: 'all .15s',
-            background: view === m.id ? 'var(--berry)' : 'var(--line-2)',
-            color: view === m.id ? '#fff' : 'var(--ink-2)',
-          }}>{m.label}</button>
-        ))}
+        <IconBtn name="bell" badge={0} />
       </div>
       {view !== 'chain' && <CatRow active={cat} setActive={setCat} />}
       <div className="app-scroll">
+        {/* Переключатель режимов уехал внутрь прокрутки: режим выбирают редко,
+            а 40px постоянной высоты он занимал всегда. */}
+        <div className="row gap6" style={{ padding: '2px 18px 12px', overflowX: 'auto', scrollbarWidth: 'none' }}>
+          {VIEW_MODES.map(m => (
+            <button key={m.id} onClick={() => setView(m.id)} style={{
+              padding: '6px 14px', borderRadius: 20, border: 'none', cursor: 'pointer', fontFamily: 'var(--font)',
+              fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', transition: 'all .15s',
+              background: view === m.id ? 'var(--berry)' : 'var(--line-2)',
+              color: view === m.id ? '#fff' : 'var(--ink-2)',
+            }}>{m.label}</button>
+          ))}
+        </div>
         {view === 'list' && <FeedList cat={cat} lots={shown} loading={lotsLoading} matches={matches} hints={t.matchHints} myLot={myLots && myLots[0]} onOpen={(id) => go('lot', { lotId: id })} onChains={() => setView('chain')} favIds={favIds} onToggleFav={onToggleFav} />}
         {view === 'swipe' && <FeedSwipe cat={cat} lots={shown} myLot={myLots && myLots[0]} onOpen={(id) => go('lot', { lotId: id })} />}
         {view === 'chain' && <FeedChain chains={chains} onOpenChain={(id) => go('chain', { id })} />}
