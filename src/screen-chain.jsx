@@ -1,7 +1,7 @@
 // screen-chain.jsx — chain-first discovery + multi-party chain detail
 import React from 'react';
 import { Icon } from './icons.jsx';
-import { AIBadge, Photo, Credit, Avatar, AppBar, IconBtn } from './ui.jsx';
+import { Photo, Credit, Avatar, AppBar, IconBtn } from './ui.jsx';
 
 const who = (id) => (id === 'me' ? { name: 'Вы', initials: 'В' } : { name: id, initials: String(id || '?').charAt(0).toUpperCase() });
 
@@ -65,7 +65,7 @@ export function ChainCard({ chain, onOpen, mini }) {
 
 export function FeedChain({ onOpenChain, chains = [] }) {
   return (
-    <div className="col gap16" style={{ padding: '4px 18px 20px' }}>
+    <div className="col gap14" style={{ padding: '4px 18px 20px' }}>
       <div className="card" style={{ padding: 14, background: 'linear-gradient(135deg, var(--berry-900), var(--berry))', color: '#fff' }}>
         <div className="row gap10" style={{ alignItems: 'flex-start' }}>
           <div className="avatar" style={{ width: 38, height: 38, background: 'rgba(255,255,255,0.18)', flex: 'none' }}><Icon name="chain" size={20} color="#fff" /></div>
@@ -75,12 +75,11 @@ export function FeedChain({ onOpenChain, chains = [] }) {
           </div>
         </div>
       </div>
-      <div className="row" style={{ justifyContent: 'space-between' }}>
-        <span className="row gap6"><AIBadge>Подобрано для вас</AIBadge></span>
-        <span className="cap">по вашим хотелкам</span>
-      </div>
-      <div className="col gap12">
-        {chains.map(c => <ChainCard key={c.id} chain={c} mini onOpen={() => onOpenChain(c.id)} />)}
+      <div className="card col" style={{ padding: '30px 22px', alignItems: 'center', textAlign: 'center', gap: 10 }}>
+        <div className="avatar" style={{ width: 56, height: 56, background: 'var(--berry-50)' }}><Icon name="chain" size={27} color="var(--berry)" /></div>
+        <span className="tag" style={{ background: 'var(--berry-50)', color: 'var(--berry)' }}>Скоро появятся</span>
+        <span className="title" style={{ fontSize: 15 }}>Многосторонние обмены уже готовятся</span>
+        <span className="sub" style={{ lineHeight: 1.5 }}>Мы донастраиваем умные цепочки из 3–5 участников. Пока предлагайте прямой обмен на любом объявлении.</span>
       </div>
     </div>
   );

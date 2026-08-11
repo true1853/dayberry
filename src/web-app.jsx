@@ -25,7 +25,7 @@ function WebNav({ view, setView, user, avatar, query, setQuery, onLogout, onCrea
   const [q, setQ] = React.useState(query || '');
   const tabs = [
     { id: 'home', label: 'Обмен' },
-    { id: 'chains', label: 'Цепочки', new: true },
+    { id: 'chains', label: 'Цепочки' },
     { id: 'deals', label: 'Сделки' },
     { id: 'profile', label: 'Профиль' },
   ];
@@ -391,77 +391,16 @@ function LotView({ L, onBack, onOffer, onOwnerChat }) {
 }
 
 // ---------------- chains ----------------
-function ChainsView({ onBack, onJoin, chains = [] }) {
-  const [sel, setSel] = React.useState(null);
-  const chain = sel ? chains.find(c => c.id === sel) : null;
-  if (chain) return <ChainDetailW chain={chain} onBack={() => setSel(null)} onJoin={onJoin} />;
+function ChainsView({ onBack }) {
   return (
     <div className="web-container web-section">
       <button className="web-back" onClick={onBack}><Icon name="back" size={16} color="var(--ink-2)" />На главную</button>
-      <div className="web-head" style={{ marginTop: 16 }}>
-        <h2>Многосторонние обмены</h2>
-        <AIBadge>Подобрано для вас</AIBadge>
+      <div className="col" style={{ alignItems: 'center', justifyContent: 'center', padding: '80px 20px', textAlign: 'center', gap: 12 }}>
+        <div className="avatar" style={{ width: 64, height: 64, background: 'var(--berry-50)' }}><Icon name="chain" size={30} color="var(--berry)" /></div>
+        <span className="tag" style={{ background: 'var(--berry-50)', color: 'var(--berry)' }}>Скоро появятся</span>
+        <h2 style={{ margin: '4px 0 0' }}>Многосторонние обмены</h2>
+        <span className="sub" style={{ maxWidth: 460, lineHeight: 1.55 }}>Мы донастраиваем умные цепочки из 3–5 участников, где каждый получит желаемое. Пока предлагайте прямой обмен на любом объявлении.</span>
       </div>
-      {chains.length ? (
-        <div className="web-grid">
-          {chains.map(c => (
-            <div key={c.id} className="web-lot" onClick={() => setSel(c.id)}>
-              <div className="web-lot-photo" style={{ background: 'var(--berry-50)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Icon name="chain" size={30} color="var(--berry)" />
-                <span className="web-lot-badge" style={{ right: 12, left: 'auto' }}><Icon name="chain" size={11} color="var(--berry)" /> {c.score}%</span>
-              </div>
-              <div className="web-lot-meta">
-                <span className="web-lot-title">Цепочка из {c.steps.length} участников</span>
-                <span className="web-lot-sub">{c.note}</span>
-                <span className="web-lot-sub">Вы получаете: {c.steps[c.steps.length - 1].gives}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="web-empty"><Icon name="chain" size={36} color="var(--ink-3)" /><span>Цепочек пока нет</span></div>
-      )}
-    </div>
-  );
-}
-
-function ChainDetailW({ chain, onBack, onJoin }) {
-  const who = (id) => (id === 'me' ? { name: 'Вы' } : { name: id });
-  return (
-    <div className="web-container web-section">
-      <button className="web-back" onClick={onBack}><Icon name="back" size={16} color="var(--ink-2)" />Все цепочки</button>
-      <div className="web-head" style={{ marginTop: 16 }}>
-        <h2>Цепочка · {chain.steps.length} участника</h2>
-        <span className="tag" style={{ background: 'var(--berry)', color: '#fff', fontSize: 13, padding: '6px 12px' }}>{chain.score}% совпадение</span>
-      </div>
-      <div className="card" style={{ padding: 24, maxWidth: 720 }}>
-        {chain.steps.map((s, i) => {
-          const u = who(s.who);
-          return (
-            <div key={i}>
-              <div className="row gap14" style={{ padding: '10px 0' }}>
-                <Avatar user={u.name} size={46} />
-                <div className="grow col" style={{ gap: 2 }}>
-                  <span style={{ fontSize: 15, fontWeight: 600 }}>{u.name}</span>
-                  <span className="sub">отдаёт <b style={{ color: 'var(--ink)' }}>{s.gives}</b> → получает {who(s.to).name}</span>
-                </div>
-                <Credit n={s.value} size={15} coin={14} />
-              </div>
-              {i < chain.steps.length - 1 && <div style={{ width: 2, height: 22, marginLeft: 22, background: 'var(--berry-200)' }} />}
-            </div>
-          );
-        })}
-      </div>
-      <div className="card" style={{ padding: 18, marginTop: 20, maxWidth: 720, background: 'var(--ok-soft)' }}>
-        <div className="row gap10" style={{ alignItems: 'flex-start' }}>
-          <Icon name="shield" size={22} color="var(--ok)" />
-          <div className="col gap4">
-            <span style={{ fontSize: 15, fontWeight: 600, color: '#15663f' }}>Цепочка под защитой эскроу</span>
-            <span style={{ fontSize: 14, color: '#2c6a48', lineHeight: 1.5 }}>{chain.note} Сделка проходит, только если все участники подтвердят получение.</span>
-          </div>
-        </div>
-      </div>
-      <button className="btn btn-primary btn-lg" style={{ marginTop: 24 }} onClick={() => onJoin(chain)}><Icon name="chain" size={19} color="#fff" />Вступить в цепочку</button>
     </div>
   );
 }
@@ -626,7 +565,7 @@ export default function WebApp({ lots, myLots, user, profile, onLogout, onProfil
       <div className="web-body">
         {view === 'home' && <HomeView lots={lots} myLots={myLots} matches={matches} query={query} setQuery={setQuery} cat={cat} setCat={setCat} city={city} setCity={setCity} onOpen={(id) => { setSelLot(id); setView('lot'); }} onOffer={onOffer} onChains={() => setView('chains')} />}
         {view === 'lot' && selected && <LotView L={selected} onBack={goHome} onOffer={onOffer} onOwnerChat={onOwnerChat} />}
-        {view === 'chains' && <ChainsView onBack={goHome} chains={chains} onJoin={() => { setView('deals'); }} />}
+        {view === 'chains' && <ChainsView onBack={goHome} />}
         {view === 'deals' && <DealsView onBack={goHome} chats={chats} />}
         {view === 'profile' && <ProfileView user={user} profile={profile} myLots={myLots} onOpenLot={(id) => { setSelLot(id); setView('lot'); }} onLogout={onLogout} onProfileSaved={onProfileSaved} onWallet={goHome} onEditLot={onEditLot} />}
       </div>
