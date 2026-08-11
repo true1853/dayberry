@@ -29,13 +29,24 @@ export function Credit({ n, size = 15, weight = 700, coin = 14, color, gap = 5, 
   );
 }
 
+// Превью лежит рядом с полной версией под именем <hash>.sm.webp — чистое
+// преобразование имени, без обращений к серверу. Легаси-пути (.jpg/.png)
+// остаются как есть: превью для них не создавалось.
+export function thumbUrl(url) {
+  if (typeof url !== 'string' || !url.endsWith('.webp') || url.endsWith('.sm.webp')) return url;
+  return url.slice(0, -'.webp'.length) + '.sm.webp';
+}
+
 // ---- photo placeholder or real image ----
-export function Photo({ label, url, cat = 'gadget', style, rounded = 0, badge, children }) {
+// По умолчанию показывается превью: почти везде картинка рендерится мелко
+// (сетки, аватарки лотов, строки сделок). full нужен галерее и свайпу.
+export function Photo({ label, url, cat = 'gadget', style, rounded = 0, badge, children, full = false }) {
   const c = CAT[cat] || CAT.gadget;
+  const src = full ? url : thumbUrl(url);
   if (url) {
     return (
       <div className="photo" style={{ background: c.soft, borderRadius: rounded, ...style, overflow: 'hidden', position: 'relative' }}>
-        <img src={url} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} loading="lazy" decoding="async" />
+        <img src={src} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} loading="lazy" decoding="async" />
         {badge}
         {children}
       </div>

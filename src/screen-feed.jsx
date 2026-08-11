@@ -196,7 +196,7 @@ function SwipeCard({ lot, drag = 0, onDown, onMove, onUp, onTap, style }) {
       onTouchStart={onDown} onTouchMove={onMove} onTouchEnd={onUp}
       onClick={() => { if (Math.abs(drag) < 6 && onTap) onTap(); }}
     >
-      <Photo label={lot.photo} url={lot.photoUrl} cat={lot.cat} style={{ position: 'absolute', inset: 0 }} />
+      <Photo label={lot.photo} url={lot.photoUrl} cat={lot.cat} style={{ position: 'absolute', inset: 0 }} full />
       {interactive && (
         <>
           <Stamp text="ОБМЕН" color="var(--berry)" show={drag > 40} side="left" rot={-14} />

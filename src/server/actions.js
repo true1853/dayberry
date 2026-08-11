@@ -211,7 +211,8 @@ export async function updateAvatarAction(avatar) {
   }
 
   // Пустая строка = снять аватар; иначе кладём файл на диск и храним путь.
-  const clean = incoming ? await saveDataUrl(incoming) : '';
+  // Аватар рендерится максимум в 120px — превью ему не нужно.
+  const clean = incoming ? await saveDataUrl(incoming, { max: 256, thumb: false }) : '';
 
   const updated = await prisma.user.update({
     where: { id: user.id },

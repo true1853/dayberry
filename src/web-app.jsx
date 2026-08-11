@@ -364,7 +364,7 @@ function LotView({ L, onBack, onOffer, onOwnerChat }) {
 
       <div className="web-detail-photos">
         {webPhotos.map((u, i) => (
-          <div key={i} className="ph"><Photo label={L.photo} url={u} cat={L.cat} /></div>
+          <div key={i} className="ph"><Photo label={L.photo} url={u} cat={L.cat} full /></div>
         ))}
       </div>
 

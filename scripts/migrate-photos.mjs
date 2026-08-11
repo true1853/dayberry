@@ -5,16 +5,20 @@
 // Идемпотентен: строки, уже переведённые на /uploads/..., пропускаются,
 // так что скрипт можно запускать повторно и добивать остатки.
 // Работает батчами — data-URL'ы весят мегабайты, читать всю таблицу разом нельзя.
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import { PrismaClient } from '@prisma/client';
-import { saveDataUrl, UPLOAD_DIR } from '../lib/storage.js';
+import { saveDataUrl, saveImage, UPLOAD_DIR, UPLOAD_PREFIX } from '../lib/storage.js';
 
 const prisma = new PrismaClient();
 const BATCH = 20;
 const isDataUrl = (v) => typeof v === 'string' && v.startsWith('data:image/');
+// файлы, сохранённые до перехода на WebP
+const isLegacyFile = (v) => typeof v === 'string' && v.startsWith(UPLOAD_PREFIX) && !v.endsWith('.webp');
 
 let freedBytes = 0;
 
-async function migrateTable({ label, model, field, where }) {
+async function migrateTable({ label, model, field, where, accept, convert }) {
   // Без курсора: конвертированные строки сами выпадают из фильтра, поэтому
   // каждая итерация забирает следующую порцию необработанных. Курсорная
   // пагинация здесь давала пропуски — она опиралась на id уже обновлённой
@@ -35,12 +39,11 @@ async function migrateTable({ label, model, field, where }) {
     for (const row of rows) {
       const value = row[field];
       // строка не конвертировалась — исключаем явно, иначе цикл не завершится
-      if (!isDataUrl(value)) { failed.add(row.id); continue; }
+      if (!accept(value)) { failed.add(row.id); continue; }
       try {
-        const url = await saveDataUrl(value);
-        if (!url) { failed.add(row.id); continue; }
+        const url = await convert(value);
+        if (!url || url === value) { failed.add(row.id); continue; }
         await model.update({ where: { id: row.id }, data: { [field]: url } });
-        freedBytes += value.length;
         converted++;
       } catch (e) {
         failed.add(row.id);
@@ -54,31 +57,81 @@ async function migrateTable({ label, model, field, where }) {
   return { converted, failed: failed.size };
 }
 
+// Перекодирует уже лежащий на диске файл в WebP и создаёт превью.
+async function recodeLegacy(url, opts) {
+  const name = url.slice(UPLOAD_PREFIX.length);
+  const bytes = await readFile(path.join(UPLOAD_DIR, name));
+  freedBytes += bytes.length;
+  return saveImage(bytes, opts);
+}
+
+const TARGETS = [
+  { label: 'Lot.photoUrl', model: prisma.lot, field: 'photoUrl' },
+  { label: 'LotPhoto.url', model: prisma.lotPhoto, field: 'url' },
+  { label: 'User.avatar', model: prisma.user, field: 'avatar', opts: { max: 256, thumb: false } },
+];
+
 async function main() {
   console.log(`Каталог загрузок: ${UPLOAD_DIR}\n`);
 
   const results = [];
-  results.push(await migrateTable({
-    label: 'Lot.photoUrl', model: prisma.lot, field: 'photoUrl',
-    where: { photoUrl: { startsWith: 'data:image/' } },
-  }));
-  results.push(await migrateTable({
-    label: 'LotPhoto.url', model: prisma.lotPhoto, field: 'url',
-    where: { url: { startsWith: 'data:image/' } },
-  }));
-  results.push(await migrateTable({
-    label: 'User.avatar', model: prisma.user, field: 'avatar',
-    where: { avatar: { startsWith: 'data:image/' } },
-  }));
+
+  console.log('base64 из БД -> файлы:');
+  for (const t of TARGETS) {
+    results.push(await migrateTable({
+      ...t,
+      where: { [t.field]: { startsWith: 'data:image/' } },
+      accept: isDataUrl,
+      convert: (v) => { freedBytes += v.length; return saveDataUrl(v, t.opts); },
+    }));
+  }
+
+  console.log('\nстарые JPEG/PNG -> WebP + превью:');
+  for (const t of TARGETS) {
+    results.push(await migrateTable({
+      ...t,
+      where: { AND: [{ [t.field]: { startsWith: UPLOAD_PREFIX } }, { NOT: { [t.field]: { endsWith: '.webp' } } }] },
+      accept: isLegacyFile,
+      convert: (v) => recodeLegacy(v, t.opts),
+    }));
+  }
 
   const converted = results.reduce((n, r) => n + r.converted, 0);
   const failed = results.reduce((n, r) => n + r.failed, 0);
-  console.log(`\nПеренесено записей: ${converted}${failed ? `, не удалось: ${failed}` : ''}`);
-  console.log(`Выгружено из БД: ~${(freedBytes / 1024 / 1024).toFixed(1)} МБ base64`);
-  if (converted) {
-    console.log('\nЧтобы файл БД реально уменьшился, выполните VACUUM:');
-    console.log('  sqlite3 /app/data/dayberry.db "VACUUM;"');
+  console.log(`\nОбработано записей: ${converted}${failed ? `, пропущено: ${failed}` : ''}`);
+  console.log(`Исходных данных заменено: ~${(freedBytes / 1024 / 1024).toFixed(1)} МБ`);
+
+  if (converted && !failed) await removeOrphans();
+}
+
+// Подчищает файлы, на которые больше никто не ссылается: после перекодировки
+// исходные JPEG/PNG остаются на диске мёртвым грузом. Трогаем только их —
+// всё, что не .webp и не встречается в БД.
+async function removeOrphans() {
+  const { readdir, unlink, stat } = await import('node:fs/promises');
+  const referenced = new Set();
+  for (const t of TARGETS) {
+    const rows = await t.model.findMany({
+      where: { [t.field]: { startsWith: UPLOAD_PREFIX } },
+      select: { [t.field]: true },
+    });
+    for (const r of rows) referenced.add(r[t.field].slice(UPLOAD_PREFIX.length));
   }
+
+  let removed = 0;
+  let bytes = 0;
+  for (const name of await readdir(UPLOAD_DIR)) {
+    if (name.endsWith('.webp') || referenced.has(name)) continue;
+    const full = path.join(UPLOAD_DIR, name);
+    try {
+      bytes += (await stat(full)).size;
+      await unlink(full);
+      removed++;
+    } catch (e) {
+      console.warn(`  ! не удалось удалить ${name}: ${e.message}`);
+    }
+  }
+  if (removed) console.log(`Удалено осиротевших файлов: ${removed} (${(bytes / 1024 / 1024).toFixed(1)} МБ)`);
 }
 
 main()
