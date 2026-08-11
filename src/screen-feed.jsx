@@ -64,7 +64,7 @@ function MatchStrip({ onOpen, onChains, matches = [], lots = [], myLot = null })
 // ===========================================================
 // VARIANT A — LIST / FEED
 // ===========================================================
-export function FeedList({ cat, onOpen, onChains, hints = true, limit, lots = [], matches = [], myLot = null, loading = false }) {
+export function FeedList({ cat, onOpen, onChains, hints = true, limit, lots = [], matches = [], myLot = null, loading = false, favIds, onToggleFav }) {
   let items = lots.filter(l => cat === 'all' || l.cat === cat);
   if (limit) items = items.slice(0, limit);
   return (
@@ -78,7 +78,7 @@ export function FeedList({ cat, onOpen, onChains, hints = true, limit, lots = []
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           {loading && !items.length
             ? Array.from({ length: 4 }, (_, i) => <LotCardSkeleton key={i} />)
-            : items.map(l => <LotCard key={l.id} lot={l} compact onClick={() => onOpen(l.id)} />)}
+            : items.map(l => <LotCard key={l.id} lot={l} compact onClick={() => onOpen(l.id)} fav={favIds ? favIds.has(l.id) : false} onToggleFav={onToggleFav} />)}
         </div>
       </div>
     </div>
@@ -231,7 +231,7 @@ function Stamp({ text, color, show, side, rot }) {
 }
 
 // ---------- favorites ----------
-export function FavoritesScreen({ lots = [], go }) {
+export function FavoritesScreen({ lots = [], go, onToggleFav }) {
   return (
     <div className="app-scroll">
       <div className="appbar" style={{ paddingBottom: 10 }}>
@@ -243,7 +243,7 @@ export function FavoritesScreen({ lots = [], go }) {
       <div className="px" style={{ paddingBottom: 20 }}>
         {lots.length ? (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            {lots.map(l => <LotCard key={l.id} lot={l} compact onClick={() => go('lot', { lotId: l.id })} />)}
+            {lots.map(l => <LotCard key={l.id} lot={l} compact onClick={() => go('lot', { lotId: l.id })} fav onToggleFav={onToggleFav} />)}
           </div>
         ) : (
           <div className="col gap8" style={{ alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>

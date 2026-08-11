@@ -115,7 +115,7 @@ export function AIBadge({ children = 'AI', tone = 'berry' }) {
 }
 
 // ---- lot card (feed) ----
-export function LotCard({ lot, onClick, compact }) {
+export function LotCard({ lot, onClick, compact, fav = false, onToggleFav }) {
   const ownerCity = lot.ownerCity || '';
   return (
     <div className="card" style={{ overflow: 'hidden', cursor: 'pointer' }} onClick={onClick}>
@@ -124,9 +124,17 @@ export function LotCard({ lot, onClick, compact }) {
         <div className="row gap6" style={{ position: 'absolute', top: 10, left: 10 }}>
           {lot.hot && <span className="tag" style={{ background: 'rgba(255,255,255,0.9)', color: 'var(--berry)', backdropFilter: 'blur(6px)' }}><Icon name="flame" size={12} color="var(--berry)" />Хит</span>}
         </div>
-        <button className="row" style={{ position: 'absolute', top: 8, right: 8, width: 34, height: 34, borderRadius: 999, border: 'none', background: 'rgba(255,255,255,0.92)', justifyContent: 'center', boxShadow: 'var(--sh-1)' }} onClick={(e) => e.stopPropagation()}>
-          <Icon name="heart" size={18} color="var(--ink-2)" />
-        </button>
+        {onToggleFav && (
+          <button
+            aria-label={fav ? 'Убрать из избранного' : 'В избранное'}
+            aria-pressed={fav}
+            className="row"
+            style={{ position: 'absolute', top: 8, right: 8, width: 34, height: 34, borderRadius: 999, border: 'none', background: 'rgba(255,255,255,0.92)', justifyContent: 'center', boxShadow: 'var(--sh-1)', cursor: 'pointer', transition: 'transform .15s' }}
+            onClick={(e) => { e.stopPropagation(); onToggleFav(lot); }}
+          >
+            <Icon name="heart" size={18} color={fav ? 'var(--berry)' : 'var(--ink-2)'} fill={fav ? 'currentColor' : 'none'} />
+          </button>
+        )}
         <span className="row gap4" style={{ position: 'absolute', bottom: 8, right: 8, padding: '3px 7px', borderRadius: 8, background: 'rgba(28,12,18,0.55)', color: '#fff', fontSize: 11, fontWeight: 600, backdropFilter: 'blur(4px)' }}>
           <Icon name="camera" size={12} color="#fff" />{lot.photos}
         </span>

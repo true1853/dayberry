@@ -232,17 +232,25 @@ export default function App() {
     navigate(tabPath(t));
   };
 
+  // Сердечко переключается сразу, не дожидаясь сервера: server actions идут
+  // последовательно, и на живом соединении ответ может прийти через полсекунды —
+  // тап по сердечку столько ждать не должен. При ошибке откатываем.
   const toggleFav = async (L) => {
     if (!L) return;
     requireAuth('Войдите, чтобы добавлять в избранное', async () => {
+      const wasFav = favIds.has(L.id);
+      setFavorites(fs => (wasFav ? fs.filter(x => x.id !== L.id) : (fs.some(x => x.id === L.id) ? fs : [L, ...fs])));
       try {
         const res = await toggleFavoriteAction(L.id);
-        if (res.ok) {
-          setFavorites(fs => (res.fav ? (fs.some(x => x.id === L.id) ? fs : [L, ...fs]) : fs.filter(x => x.id !== L.id)));
-        }
+        if (!res.ok) throw new Error(res.error || 'toggle failed');
+        // сервер — источник истины: приводим состояние к его ответу
+        setFavorites(fs => (res.fav
+          ? (fs.some(x => x.id === L.id) ? fs : [L, ...fs])
+          : fs.filter(x => x.id !== L.id)));
       } catch (e) {
         console.error('toggle fav failed', e);
-        showSnack('Не удалось сохранить в избранное — обновите страницу');
+        setFavorites(fs => (wasFav ? (fs.some(x => x.id === L.id) ? fs : [L, ...fs]) : fs.filter(x => x.id !== L.id)));
+        showSnack('Не удалось сохранить в избранное — попробуйте ещё раз');
       }
     });
   };
@@ -380,11 +388,11 @@ export default function App() {
 
   const tabRoot = () => {
     if (tab === 'search') {
-      return <HomeTab t={t} go={go} tab={tab} setTab={guardedTab} onCreate={onCreate} lots={lots} lotsLoading={lotsLoading} myLots={myLots} matches={matches} chains={chains} />;
+      return <HomeTab t={t} go={go} tab={tab} setTab={guardedTab} onCreate={onCreate} lots={lots} lotsLoading={lotsLoading} myLots={myLots} matches={matches} chains={chains} favIds={favIds} onToggleFav={toggleFav} />;
     }
     if (tab === 'favorites') return (
       <div className="app"><div className="safe-top" />
-        <FavoritesScreen lots={favorites} go={go} />
+        <FavoritesScreen lots={favorites} go={go} onToggleFav={toggleFav} />
         <TabBar tab={tab} setTab={guardedTab} onCreate={onCreate} unread={0} />
       </div>
     );
@@ -518,6 +526,8 @@ export default function App() {
           chats={chats}
           chains={chains}
           deals={deals}
+          favorites={favorites}
+          onToggleFav={toggleFav}
           onConfirmDeal={confirmDeal}
           onCancelDeal={cancelDeal}
           onRateDeal={submitReview}
@@ -585,7 +595,7 @@ const VIEW_MODES = [
   { id: 'chain', label: 'Цепочки' },
 ];
 
-function HomeTab({ t, go, tab, setTab, onCreate, lots, lotsLoading, matches, chains, myLots }) {
+function HomeTab({ t, go, tab, setTab, onCreate, lots, lotsLoading, matches, chains, myLots, favIds, onToggleFav }) {
   const [cat, setCat] = React.useState('all');
   const [view, setView] = React.useState(t.mechanic || 'list');
   const [q, setQ] = React.useState('');
@@ -619,7 +629,7 @@ function HomeTab({ t, go, tab, setTab, onCreate, lots, lotsLoading, matches, cha
       </div>
       {view !== 'chain' && <CatRow active={cat} setActive={setCat} />}
       <div className="app-scroll">
-        {view === 'list' && <FeedList cat={cat} lots={shown} loading={lotsLoading} matches={matches} hints={t.matchHints} myLot={myLots && myLots[0]} onOpen={(id) => go('lot', { lotId: id })} onChains={() => setView('chain')} />}
+        {view === 'list' && <FeedList cat={cat} lots={shown} loading={lotsLoading} matches={matches} hints={t.matchHints} myLot={myLots && myLots[0]} onOpen={(id) => go('lot', { lotId: id })} onChains={() => setView('chain')} favIds={favIds} onToggleFav={onToggleFav} />}
         {view === 'swipe' && <FeedSwipe cat={cat} lots={shown} myLot={myLots && myLots[0]} onOpen={(id) => go('lot', { lotId: id })} />}
         {view === 'chain' && <FeedChain chains={chains} onOpenChain={(id) => go('chain', { id })} />}
       </div>

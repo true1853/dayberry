@@ -28,11 +28,12 @@ function WebNav({ view, setView, user, avatar, query, setQuery, onLogout, onCrea
   const tabs = [
     { id: 'home', label: 'Обмен' },
     { id: 'chains', label: 'Цепочки' },
+    { id: 'favorites', label: 'Избранное' },
     { id: 'deals', label: 'Сделки' },
-    { id: 'profile', label: 'Профиль' },
+    // «Профиль» живёт в меню под аватаром — там его и ищут
   ];
   const goTab = (id) => {
-    if (!authed && (id === 'deals' || id === 'profile')) {
+    if (!authed && (id === 'deals' || id === 'profile' || id === 'favorites')) {
       onAuthRequired && onAuthRequired('Войдите, чтобы открыть этот раздел');
       return;
     }
@@ -71,8 +72,9 @@ function WebNav({ view, setView, user, avatar, query, setQuery, onLogout, onCrea
             <div className="web-drop">
               {authed ? (
                 <>
+                  <button className="web-drop-item" onClick={() => goTab('profile')}><Icon name="user" size={17} color="var(--ink-2)" />Профиль</button>
                   <button className="web-drop-item" onClick={() => goTab('deals')}><Icon name="chat" size={17} color="var(--ink-2)" />Мои сделки</button>
-                  <button className="web-drop-item" onClick={() => goTab('profile')}><Icon name="wallet" size={17} color="var(--ink-2)" />Кошелёк</button>
+                  <button className="web-drop-item" onClick={() => goTab('favorites')}><Icon name="heart" size={17} color="var(--ink-2)" />Избранное</button>
                   <div className="web-drop-sep" />
                   <button className="web-drop-item danger" onClick={() => { setMenu(false); onLogout(); }}><Icon name="close" size={17} color="var(--berry-700)" />Выйти</button>
                 </>
@@ -130,14 +132,23 @@ const bigInputStyle = {
   cursor: 'text',
 };
 
-function WebLotCard({ L, onOpen, onOffer, onEdit }) {
+function WebLotCard({ L, onOpen, onEdit, fav = false, onToggleFav }) {
   return (
     <div className="web-lot" onClick={() => onOpen(L.id)}>
       <div className="web-lot-photo">
         <Photo label={L.photo} url={L.photoUrl} cat={L.cat} />
         {L.hot && <span className="web-lot-badge"><Icon name="flame" size={11} color="var(--berry)" /> Хит</span>}
         {onEdit && <button className="web-lot-heart" title="Редактировать" onClick={(e) => { e.stopPropagation(); onEdit(L); }}><Icon name="edit" size={15} color="var(--ink-2)" /></button>}
-        <button className="web-lot-heart" onClick={(e) => { e.stopPropagation(); onOffer && onOffer(L); }}><Icon name="heart" size={17} color="var(--ink-2)" /></button>
+        {onToggleFav && (
+          <button
+            className="web-lot-heart"
+            title={fav ? 'Убрать из избранного' : 'В избранное'}
+            aria-pressed={fav}
+            onClick={(e) => { e.stopPropagation(); onToggleFav(L); }}
+          >
+            <Icon name="heart" size={17} color={fav ? 'var(--berry)' : 'var(--ink-2)'} fill={fav ? 'currentColor' : 'none'} />
+          </button>
+        )}
       </div>
       <div className="web-lot-meta">
         <span className="web-lot-title">{L.title}</span>
@@ -167,7 +178,7 @@ function WebLotSkeleton() {
   );
 }
 
-function HomeView({ lots, lotsLoading = false, myLots = [], matches = [], query, setQuery, cat, setCat, city, setCity, onOpen, onOffer, onChains }) {
+function HomeView({ lots, lotsLoading = false, myLots = [], matches = [], query, setQuery, cat, setCat, city, setCity, onOpen, onChains, favIds, onToggleFav }) {
   const [cityOpen, setCityOpen] = React.useState(false);
   const q = (query || '').toLowerCase();
   const items = lots.filter(l => {
@@ -236,7 +247,7 @@ function HomeView({ lots, lotsLoading = false, myLots = [], matches = [], query,
           </div>
         ) : items.length ? (
           <div className="web-grid">
-            {items.map(L => <WebLotCard key={L.id} L={L} onOpen={onOpen} onOffer={onOffer} />)}
+            {items.map(L => <WebLotCard key={L.id} L={L} onOpen={onOpen} fav={favIds ? favIds.has(L.id) : false} onToggleFav={onToggleFav} />)}
           </div>
         ) : (
           <div className="web-empty"><Icon name="search" size={36} color="var(--ink-3)" /><span>Ничего не нашлось — попробуйте другой запрос</span></div>
@@ -437,6 +448,28 @@ const fmtChatTime = (iso) => {
   return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
 };
 
+function FavoritesView({ lots = [], onBack, onOpen, onToggleFav }) {
+  return (
+    <div className="web-container web-section">
+      <button className="web-back" onClick={onBack}><Icon name="back" size={16} color="var(--ink-2)" />На главную</button>
+      <div className="web-head" style={{ marginTop: 16 }}>
+        <h2>Избранное</h2>
+        <span className="cap">{lots.length ? `${lots.length} шт.` : ''}</span>
+      </div>
+      {lots.length ? (
+        <div className="web-grid">
+          {lots.map(L => <WebLotCard key={L.id} L={L} onOpen={onOpen} fav onToggleFav={onToggleFav} />)}
+        </div>
+      ) : (
+        <div className="web-empty">
+          <Icon name="heart" size={36} color="var(--ink-3)" />
+          <span>Пока пусто — нажимайте на сердечко в объявлении, чтобы сохранить его сюда</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DealsView({ onBack, chats = [], deals = [], onOpenDeal, onOpenChat }) {
   const sorted = [...chats].sort((a, b) => (b.messages?.[b.messages.length - 1]?.t || b.createdAt || '') < (a.messages?.[a.messages.length - 1]?.t || a.createdAt || '') ? -1 : 1);
   const activeDeals = deals.filter(d => d.status === 'active' && d.stage !== 'done');
@@ -616,7 +649,7 @@ function ProfileView({ user, profile, myLots, onOpenLot, onLogout, onProfileSave
 }
 
 // ---------------- root ----------------
-export default function WebApp({ lots, lotsLoading = false, myLots, user, profile, onLogout, onProfileSaved, onOffer, onCreate, onEditLot, matches = [], chats = [], chains = [], deals = [], onConfirmDeal, onCancelDeal, onRateDeal, authed = true, onAuthRequired, onOwnerChat }) {
+export default function WebApp({ lots, lotsLoading = false, myLots, user, profile, onLogout, onProfileSaved, onOffer, onCreate, onEditLot, matches = [], chats = [], chains = [], deals = [], favorites = [], onToggleFav, onConfirmDeal, onCancelDeal, onRateDeal, authed = true, onAuthRequired, onOwnerChat }) {
   const [view, setView] = React.useState('home');
   const [cat, setCat] = React.useState('all');
   const [city, setCity] = React.useState('all');
@@ -627,6 +660,8 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
   const avatar = (profile && profile.avatar) || (user && user.avatar) || '';
   const selected = selLot ? lots.find(l => l.id === selLot) || null : null;
 
+  const favIds = React.useMemo(() => new Set((favorites || []).map(f => f.id)), [favorites]);
+
   const goHome = () => { setView('home'); setSelLot(null); setSelDeal(null); setSelChat(null); };
   const dealOpen = selDeal ? deals.find(x => x.id === selDeal) || null : null;
 
@@ -634,7 +669,8 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
     <div className="web">
       <WebNav view={view} setView={setView} user={user} avatar={avatar} query={query} setQuery={setQuery} onLogout={onLogout} onCreate={onCreate} authed={authed} onAuthRequired={onAuthRequired} />
       <div className="web-body">
-        {view === 'home' && <HomeView lots={lots} lotsLoading={lotsLoading} myLots={myLots} matches={matches} query={query} setQuery={setQuery} cat={cat} setCat={setCat} city={city} setCity={setCity} onOpen={(id) => { setSelLot(id); setView('lot'); }} onOffer={onOffer} onChains={() => setView('chains')} />}
+        {view === 'home' && <HomeView lots={lots} lotsLoading={lotsLoading} myLots={myLots} matches={matches} query={query} setQuery={setQuery} cat={cat} setCat={setCat} city={city} setCity={setCity} onOpen={(id) => { setSelLot(id); setView('lot'); }} onChains={() => setView('chains')} favIds={favIds} onToggleFav={onToggleFav} />}
+        {view === 'favorites' && <FavoritesView lots={favorites} onBack={goHome} onOpen={(id) => { setSelLot(id); setView('lot'); }} onToggleFav={onToggleFav} />}
         {view === 'lot' && selected && <LotView L={selected} onBack={goHome} onOffer={onOffer} onOwnerChat={onOwnerChat} />}
         {view === 'chains' && <ChainsView onBack={goHome} />}
         {view === 'deals' && <DealsView onBack={goHome} chats={chats} deals={deals} onOpenDeal={(id) => setSelDeal(id)} onOpenChat={(id) => setSelChat(id)} />}
