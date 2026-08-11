@@ -112,7 +112,6 @@ export default function App() {
 
   const handleAuth = (user) => {
     setCurrentUser(user);
-    syncMe(user);
     setAuthed(true);
   };
 
@@ -198,7 +197,6 @@ export default function App() {
         onEditLot={(L) => setEditingLot(L)}
         onProfileSaved={(updated) => {
           setCurrentUser(updated);
-          syncMe(updated);
           setProfile(p => (p ? { ...p, ...updated } : updated));
         }}
       />
@@ -282,7 +280,6 @@ export default function App() {
           onLogout={handleLogout}
           onProfileSaved={(updated) => {
             setCurrentUser(updated);
-            syncMe(updated);
             setProfile(p => (p ? { ...p, ...updated } : updated));
           }}
           onOffer={(L) => setOfferLot(L)}
