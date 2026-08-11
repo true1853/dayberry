@@ -86,7 +86,7 @@ export function DealStatus({ deal, onBack, onConfirm, onChat, onDone }) {
         </div>
       </div>
 
-      <div style={{ position: 'sticky', bottom: 0, padding: '12px 18px calc(12px + env(safe-area-inset-bottom))', background: 'linear-gradient(to top, var(--bg) 72%, transparent)' }}>
+      <div style={{ position: 'sticky', bottom: 0, padding: '12px 18px calc(12px + env(safe-area-inset-bottom, 0px) + 28px)', background: 'linear-gradient(to top, var(--bg) 72%, transparent)' }}>
         <button className="btn btn-primary btn-block btn-lg" onClick={() => setConfirming(true)}>
           <Icon name="checkCircle" size={20} color="#fff" />Подтвердить получение
         </button>

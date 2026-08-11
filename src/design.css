@@ -125,6 +125,7 @@
 .amount { font-family: var(--mono); font-weight: 600; font-feature-settings: "tnum"; letter-spacing: -0.03em; white-space: nowrap; }
 
 /* ---------- buttons ---------- */
+button { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 .btn {
   appearance: none; border: none; cursor: pointer;
   font-family: var(--font); font-weight: 500; letter-spacing: -0.01em;

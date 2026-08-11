@@ -92,7 +92,7 @@ export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, lots }) {
         </div>
       </div>
 
-      <div style={{ position: 'sticky', bottom: 0, padding: '12px 18px calc(12px + env(safe-area-inset-bottom))', background: 'linear-gradient(to top, var(--bg) 72%, transparent)', display: 'flex', gap: 10 }}>
+      <div style={{ position: 'sticky', bottom: 0, padding: '12px 18px calc(12px + env(safe-area-inset-bottom, 0px) + 28px)', background: 'linear-gradient(to top, var(--bg) 72%, transparent)', display: 'flex', gap: 10 }}>
         <button className="btn btn-soft" style={{ flex: 'none', padding: '14px 16px' }} onClick={onOwnerChat}><Icon name="chat" size={20} color="var(--ink)" /></button>
         <button className="btn btn-primary grow btn-lg" onClick={() => onOffer(L)}><Icon name="swap" size={20} color="#fff" />Предложить обмен</button>
       </div>

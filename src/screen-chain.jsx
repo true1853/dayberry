@@ -154,7 +154,7 @@ export function ChainDetail({ chainId, onBack, onJoin, chains = [] }) {
         </div>
       </div>
 
-      <div style={{ position: 'sticky', bottom: 0, padding: '12px 18px calc(12px + env(safe-area-inset-bottom))', background: 'linear-gradient(to top, var(--bg) 70%, transparent)' }}>
+      <div style={{ position: 'sticky', bottom: 0, padding: '12px 18px calc(12px + env(safe-area-inset-bottom, 0px) + 28px)', background: 'linear-gradient(to top, var(--bg) 70%, transparent)' }}>
         <button className="btn btn-primary btn-block btn-lg" onClick={() => onJoin(chain)}>
           <Icon name="chain" size={20} color="#fff" />Вступить в цепочку
         </button>

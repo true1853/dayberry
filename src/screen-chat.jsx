@@ -144,7 +144,7 @@ export function ChatThread({ chatId, onBack, onOpenDeal }) {
         })}
       </div>
 
-      <div className="row gap8" style={{ padding: '8px 14px calc(12px + env(safe-area-inset-bottom))', borderTop: '1px solid var(--line)', background: '#fff', alignItems: 'center' }}>
+      <div className="row gap8" style={{ padding: '8px 14px calc(12px + env(safe-area-inset-bottom, 0px) + 24px)', borderTop: '1px solid var(--line)', background: '#fff', alignItems: 'center' }}>
         <button style={{ width: 40, height: 40, borderRadius: 999, border: 'none', background: 'var(--line-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none', cursor: 'pointer' }}><Icon name="plusCircle" size={22} color="var(--ink-2)" /></button>
         <input value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()} placeholder="Сообщение…" style={{ flex: 1, border: '1px solid var(--line)', borderRadius: 999, padding: '11px 16px', fontSize: 15, fontFamily: 'var(--font)', outline: 'none', background: 'var(--bg)' }} />
         <button onClick={send} style={{ width: 40, height: 40, borderRadius: 999, border: 'none', background: 'var(--berry)', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none', cursor: 'pointer' }}><Icon name="send" size={20} color="#fff" /></button>

@@ -404,7 +404,7 @@ export function CreateListing({ onClose, onPublish, initialWants = '', editLot =
         )}
       </div>
 
-      <div className="px" style={{ padding: '12px 18px calc(12px + env(safe-area-inset-bottom))', borderTop: '1px solid var(--line)', background: '#fff' }}>
+      <div className="px" style={{ padding: '12px 18px calc(12px + env(safe-area-inset-bottom, 0px) + 28px)', borderTop: '1px solid var(--line)', background: '#fff' }}>
         <button className="btn btn-primary btn-block btn-lg" onClick={submit} disabled={publishing} style={{ opacity: publishing ? 0.8 : 1 }}>
           {publishing ? (
             <><span className="spin" />{editLot ? 'Сохраняем…' : 'Публикуем…'}</>
