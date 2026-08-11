@@ -181,17 +181,14 @@ export default function App() {
   React.useEffect(() => {
     (async () => {
       try {
-        const u = await sessionAction();
+        const [u, ls] = await Promise.all([sessionAction(), listLots()]);
+        setLots(ls);
         if (u) {
           setCurrentUser(u);
           setAuthed(true);
-          const ls = await listLots();
-          setLots(ls);
           await loadAuthedData();
         } else {
           setAuthed(false);
-          const ls = await listLots();
-          setLots(ls);
         }
       } catch (e) {
         console.error('bootstrap failed', e);

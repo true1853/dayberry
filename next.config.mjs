@@ -33,18 +33,6 @@ const nextConfig = {
       },
     ];
   },
-  // Оптимизация webpack
-  webpack: (config) => {
-    // Уменьшаем размер бандла в production
-    if (process.env.NODE_ENV === 'production') {
-      config.optimization.splitChunks = {
-        chunks: 'all',
-        minSize: 20000,
-        maxSize: 244000,
-      };
-    }
-    return config;
-  },
 };
 
 export default nextConfig;
