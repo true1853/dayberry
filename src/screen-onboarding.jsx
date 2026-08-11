@@ -147,14 +147,20 @@ export function CreateListing({ onClose, onPublish, initialWants = '', editLot =
     aiBusyRef.current = true;
     setAiBusy(true);
     setAiError('');
+    const call = () => analyzeListingAction({
+      kind,
+      title: title.trim(),
+      photo: photo && photo.length <= 3500000 ? photo : '',
+      value: valueNum,
+      wants: wants.trim(),
+    });
     try {
-      const res = await analyzeListingAction({
-        kind,
-        title: title.trim(),
-        photo: photo && photo.length <= 3500000 ? photo : '',
-        value: valueNum,
-        wants: wants.trim(),
-      });
+      let res;
+      try {
+        res = await call();
+      } catch (e) {
+        res = await call(); // один повтор при сетевом сбое
+      }
       if (!res.ok) { setAiError(res.error || 'Не удалось получить ответ ИИ'); return; }
       const d = res.draft || {};
       setWantsHints((d.wants || '').split(',').map(s => s.trim()).filter(Boolean));
