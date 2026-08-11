@@ -33,7 +33,7 @@ model User {
   sentMessages Message[]     @relation("messageFrom")
   transactions Transaction[]
   favorites    Favorite[]
-  
+
   @@index([email])
   @@index([city])
   @@index([createdAt])
@@ -48,6 +48,7 @@ model Favorite {
   createdAt DateTime @default(now())
 
   @@unique([userId, lotId])
+  @@index([userId, createdAt])
 }
 
 model AiCache {
@@ -67,69 +68,76 @@ model Review {
   rating    Int
   text      String
   createdAt DateTime @default(now())
+
+  @@index([targetId, createdAt])
 }
 
 model Lot {
-  id        String   @id @default(cuid())
-  ownerId   String
-  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  ownerKey  String   @default("me")
-  kind      String   @default("item")
-  cat       String
-  title     String
-  desc      String   @default("")
-  wants     String   @default("")
-  value     Int
-  aiLow     Int
-  aiHigh    Int
-  valuationSource String @default("manual") // 'ai' | 'manual'
-  condition String   @default("Новое или Б/У")
-  photo     String   @default("")
-  photoUrl  String?  @default("")
-  views     Int      @default(0)
-  hot       Boolean  @default(false)
-  posted    String   @default("только что")
-  status    String   @default("active")
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
-  lotPhotos LotPhoto[]
-  favorites Favorite[]
-  deals     Deal[]   @relation("dealTarget")
-  myDeals   Deal[]   @relation("dealMyLot")
-  
+  id              String     @id @default(cuid())
+  ownerId         String
+  owner           User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerKey        String     @default("me")
+  kind            String     @default("item")
+  cat             String
+  title           String
+  desc            String     @default("")
+  wants           String     @default("")
+  value           Int
+  aiLow           Int
+  aiHigh          Int
+  valuationSource String     @default("manual") // 'ai' | 'manual'
+  condition       String     @default("Новое или Б/У")
+  photo           String     @default("")
+  photoUrl        String?    @default("")
+  views           Int        @default(0)
+  hot             Boolean    @default(false)
+  posted          String     @default("только что")
+  status          String     @default("active")
+  sortOrder       Int        @default(0)
+  createdAt       DateTime   @default(now())
+  lotPhotos       LotPhoto[]
+  favorites       Favorite[]
+  deals           Deal[]     @relation("dealTarget")
+  myDeals         Deal[]     @relation("dealMyLot")
+
   @@index([status])
   @@index([ownerId])
   @@index([createdAt])
   @@index([sortOrder])
   @@index([cat])
+  // основной запрос ленты: where status + order by sortOrder, createdAt
+  @@index([status, sortOrder, createdAt])
+  @@index([ownerId, status])
 }
 
 model LotPhoto {
-  id     String @id @default(cuid())
-  lotId  String
-  lot    Lot    @relation(fields: [lotId], references: [id], onDelete: Cascade)
-  url    String
-  label  String @default("")
-  order  Int    @default(0)
+  id    String @id @default(cuid())
+  lotId String
+  lot   Lot    @relation(fields: [lotId], references: [id], onDelete: Cascade)
+  url   String
+  label String @default("")
+  order Int    @default(0)
+
+  @@index([lotId, order])
 }
 
 model Deal {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation("dealInitiator", fields: [userId], references: [id], onDelete: Cascade)
-  lotId     String
-  lot       Lot      @relation("dealTarget", fields: [lotId], references: [id], onDelete: Cascade)
-  myLotId   String?
-  myLot     Lot?     @relation("dealMyLot", fields: [myLotId], references: [id], onDelete: SetNull)
-  credits   Int      @default(0)
-  stage     String   @default("created")
-  status    String   @default("active")
-  initiatorConfirmed Boolean @default(false)
-  partnerConfirmed   Boolean @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  chat      Chat?
-  
+  id                 String   @id @default(cuid())
+  userId             String
+  user               User     @relation("dealInitiator", fields: [userId], references: [id], onDelete: Cascade)
+  lotId              String
+  lot                Lot      @relation("dealTarget", fields: [lotId], references: [id], onDelete: Cascade)
+  myLotId            String?
+  myLot              Lot?     @relation("dealMyLot", fields: [myLotId], references: [id], onDelete: SetNull)
+  credits            Int      @default(0)
+  stage              String   @default("created")
+  status             String   @default("active")
+  initiatorConfirmed Boolean  @default(false)
+  partnerConfirmed   Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  chat               Chat?
+
   @@index([status])
   @@index([userId])
   @@index([lotId])
@@ -146,6 +154,9 @@ model Transaction {
   amt       Int      @default(0)
   status    String   @default("done")
   createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, status])
 }
 
 model Chat {
@@ -158,7 +169,7 @@ model Chat {
   deal      Deal?     @relation(fields: [dealId], references: [id], onDelete: SetNull)
   createdAt DateTime  @default(now())
   messages  Message[]
-  
+
   @@index([userId])
   @@index([partnerId])
   @@index([dealId])
@@ -173,14 +184,16 @@ model Message {
   from      User?    @relation("messageFrom", fields: [fromId], references: [id], onDelete: SetNull)
   text      String
   createdAt DateTime @default(now())
+
+  @@index([chatId, createdAt])
 }
 
 model Chain {
-  id        String       @id @default(cuid())
-  score     Int          @default(80)
-  note      String       @default("")
-  status    String       @default("active")
-  createdAt DateTime     @default(now())
+  id        String      @id @default(cuid())
+  score     Int         @default(80)
+  note      String      @default("")
+  status    String      @default("active")
+  createdAt DateTime    @default(now())
   steps     ChainStep[]
 }
 
@@ -194,4 +207,6 @@ model ChainStep {
   to       String
   value    Int
   order    Int    @default(0)
+
+  @@index([chainId, order])
 }
