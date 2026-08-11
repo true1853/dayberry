@@ -25,7 +25,7 @@ async function upsertUser(profile) {
 export async function GET(req, { params }) {
   const { provider } = await params;
   const url = new URL(req.url);
-  const base = APP_URL() || url.origin;
+  const base = url.origin || APP_URL();
 
   // On any OAuth failure redirect to the clean origin (no query params),
   // and signal the error via a short-lived cookie the client can read + clear.
@@ -50,7 +50,7 @@ export async function GET(req, { params }) {
       try { parsed = JSON.parse(stored); } catch { parsed = null; }
       if (!parsed || parsed.state !== state || !parsed.verifier) return fail('state mismatch');
 
-      const profile = await exchangeVk(code, deviceId, parsed.verifier, state);
+      const profile = await exchangeVk(code, deviceId, parsed.verifier, state, base);
       const user = await upsertUser(profile);
       await createSession(user.id);
       return NextResponse.redirect(`${base}/`);
@@ -59,7 +59,7 @@ export async function GET(req, { params }) {
     if (provider === 'yandex') {
       const code = url.searchParams.get('code');
       if (!code) return fail('no code');
-      const profile = await exchangeYandex(code);
+      const profile = await exchangeYandex(code, base);
       const user = await upsertUser(profile);
       await createSession(user.id);
       return NextResponse.redirect(`${base}/`);

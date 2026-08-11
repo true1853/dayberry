@@ -345,7 +345,7 @@ export function AboutSheet({ open, onClose }) {
           <div className="chip chip-berry" onClick={() => {}}><Icon name="shield" size={14} color="var(--berry)" />Правила сервиса</div>
           <div className="chip chip-berry" onClick={() => {}}><Icon name="chat" size={14} color="var(--berry)" />Поддержка</div>
         </div>
-        <span className="cap" style={{ textAlign: 'center', color: 'var(--ink-3)' }}>dayberry.prismatica.agency</span>
+        <span className="cap" style={{ textAlign: 'center', color: 'var(--ink-3)' }}>dayberry.ru</span>
       </div>
     </Sheet>
   );
@@ -611,7 +611,8 @@ export function SettingsScreen({ user, profile, onBack, onLogout, onProfileSaved
   };
 
   const shareInvite = async () => {
-    const text = 'Дай бери — обмен без денег. Присоединяйся: https://dayberry.prismatica.agency';
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://dayberry.ru';
+    const text = `Дай бери — обмен без денег. Присоединяйся: ${origin}`;
     if (typeof navigator !== 'undefined' && navigator.share) {
       try { await navigator.share({ title: 'Дай бери', text }); return; } catch {}
     }

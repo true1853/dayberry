@@ -724,10 +724,11 @@ export async function joinChainAction(chainId) {
 
 // ---------- OAuth (Yandex ID / VK ID) ----------
 
-export async function getOAuthUrlAction(provider) {
+export async function getOAuthUrlAction(provider, origin) {
   const c = await cookies();
+  const base = typeof origin === 'string' && origin ? origin.replace(/\/$/, '') : '';
   if (provider === 'vk') {
-    const r = vkAuthStart();
+    const r = vkAuthStart(base || undefined);
     if (!r) return { ok: false, error: 'OAuth VK не настроен — добавьте ключи в .env' };
     c.set('vk_oauth', JSON.stringify({ state: r.state, verifier: r.codeVerifier }), {
       httpOnly: true,
@@ -739,7 +740,7 @@ export async function getOAuthUrlAction(provider) {
     return { ok: true, url: r.url };
   }
   if (provider === 'yandex') {
-    const r = yandexAuthStart();
+    const r = yandexAuthStart(base || undefined);
     if (!r) return { ok: false, error: 'OAuth Яндекса не настроен — добавьте ключи в .env' };
     return { ok: true, url: r.url };
   }
