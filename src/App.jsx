@@ -1,38 +1,17 @@
 'use client';
 // App.jsx — root: navigation, phone frame scaling, tweaks
 import React from 'react';
-import dynamic from 'next/dynamic';
 import { sessionAction, listLots, logoutAction, createLotAction, updateLotAction, getMyLots, getProfileAction, listDealsAction, getWalletAction, listChatsAction, listChainsAction, getMatchesAction, createDealAction, confirmReceiptAction, confirmPartnerAction, cancelDealAction, topUpAction, joinChainAction, startChatAction, getDealChatAction, listFavoritesAction, toggleFavoriteAction } from './server/actions.js';
-// Ленивая загрузка экранов
-const FeedList = dynamic(() => import('./screen-feed.jsx').then(mod => mod.FeedList), { ssr: false });
-const FeedSwipe = dynamic(() => import('./screen-feed.jsx').then(mod => mod.FeedSwipe), { ssr: false });
-const CatRow = dynamic(() => import('./screen-feed.jsx').then(mod => mod.CatRow), { ssr: false });
-const FavoritesScreen = dynamic(() => import('./screen-feed.jsx').then(mod => mod.FavoritesScreen), { ssr: false });
-
-const FeedChain = dynamic(() => import('./screen-chain.jsx').then(mod => mod.FeedChain), { ssr: false });
-const ChainDetail = dynamic(() => import('./screen-chain.jsx').then(mod => mod.ChainDetail), { ssr: false });
-
-const LotDetail = dynamic(() => import('./screen-lot.jsx').then(mod => mod.LotDetail), { ssr: false });
-const OfferSheet = dynamic(() => import('./screen-lot.jsx').then(mod => mod.OfferSheet), { ssr: false });
-
-const DealStatus = dynamic(() => import('./screen-deal.jsx').then(mod => mod.DealStatus), { ssr: false });
-
-const DealsList = dynamic(() => import('./screen-chat.jsx').then(mod => mod.DealsList), { ssr: false });
-const ChatThread = dynamic(() => import('./screen-chat.jsx').then(mod => mod.ChatThread), { ssr: false });
-
-const Wallet = dynamic(() => import('./screen-wallet.jsx').then(mod => mod.Wallet), { ssr: false });
-const CreditsInfo = dynamic(() => import('./screen-wallet.jsx').then(mod => mod.CreditsInfo), { ssr: false });
-
-const Onboarding = dynamic(() => import('./screen-onboarding.jsx').then(mod => mod.Onboarding), { ssr: false });
-const CreateListing = dynamic(() => import('./screen-onboarding.jsx').then(mod => mod.CreateListing), { ssr: false });
-
-const AuthScreen = dynamic(() => import('./screen-auth.jsx').then(mod => mod.AuthScreen), { ssr: false });
-
-const ProfileScreen = dynamic(() => import('./screen-profile.jsx').then(mod => mod.ProfileScreen), { ssr: false });
-const SettingsScreen = dynamic(() => import('./screen-profile.jsx').then(mod => mod.SettingsScreen), { ssr: false });
-const MyLotsScreen = dynamic(() => import('./screen-profile.jsx').then(mod => mod.MyLotsScreen), { ssr: false });
-
-const WebApp = dynamic(() => import('./web-app.jsx'), { ssr: false });
+import { FeedList, FeedSwipe, CatRow, FavoritesScreen } from './screen-feed.jsx';
+import { FeedChain, ChainDetail } from './screen-chain.jsx';
+import { LotDetail, OfferSheet } from './screen-lot.jsx';
+import { DealStatus } from './screen-deal.jsx';
+import { DealsList, ChatThread } from './screen-chat.jsx';
+import { Wallet, CreditsInfo } from './screen-wallet.jsx';
+import { Onboarding, CreateListing } from './screen-onboarding.jsx';
+import { AuthScreen } from './screen-auth.jsx';
+import { ProfileScreen, SettingsScreen, MyLotsScreen } from './screen-profile.jsx';
+import WebApp from './web-app.jsx';
 import { parseRoute, tabPath, screenPath, readPath } from './router.js';
 
 import { AppBar, IconBtn, TabBar } from './ui.jsx';
