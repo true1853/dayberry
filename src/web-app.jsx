@@ -153,7 +153,21 @@ function WebLotCard({ L, onOpen, onOffer, onEdit }) {
   );
 }
 
-function HomeView({ lots, myLots = [], matches = [], query, setQuery, cat, setCat, city, setCity, onOpen, onOffer, onChains }) {
+// Плейсхолдер карточки, пока едет лента.
+function WebLotSkeleton() {
+  return (
+    <div className="web-lot" aria-hidden="true">
+      <div className="web-lot-photo"><div className="skel" style={{ position: 'absolute', inset: 0 }} /></div>
+      <div className="web-lot-meta">
+        <div className="skel" style={{ height: 15, width: '80%', borderRadius: 4 }} />
+        <div className="skel" style={{ height: 13, width: '50%', borderRadius: 4 }} />
+        <div className="skel" style={{ height: 17, width: '35%', borderRadius: 4, marginTop: 4 }} />
+      </div>
+    </div>
+  );
+}
+
+function HomeView({ lots, lotsLoading = false, myLots = [], matches = [], query, setQuery, cat, setCat, city, setCity, onOpen, onOffer, onChains }) {
   const [cityOpen, setCityOpen] = React.useState(false);
   const q = (query || '').toLowerCase();
   const items = lots.filter(l => {
@@ -216,7 +230,11 @@ function HomeView({ lots, myLots = [], matches = [], query, setQuery, cat, setCa
           <h2>{q ? `Результаты по «${query}»` : cat === 'all' ? 'Обмены рядом' : CATS.find(c => c[0] === cat)?.[1]}</h2>
           <a href="#" onClick={e => e.preventDefault()}>Все объявления →</a>
         </div>
-        {items.length ? (
+        {lotsLoading && !items.length ? (
+          <div className="web-grid">
+            {Array.from({ length: 8 }, (_, i) => <WebLotSkeleton key={i} />)}
+          </div>
+        ) : items.length ? (
           <div className="web-grid">
             {items.map(L => <WebLotCard key={L.id} L={L} onOpen={onOpen} onOffer={onOffer} />)}
           </div>
@@ -578,7 +596,7 @@ function ProfileView({ user, profile, myLots, onOpenLot, onLogout, onProfileSave
 }
 
 // ---------------- root ----------------
-export default function WebApp({ lots, myLots, user, profile, onLogout, onProfileSaved, onOffer, onCreate, onEditLot, matches = [], chats = [], chains = [], deals = [], onConfirmDeal, onCancelDeal, authed = true, onAuthRequired, onOwnerChat }) {
+export default function WebApp({ lots, lotsLoading = false, myLots, user, profile, onLogout, onProfileSaved, onOffer, onCreate, onEditLot, matches = [], chats = [], chains = [], deals = [], onConfirmDeal, onCancelDeal, authed = true, onAuthRequired, onOwnerChat }) {
   const [view, setView] = React.useState('home');
   const [cat, setCat] = React.useState('all');
   const [city, setCity] = React.useState('all');
@@ -596,7 +614,7 @@ export default function WebApp({ lots, myLots, user, profile, onLogout, onProfil
     <div className="web">
       <WebNav view={view} setView={setView} user={user} avatar={avatar} query={query} setQuery={setQuery} onLogout={onLogout} onCreate={onCreate} authed={authed} onAuthRequired={onAuthRequired} />
       <div className="web-body">
-        {view === 'home' && <HomeView lots={lots} myLots={myLots} matches={matches} query={query} setQuery={setQuery} cat={cat} setCat={setCat} city={city} setCity={setCity} onOpen={(id) => { setSelLot(id); setView('lot'); }} onOffer={onOffer} onChains={() => setView('chains')} />}
+        {view === 'home' && <HomeView lots={lots} lotsLoading={lotsLoading} myLots={myLots} matches={matches} query={query} setQuery={setQuery} cat={cat} setCat={setCat} city={city} setCity={setCity} onOpen={(id) => { setSelLot(id); setView('lot'); }} onOffer={onOffer} onChains={() => setView('chains')} />}
         {view === 'lot' && selected && <LotView L={selected} onBack={goHome} onOffer={onOffer} onOwnerChat={onOwnerChat} />}
         {view === 'chains' && <ChainsView onBack={goHome} />}
         {view === 'deals' && <DealsView onBack={goHome} chats={chats} deals={deals} onOpenDeal={(id) => setSelDeal(id)} onOpenChat={(id) => setSelChat(id)} />}

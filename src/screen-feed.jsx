@@ -64,7 +64,7 @@ function MatchStrip({ onOpen, onChains, matches = [], lots = [], myLot = null })
 // ===========================================================
 // VARIANT A — LIST / FEED
 // ===========================================================
-export function FeedList({ cat, onOpen, onChains, hints = true, limit, lots = [], matches = [], myLot = null }) {
+export function FeedList({ cat, onOpen, onChains, hints = true, limit, lots = [], matches = [], myLot = null, loading = false }) {
   let items = lots.filter(l => cat === 'all' || l.cat === cat);
   if (limit) items = items.slice(0, limit);
   return (
@@ -76,8 +76,25 @@ export function FeedList({ cat, onOpen, onChains, hints = true, limit, lots = []
           <span className="cap row gap4"><Icon name="map" size={14} color="var(--ink-3)" />Москва</span>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          {items.map(l => <LotCard key={l.id} lot={l} compact onClick={() => onOpen(l.id)} />)}
+          {loading && !items.length
+            ? Array.from({ length: 4 }, (_, i) => <LotCardSkeleton key={i} />)
+            : items.map(l => <LotCard key={l.id} lot={l} compact onClick={() => onOpen(l.id)} />)}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Плейсхолдер карточки, пока едет лента: держит layout, чтобы контент
+// не прыгал при появлении данных.
+export function LotCardSkeleton() {
+  return (
+    <div className="card skel-card" aria-hidden="true">
+      <div className="skel" style={{ aspectRatio: '1 / 1', borderRadius: 0 }} />
+      <div className="col gap6" style={{ padding: '10px 12px 12px' }}>
+        <div className="skel" style={{ height: 13, width: '85%', borderRadius: 4 }} />
+        <div className="skel" style={{ height: 11, width: '55%', borderRadius: 4 }} />
+        <div className="skel" style={{ height: 15, width: '40%', borderRadius: 4, marginTop: 2 }} />
       </div>
     </div>
   );

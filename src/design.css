@@ -281,3 +281,13 @@ button { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
   animation: snack-in .25s cubic-bezier(.2,.8,.2,1) both;
 }
 @keyframes snack-in { from { opacity: 0; transform: translateX(-50%) translateY(-12px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+
+/* ---------- skeletons ---------- */
+.skel {
+  background: linear-gradient(90deg, var(--line-2) 25%, var(--line) 37%, var(--line-2) 63%);
+  background-size: 400% 100%;
+  animation: skel-shimmer 1.4s ease-in-out infinite;
+}
+.skel-card { overflow: hidden; }
+@keyframes skel-shimmer { from { background-position: 100% 50%; } to { background-position: 0 50%; } }
+@media (prefers-reduced-motion: reduce) { .skel { animation: none; } }

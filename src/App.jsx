@@ -1,7 +1,7 @@
 'use client';
 // App.jsx — root: navigation, phone frame scaling, tweaks
 import React from 'react';
-import { sessionAction, listLots, logoutAction, createLotAction, updateLotAction, getMyLots, getProfileAction, listDealsAction, getWalletAction, listChatsAction, listChainsAction, getMatchesAction, createDealAction, confirmReceiptAction, confirmPartnerAction, cancelDealAction, topUpAction, joinChainAction, startChatAction, getDealChatAction, listFavoritesAction, toggleFavoriteAction } from './server/actions.js';
+import { bootstrapAction, loadAuthedDataAction, logoutAction, createLotAction, updateLotAction, getWalletAction, listDealsAction, listChatsAction, getMatchesAction, createDealAction, confirmReceiptAction, confirmPartnerAction, cancelDealAction, topUpAction, joinChainAction, startChatAction, getDealChatAction, toggleFavoriteAction } from './server/actions.js';
 import { FeedList, FeedSwipe, CatRow, FavoritesScreen } from './screen-feed.jsx';
 import { FeedChain, ChainDetail } from './screen-chain.jsx';
 import { LotDetail, OfferSheet } from './screen-lot.jsx';
@@ -78,6 +78,7 @@ export default function App() {
   const [editingLot, setEditingLot] = React.useState(null);
   const [infoOpen, setInfoOpen] = React.useState(false);
   const [lots, setLots] = React.useState([]);
+  const [lotsLoading, setLotsLoading] = React.useState(true);
   const [myLots, setMyLots] = React.useState([]);
   const [profile, setProfile] = React.useState(null);
   const [deals, setDeals] = React.useState([]);
@@ -143,38 +144,52 @@ export default function App() {
   React.useEffect(() => { applyAccent(t.accent); }, [t.accent]);
 
   const loadAuthedData = async () => {
-    const [ml, pf, de, wa, ch, cn, ma, fv] = await Promise.all([
-      getMyLots(), getProfileAction(),
-      listDealsAction(), getWalletAction(), listChatsAction(), listChainsAction(), getMatchesAction(), listFavoritesAction(),
-    ]);
-    setMyLots(ml);
-    setProfile(pf);
-    setDeals(de || []);
-    setWallet(wa);
-    setChats(ch || []);
-    setChains(cn || []);
-    setMatches(ma || []);
-    setFavorites(fv || []);
+    const d = await loadAuthedDataAction();
+    if (!d) return;
+    setMyLots(d.myLots || []);
+    setProfile(d.profile);
+    setDeals(d.deals || []);
+    setWallet(d.wallet);
+    setChats(d.chats || []);
+    setFavorites(d.favorites || []);
   };
 
+  // Мэтчинг ходит во внешний AI — держим его вне критического пути загрузки.
+  const loadMatches = async () => {
+    try {
+      const ma = await getMatchesAction();
+      setMatches(ma || []);
+    } catch (e) {
+      console.error('matches failed', e);
+    }
+  };
+
+  // Прогрессивная загрузка в три round-trip'а вместо десяти: сессия с лентой,
+  // затем данные пользователя, и только в конце AI-мэтчи. Порядок здесь — это
+  // и есть приоритет отрисовки, потому что server actions идут последовательно.
   React.useEffect(() => {
+    let cancelled = false;
     (async () => {
+      let u = null;
       try {
-        const [u, ls] = await Promise.all([sessionAction(), listLots()]);
-        setLots(ls);
-        if (u) {
-          setCurrentUser(u);
-          setAuthed(true);
-          await loadAuthedData();
-        } else {
-          setAuthed(false);
-        }
+        const boot = await bootstrapAction();
+        if (cancelled) return;
+        u = boot.user;
+        setLots(boot.lots || []);
+        setChains(boot.chains || []);
+        if (u) { setCurrentUser(u); setAuthed(true); } else { setAuthed(false); }
       } catch (e) {
         console.error('bootstrap failed', e);
       } finally {
-        setBooting(false);
+        if (!cancelled) { setBooting(false); setLotsLoading(false); }
       }
+
+      if (cancelled || !u) return;
+      try { await loadAuthedData(); } catch (e) { console.error('authed data failed', e); }
+      if (cancelled) return;
+      loadMatches();
     })();
+    return () => { cancelled = true; };
   }, []);
 
   const handleAuth = async (user) => {
@@ -182,6 +197,7 @@ export default function App() {
     setAuthed(true);
     setAuthOpen(false);
     try { await loadAuthedData(); } catch (e) { console.error('load after auth failed', e); }
+    loadMatches();
     const next = pendingActionRef.current;
     pendingActionRef.current = null;
     if (next) next();
@@ -335,7 +351,7 @@ export default function App() {
 
   const tabRoot = () => {
     if (tab === 'search') {
-      return <HomeTab t={t} go={go} tab={tab} setTab={guardedTab} onCreate={onCreate} lots={lots} myLots={myLots} matches={matches} chains={chains} />;
+      return <HomeTab t={t} go={go} tab={tab} setTab={guardedTab} onCreate={onCreate} lots={lots} lotsLoading={lotsLoading} myLots={myLots} matches={matches} chains={chains} />;
     }
     if (tab === 'favorites') return (
       <div className="app"><div className="safe-top" />
@@ -460,6 +476,7 @@ export default function App() {
       {isDesktop ? (
         <WebApp
           lots={lots}
+          lotsLoading={lotsLoading}
           myLots={myLots}
           user={currentUser}
           profile={profile}
@@ -545,7 +562,7 @@ const VIEW_MODES = [
   { id: 'chain', label: 'Цепочки' },
 ];
 
-function HomeTab({ t, go, tab, setTab, onCreate, lots, matches, chains, myLots }) {
+function HomeTab({ t, go, tab, setTab, onCreate, lots, lotsLoading, matches, chains, myLots }) {
   const [cat, setCat] = React.useState('all');
   const [view, setView] = React.useState(t.mechanic || 'list');
   const [q, setQ] = React.useState('');
@@ -579,7 +596,7 @@ function HomeTab({ t, go, tab, setTab, onCreate, lots, matches, chains, myLots }
       </div>
       {view !== 'chain' && <CatRow active={cat} setActive={setCat} />}
       <div className="app-scroll">
-        {view === 'list' && <FeedList cat={cat} lots={shown} matches={matches} hints={t.matchHints} myLot={myLots && myLots[0]} onOpen={(id) => go('lot', { lotId: id })} onChains={() => setView('chain')} />}
+        {view === 'list' && <FeedList cat={cat} lots={shown} loading={lotsLoading} matches={matches} hints={t.matchHints} myLot={myLots && myLots[0]} onOpen={(id) => go('lot', { lotId: id })} onChains={() => setView('chain')} />}
         {view === 'swipe' && <FeedSwipe cat={cat} lots={shown} myLot={myLots && myLots[0]} onOpen={(id) => go('lot', { lotId: id })} />}
         {view === 'chain' && <FeedChain chains={chains} onOpenChain={(id) => go('chain', { id })} />}
       </div>
