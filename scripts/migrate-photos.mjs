@@ -15,42 +15,43 @@ const isDataUrl = (v) => typeof v === 'string' && v.startsWith('data:image/');
 let freedBytes = 0;
 
 async function migrateTable({ label, model, field, where }) {
-  let cursor = null;
+  // Без курсора: конвертированные строки сами выпадают из фильтра, поэтому
+  // каждая итерация забирает следующую порцию необработанных. Курсорная
+  // пагинация здесь давала пропуски — она опиралась на id уже обновлённой
+  // строки, которой в отфильтрованной выборке больше нет.
+  const failed = new Set();
   let scanned = 0;
   let converted = 0;
-  let failed = 0;
 
   for (;;) {
     const rows = await model.findMany({
-      where,
+      where: failed.size ? { AND: [where, { id: { notIn: [...failed] } }] } : where,
       select: { id: true, [field]: true },
-      orderBy: { id: 'asc' },
       take: BATCH,
-      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     });
     if (!rows.length) break;
-    cursor = rows[rows.length - 1].id;
     scanned += rows.length;
 
     for (const row of rows) {
       const value = row[field];
-      if (!isDataUrl(value)) continue;
+      // строка не конвертировалась — исключаем явно, иначе цикл не завершится
+      if (!isDataUrl(value)) { failed.add(row.id); continue; }
       try {
         const url = await saveDataUrl(value);
-        if (!url) { failed++; continue; }
+        if (!url) { failed.add(row.id); continue; }
         await model.update({ where: { id: row.id }, data: { [field]: url } });
         freedBytes += value.length;
         converted++;
       } catch (e) {
-        failed++;
+        failed.add(row.id);
         console.error(`  ! ${label} ${row.id}: ${e.message}`);
       }
     }
     process.stdout.write(`  ${label}: просмотрено ${scanned}, перенесено ${converted}\r`);
   }
 
-  console.log(`  ${label}: просмотрено ${scanned}, перенесено ${converted}${failed ? `, ошибок ${failed}` : ''}          `);
-  return { converted, failed };
+  console.log(`  ${label}: просмотрено ${scanned}, перенесено ${converted}${failed.size ? `, пропущено ${failed.size}` : ''}          `);
+  return { converted, failed: failed.size };
 }
 
 async function main() {
