@@ -1,7 +1,7 @@
 'use client';
 // App.jsx — root: navigation, phone frame scaling, tweaks
 import React from 'react';
-import { sessionAction, listLots, logoutAction, createLotAction, updateLotAction, getMyLots, getProfileAction, listDealsAction, getWalletAction, listChatsAction, listChainsAction, getMatchesAction, createDealAction, confirmReceiptAction, joinChainAction } from './server/actions.js';
+import { sessionAction, listLots, logoutAction, createLotAction, updateLotAction, getMyLots, getProfileAction, listDealsAction, getWalletAction, listChatsAction, listChainsAction, getMatchesAction, createDealAction, confirmReceiptAction, joinChainAction, startChatAction } from './server/actions.js';
 import { FeedList, FeedSwipe, CatRow } from './screen-feed.jsx';
 import { FeedChain, ChainDetail } from './screen-chain.jsx';
 import { LotDetail, OfferSheet } from './screen-lot.jsx';
@@ -197,6 +197,18 @@ export default function App() {
 
   const onCreate = () => requireAuth('Создать объявление можно после регистрации', () => { setAuthOpen(false); setCreating(true); });
 
+  const openChatWith = async (L) => {
+    if (!L) return;
+    const existing = chats.find(c => c.partner.id === L.ownerId);
+    if (existing) { go('chat', { id: existing.id }); return; }
+    const res = await startChatAction(L.id);
+    if (res.ok) {
+      setChats(cs => (res.chat ? [res.chat, ...cs] : cs));
+      go('chat', { id: res.chat.id });
+    }
+  };
+  const handleOwnerChat = (L) => requireAuth('Войдите, чтобы написать владельцу', () => openChatWith(L));
+
   const tabRoot = () => {
     if (tab === 'home') {
       return <HomeTab t={t} go={go} tab={tab} setTab={guardedTab} onCreate={onCreate} lots={lots} myLots={myLots} matches={matches} chains={chains} />;
@@ -236,12 +248,7 @@ export default function App() {
     if (!top) return null;
     if (top.name === 'lot') return (
       <div className="app"><div className="safe-top" />
-        <LotDetail lots={lots} myLots={myLots} lotId={top.params.lotId} onBack={back} onOffer={(L) => requireAuth('Предложить обмен можно после регистрации', () => setOfferLot(L))} onOwnerChat={() => requireAuth('Войдите, чтобы написать владельцу', () => {
-          const L = lots.find(x => x.id === top.params.lotId);
-          const ownerName = L ? (L.ownerName || '') : '';
-          const ch = chats.find(c => c.partner.name === ownerName);
-          if (ch) go('chat', { id: ch.id });
-        })} />
+        <LotDetail lots={lots} myLots={myLots} lotId={top.params.lotId} onBack={back} onOffer={(L) => requireAuth('Предложить обмен можно после регистрации', () => setOfferLot(L))} onOwnerChat={() => handleOwnerChat(lots.find(x => x.id === top.params.lotId))} />
       </div>
     );
     if (top.name === 'chainfeed') return (
@@ -297,6 +304,7 @@ export default function App() {
           onOffer={(L) => requireAuth('Предложить обмен можно после регистрации', () => setOfferLot(L))}
           onCreate={onCreate}
           onEditLot={(L) => requireAuth('Редактировать объявление можно после регистрации', () => setEditingLot(L))}
+          onOwnerChat={handleOwnerChat}
           matches={matches}
           chats={chats}
           chains={chains}

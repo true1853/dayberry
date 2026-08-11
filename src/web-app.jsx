@@ -311,7 +311,7 @@ function ReservationRail({ L, onOffer }) {
 }
 const stepBtn = { width: 30, height: 30, borderRadius: 999, border: '1px solid var(--line)', background: '#fff', color: 'var(--ink)', fontSize: 18, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 };
 
-function LotView({ L, onBack, onOffer }) {
+function LotView({ L, onBack, onOffer, onOwnerChat }) {
   const owner = {
     name: L.ownerName || '',
     city: L.ownerCity || '',
@@ -375,7 +375,7 @@ function LotView({ L, onBack, onOffer }) {
               <span style={{ fontSize: 15, fontWeight: 600 }}>{owner.name}</span>
               <span className="row gap6"><Stars value={owner.rating} /><span className="cap">{owner.rating} · {owner.deals} сделок</span></span>
             </div>
-            <button className="btn btn-soft" style={{ padding: '11px 16px', fontSize: 14 }}><Icon name="chat" size={17} color="var(--ink)" />Связаться</button>
+            <button className="btn btn-soft" style={{ padding: '11px 16px', fontSize: 14 }} onClick={() => onOwnerChat && onOwnerChat(L)}><Icon name="chat" size={17} color="var(--ink)" />Связаться</button>
           </div>
         </div>
 
@@ -582,7 +582,7 @@ function ProfileView({ user, profile, myLots, onOpenLot, onLogout, onProfileSave
 }
 
 // ---------------- root ----------------
-export default function WebApp({ lots, myLots, user, profile, onLogout, onProfileSaved, onOffer, onCreate, onEditLot, matches = [], chats = [], chains = [], authed = true, onAuthRequired }) {
+export default function WebApp({ lots, myLots, user, profile, onLogout, onProfileSaved, onOffer, onCreate, onEditLot, matches = [], chats = [], chains = [], authed = true, onAuthRequired, onOwnerChat }) {
   const [view, setView] = React.useState('home');
   const [cat, setCat] = React.useState('all');
   const [city, setCity] = React.useState('all');
@@ -598,7 +598,7 @@ export default function WebApp({ lots, myLots, user, profile, onLogout, onProfil
       <WebNav view={view} setView={setView} user={user} avatar={avatar} query={query} setQuery={setQuery} onLogout={onLogout} onCreate={onCreate} authed={authed} onAuthRequired={onAuthRequired} />
       <div className="web-body">
         {view === 'home' && <HomeView lots={lots} myLots={myLots} matches={matches} query={query} setQuery={setQuery} cat={cat} setCat={setCat} city={city} setCity={setCity} onOpen={(id) => { setSelLot(id); setView('lot'); }} onOffer={onOffer} onChains={() => setView('chains')} />}
-        {view === 'lot' && selected && <LotView L={selected} onBack={goHome} onOffer={onOffer} />}
+        {view === 'lot' && selected && <LotView L={selected} onBack={goHome} onOffer={onOffer} onOwnerChat={onOwnerChat} />}
         {view === 'chains' && <ChainsView onBack={goHome} chains={chains} onJoin={() => { setView('deals'); }} />}
         {view === 'deals' && <DealsView onBack={goHome} chats={chats} />}
         {view === 'profile' && <ProfileView user={user} profile={profile} myLots={myLots} onOpenLot={(id) => { setSelLot(id); setView('lot'); }} onLogout={onLogout} onProfileSaved={onProfileSaved} onWallet={goHome} onEditLot={onEditLot} />}

@@ -418,7 +418,7 @@ export async function getWalletAction() {
 // ---------- chat ----------
 
 const chatWith = {
-  partner: { select: { name: true, city: true, avatar: true } },
+  partner: { select: { id: true, name: true, city: true, avatar: true } },
   deal: { select: { id: true, stage: true, credits: true, status: true, lot: { include: { owner: { select: { name: true } } } } } },
   messages: { orderBy: { createdAt: 'asc' } },
 };
@@ -427,6 +427,7 @@ async function serializeChat(c) {
   return {
     id: c.id,
     partner: {
+      id: c.partner?.id || '',
       name: c.partner?.name || '',
       city: c.partner?.city || '',
       avatar: c.partner?.avatar || '',
@@ -458,6 +459,27 @@ export async function listChatsAction() {
     orderBy: { createdAt: 'desc' },
   });
   return Promise.all(chats.map(serializeChat));
+}
+
+export async function startChatAction(lotId) {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: 'Требуется вход' };
+
+  const lot = await prisma.lot.findUnique({ where: { id: lotId } });
+  if (!lot) return { ok: false, error: 'Объявление не найдено' };
+  if (lot.ownerId === user.id) return { ok: false, error: 'Это ваше объявление' };
+
+  let chat = await prisma.chat.findFirst({
+    where: { userId: user.id, partnerId: lot.ownerId },
+    include: chatWith,
+  });
+  if (!chat) {
+    chat = await prisma.chat.create({
+      data: { userId: user.id, partnerId: lot.ownerId },
+      include: chatWith,
+    });
+  }
+  return { ok: true, chat: await serializeChat(chat) };
 }
 
 export async function getChatAction(chatId) {
