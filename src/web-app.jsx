@@ -3,7 +3,8 @@ import React from 'react';
 import { CITIES, REMOTE } from './cities.js';
 import { Icon } from './icons.jsx';
 import { fmt, Logo, Credit, Photo, Avatar, Stars, CatTag, AIBadge } from './ui.jsx';
-import { EditProfileSheet } from './screen-profile.jsx';
+import { EditProfileSheet, resizeImage } from './screen-profile.jsx';
+import { updateAvatarAction } from './server/actions.js';
 
 const FOOTER_COLS = [
   { h: 'Поддержка', links: ['Справка', 'Безопасность', 'Центр доверия', 'Правила сообщества', 'Связь с нами'] },
@@ -511,6 +512,7 @@ function DealsView({ onBack, chats = [] }) {
 // ---------------- profile ----------------
 function ProfileView({ user, profile, myLots, onOpenLot, onLogout, onProfileSaved, onWallet, onEditLot }) {
   const [editing, setEditing] = React.useState(false);
+  const avatarRef = React.useRef(null);
   const name = (user && user.name) || '';
   const city = (user && user.city) || '';
   const rating = user ? (user.rating ?? 0) : 0;
@@ -520,16 +522,39 @@ function ProfileView({ user, profile, myLots, onOpenLot, onLogout, onProfileSave
   const avatar = (profile && profile.avatar) || (user && user.avatar) || '';
   const reviews = (profile && profile.reviews) || [];
 
+  const onAvatarFile = async (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    try {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('Не удалось прочитать файл'));
+        reader.readAsDataURL(f);
+      });
+      const resized = await resizeImage(dataUrl, 256);
+      const res = await updateAvatarAction(resized);
+      if (res.ok && onProfileSaved) onProfileSaved(res.user);
+    } catch (err) {
+      console.error('avatar upload failed', err);
+    }
+  };
+
   return (
     <>
       <div className="web-container web-section">
         <div className="row gap20" style={{ gap: 40, alignItems: 'flex-start' }}>
           <div className="col" style={{ alignItems: 'center', gap: 14, flex: 'none', width: 280 }}>
-            {avatar ? (
-              <div style={{ width: 120, height: 120, borderRadius: 999, overflow: 'hidden', boxShadow: 'var(--sh-2)' }}><img src={avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} /></div>
-            ) : (
-              <div style={{ width: 120, height: 120, borderRadius: 999, background: 'linear-gradient(135deg, var(--berry), var(--berry-500))', color: '#fff', fontSize: 48, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: 'var(--sh-2)' }}>{(name || '?').charAt(0)}</div>
-            )}
+            <div style={{ position: 'relative' }}>
+              {avatar ? (
+                <div style={{ width: 120, height: 120, borderRadius: 999, overflow: 'hidden', boxShadow: 'var(--sh-2)' }}><img src={avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} /></div>
+              ) : (
+                <div style={{ width: 120, height: 120, borderRadius: 999, background: 'linear-gradient(135deg, var(--berry), var(--berry-500))', color: '#fff', fontSize: 48, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: 'var(--sh-2)' }}>{(name || '?').charAt(0)}</div>
+              )}
+              <button onClick={() => avatarRef.current && avatarRef.current.click()} title="Изменить фото" style={{ position: 'absolute', bottom: 2, right: 2, width: 34, height: 34, borderRadius: 999, background: 'var(--berry)', border: '2.5px solid #fff', boxShadow: 'var(--sh-1)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><Icon name="camera" size={16} color="#fff" /></button>
+              <input ref={avatarRef} type="file" accept="image/*" onChange={onAvatarFile} style={{ display: 'none' }} />
+            </div>
             <div className="col" style={{ alignItems: 'center', gap: 4 }}>
               <span style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em' }}>{name}</span>
               <span className="sub"><Icon name="map" size={13} color="var(--ink-3)" /> {city}</span>

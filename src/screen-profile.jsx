@@ -2,7 +2,7 @@
 import React from 'react';
 import { Icon } from './icons.jsx';
 import { Credit, AppBar, IconBtn, TabBar, Photo, Sheet } from './ui.jsx';
-import { updateProfileAction, updateAvatarAction, changePasswordAction, updateSettingsAction } from './server/actions.js';
+import { updateProfileAction, updateAvatarAction, changePasswordAction, updateSettingsAction, askWantsAction } from './server/actions.js';
 import { PhoneField, CityField } from './fields.jsx';
 
 function StatBox({ value, label }) {
@@ -95,6 +95,8 @@ export function EditProfileSheet({ user, open, onClose, onSaved }) {
   const [phone, setPhone] = React.useState(user?.phone || '');
   const [error, setError] = React.useState('');
   const [saving, setSaving] = React.useState(false);
+  const [wizardOpen, setWizardOpen] = React.useState(false);
+  const avatarRef = React.useRef(null);
 
   React.useEffect(() => {
     if (open) {
@@ -106,6 +108,25 @@ export function EditProfileSheet({ user, open, onClose, onSaved }) {
       setError('');
     }
   }, [open, user]);
+
+  const onAvatarFile = async (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    try {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('Не удалось прочитать файл'));
+        reader.readAsDataURL(f);
+      });
+      const resized = await resizeImage(dataUrl, 256);
+      const res = await updateAvatarAction(resized);
+      if (res.ok && onSaved) onSaved(res.user);
+    } catch (err) {
+      console.error('avatar upload failed', err);
+    }
+  };
 
   const save = async () => {
     if (!name.trim()) return setError('Введите имя');
@@ -121,6 +142,20 @@ export function EditProfileSheet({ user, open, onClose, onSaved }) {
   return (
     <Sheet open={open} onClose={onClose} title="Редактировать профиль">
       <div className="px col gap14" style={{ paddingBottom: 10 }}>
+        <div className="row gap12" style={{ alignItems: 'center' }}>
+          <div style={{ position: 'relative' }}>
+            {(user && user.avatar) ? (
+              <div style={{ width: 64, height: 64, borderRadius: 999, overflow: 'hidden' }}><img src={user.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} /></div>
+            ) : (
+              <div style={{ width: 64, height: 64, borderRadius: 999, background: 'linear-gradient(135deg, var(--berry), var(--berry-500))', color: '#fff', fontSize: 26, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{(name || '?').charAt(0)}</div>
+            )}
+          </div>
+          <div className="col gap6">
+            <button className="btn btn-soft" style={{ padding: '10px 14px', fontSize: 13.5 }} onClick={() => avatarRef.current && avatarRef.current.click()}><Icon name="camera" size={16} color="var(--ink)" />Изменить фото</button>
+            <span className="cap">Фото появится в профиле и в сделках</span>
+            <input ref={avatarRef} type="file" accept="image/*" onChange={onAvatarFile} style={{ display: 'none' }} />
+          </div>
+        </div>
         <div className="col gap6">
           <label className="cap">Имя</label>
           <input value={name} onChange={e => setName(e.target.value)} placeholder="Как вас зовут?" style={fieldStyle} />
@@ -132,7 +167,10 @@ export function EditProfileSheet({ user, open, onClose, onSaved }) {
           <textarea value={bio} onChange={e => setBio(e.target.value)} placeholder="Чем меняетесь, где, как любите договариваться…" rows={4} style={{ ...fieldStyle, resize: 'none', lineHeight: 1.5 }} />
         </div>
         <div className="col gap6">
-          <label className="cap">Хочу получить</label>
+          <div className="row gap8" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+            <label className="cap">Хочу получить</label>
+            <button onClick={() => setWizardOpen(true)} style={{ background: 'var(--berry-50)', border: 'none', borderRadius: 999, padding: '6px 11px', color: 'var(--berry)', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'var(--font)' }}><Icon name="ai" size={14} color="var(--berry)" />Сформировать с ИИ</button>
+          </div>
           <input value={wants} onChange={e => setWants(e.target.value)} placeholder="Например: ноутбук, клининг, услуги дизайна" style={fieldStyle} />
           <span className="cap">Эти хотелки используют умный мэтчинг и AI при создании объявлений.</span>
         </div>
@@ -140,6 +178,91 @@ export function EditProfileSheet({ user, open, onClose, onSaved }) {
         <button className="btn btn-primary btn-block btn-lg" onClick={save} disabled={saving} style={{ opacity: saving ? 0.7 : 1 }}>
           {saving ? 'Сохраняем…' : 'Сохранить'}
         </button>
+      </div>
+      <WantsWizard open={wizardOpen} onClose={() => setWizardOpen(false)} onResult={(w) => { setWants(w); setWizardOpen(false); }} />
+    </Sheet>
+  );
+}
+
+export function WantsWizard({ open, onClose, onResult }) {
+  const [steps, setSteps] = React.useState([]);
+  const [question, setQuestion] = React.useState('');
+  const [suggestions, setSuggestions] = React.useState([]);
+  const [answer, setAnswer] = React.useState('');
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState('');
+  const [result, setResult] = React.useState(null);
+
+  React.useEffect(() => {
+    if (open) {
+      setSteps([]);
+      setQuestion('');
+      setSuggestions([]);
+      setAnswer('');
+      setError('');
+      setResult(null);
+      askNext([]);
+    }
+  }, [open]);
+
+  const askNext = async (ctx) => {
+    setBusy(true);
+    setError('');
+    const res = await askWantsAction({ context: ctx });
+    setBusy(false);
+    if (!res.ok) { setError(res.error || 'Не удалось получить ответ ИИ'); return; }
+    if (res.done) setResult(res.wants || '');
+    else {
+      setQuestion(res.question || 'Что вам сейчас нужно?');
+      setSuggestions(res.suggestions || []);
+    }
+  };
+
+  const answerFn = async (val) => {
+    const v = (val || answer || '').trim();
+    if (!v) return;
+    const next = [...steps, { q: question, a: v }];
+    setSteps(next);
+    setAnswer('');
+    askNext(next);
+  };
+
+  return (
+    <Sheet open={open} onClose={onClose} title="Хочу получить · с ИИ">
+      <div className="px col gap14" style={{ paddingBottom: 10 }}>
+        {error && <div style={ERR_BOX}>{error}</div>}
+        {result !== null ? (
+          <>
+            <div className="row gap6"><Icon name="checkCircle" size={20} color="var(--ok)" /><span className="title">Вот что получилось</span></div>
+            <div className="row gap6" style={{ flexWrap: 'wrap' }}>
+              {result.split(',').map(s => s.trim()).filter(Boolean).map((s, i) => (
+                <span key={i} className="chip chip-berry" style={{ fontSize: 13 }}>{s}</span>
+              ))}
+            </div>
+            <button className="btn btn-primary btn-block btn-lg" onClick={() => onResult(result)}>Вставить в профиль</button>
+            <button className="btn btn-soft btn-block" onClick={() => setResult(null)}>Задать ещё вопросы</button>
+          </>
+        ) : busy ? (
+          <div className="col" style={{ alignItems: 'center', gap: 10, padding: '22px 0' }}>
+            <span className="spin" />
+            <span className="cap">ИИ думает…</span>
+          </div>
+        ) : (
+          <>
+            <div className="card" style={{ padding: 14, background: 'var(--berry-50)', border: '1px solid var(--berry-100)' }}>
+              <span className="body" style={{ lineHeight: 1.5 }}>{question}</span>
+            </div>
+            <input value={answer} onChange={e => setAnswer(e.target.value)} placeholder="Ваш ответ" style={fieldStyle} onKeyDown={e => { if (e.key === 'Enter') answerFn(); }} />
+            {suggestions.length > 0 && (
+              <div className="row gap6" style={{ flexWrap: 'wrap' }}>
+                {suggestions.map((s, i) => (
+                  <button key={i} onClick={() => answerFn(s)} className="chip chip-berry" style={{ fontFamily: 'var(--font)', fontSize: 13, cursor: 'pointer' }}>{s}</button>
+                ))}
+              </div>
+            )}
+            <button className="btn btn-primary btn-block btn-lg" onClick={() => answerFn()} disabled={busy}>Ответить</button>
+          </>
+        )}
       </div>
     </Sheet>
   );
@@ -489,7 +612,7 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, 
   );
 }
 
-function resizeImage(dataUrl, size) {
+export function resizeImage(dataUrl, size) {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
