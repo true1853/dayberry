@@ -46,4 +46,6 @@ ENV HOSTNAME=0.0.0.0
 
 # db push (идемпотентен) + перенос base64-фото на диск (после первого
 # прогона — no-op) + старт сервера
-CMD ["sh", "-c", "mkdir -p /app/data/uploads && ./node_modules/.bin/prisma db push --skip-generate && node scripts/migrate-photos.mjs && node server.js"]
+# prisma вызывается по entry-поинту пакета: symlink'ов node_modules/.bin
+# в standalone-образе нет, они не переносятся из builder-стадии.
+CMD ["sh", "-c", "mkdir -p /app/data/uploads && node node_modules/prisma/build/index.js db push --skip-generate && node scripts/migrate-photos.mjs && node server.js"]
