@@ -8,9 +8,6 @@ const nextConfig = {
   // Без этого Next при нескольких lockfile'ах выбирает родительский каталог
   // как корень и раскладывает standalone по вложенному пути.
   outputFileTracingRoot: projectRoot,
-  // Собираем самодостаточный сервер: в рантайм-образ едут только реально
-  // используемые модули, без dev-зависимостей и исходников.
-  output: 'standalone',
   images: { unoptimized: true },
   experimental: {
     serverActions: {
