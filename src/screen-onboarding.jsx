@@ -169,7 +169,7 @@ export function CreateListing({ onClose, onPublish, initialWants = '', editLot =
         if (d.desc && (!desc.trim() || desc.trim().startsWith('Готов(а)'))) setDesc(d.desc);
         if (d.wants && !wants.trim()) setWants(d.wants);
         if (d.value > 0 && !valueNum) setValue(String(d.value));
-        setAiNote(`Черновик готов. ${d.reasoning || 'Проверьте и поправьте поля.'}`);
+        setAiNote(`${d.ai === false ? 'Быстрый черновик. ' : ''}${d.reasoning || 'Проверьте и поправьте поля.'}`);
       }
     } catch (e) {
       setAiError('Не удалось получить ответ ИИ');

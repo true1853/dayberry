@@ -71,6 +71,7 @@ export default function App() {
   const publishingRef = React.useRef(false);
   const [authOpen, setAuthOpen] = React.useState(false);
   const [authMsg, setAuthMsg] = React.useState('');
+  const pendingActionRef = React.useRef(null);
   const [offerLot, setOfferLot] = React.useState(null);
   const [deal, setDeal] = React.useState(null);
   const [creating, setCreating] = React.useState(false);
@@ -116,18 +117,22 @@ export default function App() {
     setCurrentUser(user);
     setAuthed(true);
     setAuthOpen(false);
+    const next = pendingActionRef.current;
+    pendingActionRef.current = null;
+    if (next) next();
   };
 
-  const requireAuth = (msg) => {
-    if (authed) return true;
+  const requireAuth = (msg, action) => {
+    if (authed) { if (action) action(); return true; }
     setAuthMsg(msg || 'Войдите или зарегистрируйтесь, чтобы продолжить');
+    pendingActionRef.current = action || null;
     setAuthOpen(true);
     return false;
   };
 
   const guardedTab = (t) => {
     if (!authed && (t === 'deals' || t === 'wallet' || t === 'profile')) {
-      requireAuth('Войдите, чтобы открыть этот раздел');
+      requireAuth('Войдите, чтобы открыть этот раздел', () => { setStack([]); setTabRaw(t); });
       return;
     }
     setStack([]);
@@ -190,7 +195,7 @@ export default function App() {
     }
   };
 
-  const onCreate = () => { if (requireAuth('Создать объявление можно после регистрации')) setCreating(true); };
+  const onCreate = () => requireAuth('Создать объявление можно после регистрации', () => setCreating(true));
 
   const tabRoot = () => {
     if (tab === 'home') {
@@ -231,13 +236,12 @@ export default function App() {
     if (!top) return null;
     if (top.name === 'lot') return (
       <div className="app"><div className="safe-top" />
-        <LotDetail lots={lots} myLots={myLots} lotId={top.params.lotId} onBack={back} onOffer={(L) => { if (requireAuth('Предложить обмен можно после регистрации')) setOfferLot(L); }} onOwnerChat={() => {
-          if (!requireAuth('Войдите, чтобы написать владельцу')) return;
+        <LotDetail lots={lots} myLots={myLots} lotId={top.params.lotId} onBack={back} onOffer={(L) => requireAuth('Предложить обмен можно после регистрации', () => setOfferLot(L))} onOwnerChat={() => requireAuth('Войдите, чтобы написать владельцу', () => {
           const L = lots.find(x => x.id === top.params.lotId);
           const ownerName = L ? (L.ownerName || '') : '';
           const ch = chats.find(c => c.partner.name === ownerName);
           if (ch) go('chat', { id: ch.id });
-        }} />
+        })} />
       </div>
     );
     if (top.name === 'chainfeed') return (
@@ -248,14 +252,13 @@ export default function App() {
     );
     if (top.name === 'chain') return (
       <div className="app"><div className="safe-top" />
-        <ChainDetail chainId={top.params.id} chains={chains} onBack={back} onJoin={async (ch) => {
-          if (!requireAuth('Вступить в цепочку можно после регистрации')) return;
+        <ChainDetail chainId={top.params.id} chains={chains} onBack={back} onJoin={(ch) => requireAuth('Вступить в цепочку можно после регистрации', async () => {
           const res = await joinChainAction(ch.id);
           const wa = await getWalletAction();
           if (wa) setWallet(wa);
           back();
           if (res.ok) { const de = await listDealsAction(); setDeals(de || []); const dl = de.find(x => x.id === res.dealId); setDeal(dl); go('deal'); }
-        }} />
+        })} />
       </div>
     );
     if (top.name === 'deal') return (
@@ -291,9 +294,9 @@ export default function App() {
             setCurrentUser(updated);
             setProfile(p => (p ? { ...p, ...updated } : updated));
           }}
-          onOffer={(L) => { if (requireAuth('Предложить обмен можно после регистрации')) setOfferLot(L); }}
+          onOffer={(L) => requireAuth('Предложить обмен можно после регистрации', () => setOfferLot(L))}
           onCreate={onCreate}
-          onEditLot={(L) => { if (requireAuth('Редактировать объявление можно после регистрации')) setEditingLot(L); }}
+          onEditLot={(L) => requireAuth('Редактировать объявление можно после регистрации', () => setEditingLot(L))}
           matches={matches}
           chats={chats}
           chains={chains}

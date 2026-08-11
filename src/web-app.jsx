@@ -66,11 +66,18 @@ function WebNav({ view, setView, user, avatar, query, setQuery, onLogout, onCrea
           </button>
           {menu && (
             <div className="web-drop">
-              <button className="web-drop-item" onClick={() => goTab('profile')}><Icon name="user" size={17} color="var(--ink-2)" />Профиль</button>
-              <button className="web-drop-item" onClick={() => goTab('deals')}><Icon name="chat" size={17} color="var(--ink-2)" />Мои сделки</button>
-              <button className="web-drop-item" onClick={() => goTab('home')}><Icon name="wallet" size={17} color="var(--ink-2)" />Кошелёк</button>
-              <div className="web-drop-sep" />
-              <button className="web-drop-item danger" onClick={() => { setMenu(false); onLogout(); }}><Icon name="close" size={17} color="var(--berry-700)" />Выйти</button>
+              {authed ? (
+                <>
+                  <button className="web-drop-item" onClick={() => goTab('deals')}><Icon name="chat" size={17} color="var(--ink-2)" />Мои сделки</button>
+                  <button className="web-drop-item" onClick={() => goTab('profile')}><Icon name="wallet" size={17} color="var(--ink-2)" />Кошелёк</button>
+                  <div className="web-drop-sep" />
+                  <button className="web-drop-item danger" onClick={() => { setMenu(false); onLogout(); }}><Icon name="close" size={17} color="var(--berry-700)" />Выйти</button>
+                </>
+              ) : (
+                <button className="web-drop-item" onClick={() => { setMenu(false); onAuthRequired && onAuthRequired('Войдите, чтобы открыть сделки и кошелёк'); }}>
+                  <Icon name="user" size={17} color="var(--berry)" />Войти / Регистрация
+                </button>
+              )}
             </div>
           )}
         </div>
