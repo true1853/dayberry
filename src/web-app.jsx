@@ -8,6 +8,7 @@ import { EditProfileSheet, resizeImage } from './screen-profile.jsx';
 import { updateAvatarAction } from './server/actions.js';
 import { DealStatus } from './screen-deal.jsx';
 import { ChatThread } from './screen-chat.jsx';
+import { FeedChain, ChainDetail } from './screen-chain.jsx';
 
 const FOOTER_COLS = [
   { h: 'Поддержка', links: ['Справка', 'Безопасность', 'Центр доверия', 'Правила сообщества', 'Связь с нами'] },
@@ -428,15 +429,15 @@ function LotView({ L, onBack, onOffer, onOwnerChat }) {
 }
 
 // ---------------- chains ----------------
-function ChainsView({ onBack }) {
+// Десктоп переиспользует мобильные компоненты цепочки: экран редкий, а
+// вторая вёрстка того же флоу разъезжается с первой при любой правке.
+function ChainsView({ onBack, chains, onOpenChain, chainProps }) {
   return (
     <div className="web-container web-section">
       <button className="web-back" onClick={onBack}><Icon name="back" size={16} color="var(--ink-2)" />На главную</button>
-      <div className="col" style={{ alignItems: 'center', justifyContent: 'center', padding: '80px 20px', textAlign: 'center', gap: 12 }}>
-        <div className="avatar" style={{ width: 64, height: 64, background: 'var(--berry-50)' }}><Icon name="chain" size={30} color="var(--berry)" /></div>
-        <span className="tag" style={{ background: 'var(--berry-50)', color: 'var(--berry)' }}>Скоро появятся</span>
-        <h2 style={{ margin: '4px 0 0' }}>Многосторонние обмены</h2>
-        <span className="sub" style={{ maxWidth: 460, lineHeight: 1.55 }}>Мы донастраиваем умные цепочки из 3–5 участников, где каждый получит желаемое. Пока предлагайте прямой обмен на любом объявлении.</span>
+      <h2 style={{ margin: '4px 0 14px' }}>Многосторонние обмены</h2>
+      <div style={{ maxWidth: 560 }}>
+        <FeedChain chains={chains} onOpenChain={onOpenChain} {...chainProps} />
       </div>
     </div>
   );
@@ -654,7 +655,7 @@ function ProfileView({ user, profile, myLots, onOpenLot, onLogout, onProfileSave
 }
 
 // ---------------- root ----------------
-export default function WebApp({ lots, lotsLoading = false, myLots, user, profile, onLogout, onProfileSaved, onOffer, onCreate, onEditLot, matches = [], chats = [], chains = [], deals = [], favorites = [], onToggleFav, onConfirmDeal, onCancelDeal, onRateDeal, authed = true, onAuthRequired, onOwnerChat }) {
+export default function WebApp({ lots, lotsLoading = false, myLots, user, profile, onLogout, onProfileSaved, onOffer, onCreate, onEditLot, matches = [], chats = [], chains = [], deals = [], favorites = [], onToggleFav, onConfirmDeal, onCancelDeal, onRateDeal, authed = true, onAuthRequired, onOwnerChat, chainProps = {}, chainActions = {}, chainBusy = false }) {
   const [view, setView] = React.useState('home');
   const [cat, setCat] = React.useState('all');
   const [city, setCity] = React.useState('all');
@@ -662,12 +663,13 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
   const [selLot, setSelLot] = React.useState(null);
   const [selDeal, setSelDeal] = React.useState(null);
   const [selChat, setSelChat] = React.useState(null);
+  const [selChain, setSelChain] = React.useState(null);
   const avatar = (profile && profile.avatar) || (user && user.avatar) || '';
   const selected = selLot ? lots.find(l => l.id === selLot) || null : null;
 
   const favIds = React.useMemo(() => new Set((favorites || []).map(f => f.id)), [favorites]);
 
-  const goHome = () => { setView('home'); setSelLot(null); setSelDeal(null); setSelChat(null); };
+  const goHome = () => { setView('home'); setSelLot(null); setSelDeal(null); setSelChat(null); setSelChain(null); };
   const dealOpen = selDeal ? deals.find(x => x.id === selDeal) || null : null;
 
   return (
@@ -677,7 +679,7 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
         {view === 'home' && <HomeView lots={lots} lotsLoading={lotsLoading} myLots={myLots} matches={matches} query={query} setQuery={setQuery} cat={cat} setCat={setCat} city={city} setCity={setCity} onOpen={(id) => { setSelLot(id); setView('lot'); }} onChains={() => setView('chains')} favIds={favIds} onToggleFav={onToggleFav} />}
         {view === 'favorites' && <FavoritesView lots={favorites} onBack={goHome} onOpen={(id) => { setSelLot(id); setView('lot'); }} onToggleFav={onToggleFav} />}
         {view === 'lot' && selected && <LotView L={selected} onBack={goHome} onOffer={onOffer} onOwnerChat={onOwnerChat} />}
-        {view === 'chains' && <ChainsView onBack={goHome} />}
+        {view === 'chains' && <ChainsView onBack={goHome} chains={chains} chainProps={chainProps} onOpenChain={(id) => setSelChain(id)} />}
         {view === 'deals' && <DealsView onBack={goHome} chats={chats} deals={deals} onOpenDeal={(id) => setSelDeal(id)} onOpenChat={(id) => setSelChat(id)} />}
         {view === 'profile' && <ProfileView user={user} profile={profile} myLots={myLots} onOpenLot={(id) => { setSelLot(id); setView('lot'); }} onLogout={onLogout} onProfileSaved={onProfileSaved} onWallet={goHome} onEditLot={onEditLot} />}
       </div>
@@ -705,6 +707,26 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
             onBack={() => setSelChat(null)}
             onOpenDeal={() => { const c = chats.find(x => x.id === selChat); if (c && c.deal) setSelDeal(c.deal.id); }}
           />
+        </div>
+      ) : selChain ? (
+        <div className="web-modal">
+          <div className="app">
+            <div className="safe-top" />
+            <ChainDetail
+              chainId={selChain}
+              chains={chains}
+              busy={chainBusy}
+              onBack={() => setSelChain(null)}
+              onStart={chainActions.onStart}
+              onRespond={async (ch, accept) => {
+                await chainActions.onRespond?.(ch, accept);
+                if (!accept) setSelChain(null);
+              }}
+              onSent={chainActions.onSent}
+              onReceived={chainActions.onReceived}
+              onOpenChat={(chatId) => { setSelChain(null); setSelChat(chatId); }}
+            />
+          </div>
         </div>
       ) : null}
     </div>

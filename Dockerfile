@@ -23,5 +23,9 @@ ENV NODE_ENV=production
 EXPOSE 3000
 
 # каталог загрузок на томе + db push (идемпотентен) + перенос base64-фото
-# на диск (после первого прогона — no-op) + старт сервера
-CMD ["sh", "-c", "mkdir -p /app/data/uploads && npx prisma db push --skip-generate && node scripts/migrate-photos.mjs && node node_modules/next/dist/bin/next start -p 80"]
+# на диск + состав участников для уже существующих чатов (обе миграции
+# идемпотентны, после первого прогона — no-op) + старт сервера.
+#
+# migrate-chains обязан идти каждый старт, а не разово руками: состав чата
+# переехал в ChatMember, и до бэкфилла список переписок у людей пустой.
+CMD ["sh", "-c", "mkdir -p /app/data/uploads && npx prisma db push --skip-generate && node scripts/migrate-photos.mjs && node scripts/migrate-chains.mjs && node node_modules/next/dist/bin/next start -p 80"]

@@ -32,6 +32,9 @@ export function parseRoute(path) {
       return { tab: 'deals', stack: [{ name: 'chat', params: { id: b } }] };
     case 'chains':
       return { tab: 'search', stack: [{ name: 'chainfeed' }] };
+    // у цепочки должен быть свой адрес: на неё ведут ссылки из уведомлений
+    case 'chain':
+      return { tab: 'search', stack: [{ name: 'chainfeed' }, { name: 'chain', params: { id: b } }] };
     default:
       return { tab: 'search', stack: [] };
   }
@@ -51,7 +54,7 @@ export function screenPath(name, params = {}) {
     case 'chat':
       return '/chat/' + encodeURIComponent(params.id || '');
     case 'chain':
-      return '/chains';
+      return '/chain/' + encodeURIComponent(params.id || '');
     case 'chainfeed':
       return '/chains';
     case 'settings':

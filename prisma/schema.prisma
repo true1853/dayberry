@@ -34,6 +34,11 @@ model User {
   sentMessages Message[]     @relation("messageFrom")
   transactions Transaction[]
   favorites    Favorite[]
+  chatMemberships ChatMember[]
+  notifications   Notification[]
+  chainSteps      ChainStep[]   @relation("chainGiver")
+  chainStepsTo    ChainStep[]   @relation("chainReceiver")
+  chainsStarted   Chain[]       @relation("chainInitiator")
 
   @@index([email])
   @@index([city])
@@ -104,6 +109,7 @@ model Lot {
   favorites       Favorite[]
   deals           Deal[]     @relation("dealTarget")
   myDeals         Deal[]     @relation("dealMyLot")
+  chainSteps      ChainStep[]
 
   @@index([status])
   @@index([ownerId])
@@ -159,27 +165,52 @@ model Transaction {
   sub       String   @default("")
   amt       Int      @default(0)
   status    String   @default("done")
+  // На что ссылается операция. Сделки ищут свой эскроу по «последнему
+  // held у пользователя»; в цепочке замороженных доплат сразу несколько,
+  // и такой поиск разъезжается — поэтому ссылка явная.
+  refType   String   @default("")
+  refId     String   @default("")
   createdAt DateTime @default(now())
 
   @@index([userId, createdAt])
   @@index([userId, status])
+  @@index([refType, refId])
 }
 
+// Чат бывает парным (direct) и групповым (chain). Состав участников живёт
+// в ChatMember и для парного тоже — userId/partnerId остались только ради
+// показа собеседника в существующих экранах и заполнены лишь у direct.
 model Chat {
   id        String    @id @default(cuid())
-  userId    String
-  user      User      @relation("chatOwner", fields: [userId], references: [id], onDelete: Cascade)
-  partnerId String
-  partner   User      @relation("chatPartner", fields: [partnerId], references: [id], onDelete: Cascade)
+  kind      String    @default("direct")
+  userId    String?
+  user      User?     @relation("chatOwner", fields: [userId], references: [id], onDelete: Cascade)
+  partnerId String?
+  partner   User?     @relation("chatPartner", fields: [partnerId], references: [id], onDelete: Cascade)
   dealId    String?   @unique
   deal      Deal?     @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  chainId   String?   @unique
+  chain     Chain?    @relation(fields: [chainId], references: [id], onDelete: SetNull)
   createdAt DateTime  @default(now())
   messages  Message[]
+  members   ChatMember[]
 
   @@index([userId])
   @@index([partnerId])
   @@index([dealId])
   @@index([createdAt])
+}
+
+model ChatMember {
+  id       String   @id @default(cuid())
+  chatId   String
+  chat     Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  joinedAt DateTime @default(now())
+
+  @@unique([chatId, userId])
+  @@index([userId])
 }
 
 model Message {
@@ -194,25 +225,77 @@ model Message {
   @@index([chatId, createdAt])
 }
 
+// Цепочка живёт по маршруту:
+//   candidate — найдена движком, никого ещё не беспокоили
+//   pending   — кто-то нажал «я в деле», остальным ушли уведомления, идёт TTL
+//   active    — согласились все, лоты заблокированы, доплаты в эскроу
+//   done      — все передачи подтверждены
+//   failed | expired — отказ без замены | вышло время
+//
+// kind: circle — круг замкнут желанием (каждый получает вещь);
+//       credit — круг замкнут баллами (последний вместо вещи платит).
 model Chain {
-  id        String      @id @default(cuid())
-  score     Int         @default(80)
-  note      String      @default("")
-  status    String      @default("active")
-  createdAt DateTime    @default(now())
-  steps     ChainStep[]
+  id          String      @id @default(cuid())
+  kind        String      @default("circle")
+  score       Int         @default(80)
+  note        String      @default("")
+  status      String      @default("candidate")
+  city        String      @default("")
+  // отпечаток состава: не даёт движку плодить дубли одной и той же цепочки
+  fingerprint String      @unique
+  initiatorId String?
+  initiator   User?       @relation("chainInitiator", fields: [initiatorId], references: [id], onDelete: SetNull)
+  // цепочка, взамен которой собрана эта (авто-замена после отказа)
+  replacesId  String?
+  expiresAt   DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  steps       ChainStep[]
+  chat        Chat?
+
+  @@index([status, score])
+  @@index([status, expiresAt])
 }
 
 model ChainStep {
-  id       String @id @default(cuid())
-  chainId  String
-  chain    Chain  @relation(fields: [chainId], references: [id], onDelete: Cascade)
-  who      String
-  gives    String
-  photoUrl String @default("")
-  to       String
-  value    Int
-  order    Int    @default(0)
+  id          String    @id @default(cuid())
+  chainId     String
+  chain       Chain     @relation(fields: [chainId], references: [id], onDelete: Cascade)
+  order       Int       @default(0)
+  userId      String
+  user        User      @relation("chainGiver", fields: [userId], references: [id], onDelete: Cascade)
+  // null — шаг закрытия баллами: участник ничего не отдаёт, только платит
+  lotId       String?
+  lot         Lot?      @relation(fields: [lotId], references: [id], onDelete: Cascade)
+  toUserId    String
+  toUser      User      @relation("chainReceiver", fields: [toUserId], references: [id], onDelete: Cascade)
+  value       Int       @default(0)
+  // сколько баллов доплачивает участник; отрицательное — получает
+  topup       Int       @default(0)
+  // сила совпадения именно этого ребра, 0..100 — из неё считается score цепочки
+  edgeScore   Int       @default(0)
+  state       String    @default("pending")
+  respondedAt DateTime?
+  sentAt      DateTime?
+  receivedAt  DateTime?
 
+  @@unique([chainId, userId])
   @@index([chainId, order])
+  @@index([userId, state])
+}
+
+model Notification {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type       String
+  title      String
+  body       String    @default("")
+  entityType String    @default("")
+  entityId   String    @default("")
+  readAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
 }

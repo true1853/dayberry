@@ -2,6 +2,8 @@
 
 import { prisma } from '../../lib/prisma';
 import { analyzeListing, computeMatches, askWants } from '../../lib/ai';
+import { refreshChainCandidates, findReplacement, CHAIN_ACCEPT_WINDOW_MS } from '../../lib/chains';
+import { notify, serializeNotification } from '../../lib/notify';
 import { vkAuthStart, yandexAuthStart } from '../../lib/oauth';
 import { saveDataUrl, saveDataUrls, isStorableImage } from '../../lib/storage';
 import { cookies } from 'next/headers';
@@ -109,18 +111,20 @@ export async function sessionAction() {
 
 export async function bootstrapAction() {
   const user = await getCurrentUser();
-  const [lots, chains] = await Promise.all([lotsFeed(user), chainsList()]);
+  // Цепочки стали персональными: гостю показывать нечего, и лишний
+  // запрос на критическом пути ленты ему не нужен.
+  const [lots, chains] = await Promise.all([lotsFeed(user), chainsList(user)]);
   return { user, lots, chains };
 }
 
 export async function loadAuthedDataAction() {
   const user = await getCurrentUser();
   if (!user) return null;
-  const [myLots, profile, deals, wallet, chats, favorites] = await Promise.all([
+  const [myLots, profile, deals, wallet, chats, favorites, notifications] = await Promise.all([
     myLotsOf(user), profileOf(user), dealsOf(user),
-    walletOf(user), chatsOf(user), favoritesOf(user),
+    walletOf(user), chatsOf(user), favoritesOf(user), notificationsOf(user),
   ]);
-  return { myLots, profile, deals, wallet, chats, favorites };
+  return { myLots, profile, deals, wallet, chats, favorites, notifications };
 }
 
 export async function getProfileAction() {
@@ -327,7 +331,9 @@ export async function getMyLots() {
 async function myLotsOf(user) {
   if (!user) return [];
   const lots = await prisma.lot.findMany({
-    where: { ownerId: user.id, status: 'active' },
+    // in_chain — лот занят активной цепочкой: из ленты он ушёл, но у
+    // владельца в «моих лотах» обязан остаться, иначе вещь просто исчезла
+    where: { ownerId: user.id, status: { in: ['active', 'in_chain'] } },
     include: { owner: { select: { city: true, name: true, avatar: true, rating: true, reviewsCount: true, dealsCount: true } }, lotPhotos: { orderBy: { order: 'asc' } } },
     orderBy: { createdAt: 'desc' },
   });
@@ -513,7 +519,11 @@ export async function updateLotAction(lotId, input) {
 const DEAL_STAGE_ORDER = ['created', 'meet', 'confirm', 'done'];
 
 // Сигналы отката транзакции — не выносим наружу как 500.
-class InsufficientFunds extends Error {}
+// userId нужен цепочке: там платят несколько человек, и в отказе важно
+// назвать того, у кого не хватило.
+class InsufficientFunds extends Error {
+  constructor(userId) { super('insufficient funds'); this.userId = userId; }
+}
 class DealClosed extends Error {}
 
 function dealWith() {
@@ -629,7 +639,13 @@ export async function createDealAction(input) {
 
       // chat with the lot owner
       const chat = await tx.chat.create({
-        data: { userId: user.id, partnerId: lot.ownerId, dealId: deal.id },
+        data: {
+          kind: 'direct',
+          userId: user.id,
+          partnerId: lot.ownerId,
+          dealId: deal.id,
+          members: { create: [{ userId: user.id }, { userId: lot.ownerId }] },
+        },
       });
       await tx.message.create({
         data: { chatId: chat.id, text: `Открыл(а) сделку на «${lot.title}» — ${num} Б в эскроу.` },
@@ -808,26 +824,50 @@ const chatBase = {
   partner: { select: { id: true, name: true, city: true, avatar: true } },
   user: { select: { id: true, name: true, city: true, avatar: true } },
   deal: { select: { id: true, stage: true, credits: true, status: true, lot: { select: { title: true } } } },
+  members: { select: { user: { select: { id: true, name: true, city: true, avatar: true } } } },
 };
+
+// Состав чата — в ChatMember, и для парного тоже: групповой чат цепочки
+// в два столбца userId/partnerId не помещается.
+const chatMemberOf = (userId) => ({ members: { some: { userId } } });
 
 // Открытый чат: последние N сообщений (забираем с конца, отдаём по возрастанию).
 const chatWith = {
   ...chatBase,
-  messages: { orderBy: { createdAt: 'desc' }, take: THREAD_MESSAGE_LIMIT },
+  messages: {
+    orderBy: { createdAt: 'desc' },
+    take: THREAD_MESSAGE_LIMIT,
+    // в групповом чате «они» — это трое разных людей, нужно имя автора
+    include: { from: { select: { id: true, name: true } } },
+  },
 };
 
 // Список чатов: нужен только последний текст для превью — вся история
 // всех переписок раньше уезжала клиенту на каждой загрузке приложения.
 const chatListWith = {
   ...chatBase,
-  messages: { orderBy: { createdAt: 'desc' }, take: 1 },
+  messages: {
+    orderBy: { createdAt: 'desc' },
+    take: 1,
+    include: { from: { select: { id: true, name: true } } },
+  },
 };
 
 async function serializeChat(c, currentUserId) {
+  const others = (c.members || [])
+    .map(m => m.user)
+    .filter(u => u && u.id !== currentUserId);
   const ownerSide = c.userId === currentUserId;
-  const u = ownerSide ? c.partner : c.user;
+  // В парном чате собеседник один; в цепочке «партнёра» нет, и шапка
+  // называет чат самой цепочкой — иначе пришлось бы выбирать одного из двух.
+  const u = c.kind === 'chain'
+    ? { id: '', name: `Цепочка · ${others.length + 1} участника`, city: '', avatar: '' }
+    : (others[0] || (ownerSide ? c.partner : c.user));
   return {
     id: c.id,
+    kind: c.kind || 'direct',
+    chainId: c.chainId || null,
+    members: others.map(m => ({ id: m.id, name: m.name, city: m.city, avatar: m.avatar || '' })),
     partner: {
       id: u?.id || '',
       name: u?.name || '',
@@ -846,6 +886,7 @@ async function serializeChat(c, currentUserId) {
       id: m.id,
       from: !m.fromId ? 'sys' : (m.fromId === currentUserId ? 'me' : 'them'),
       me: m.fromId ? m.fromId === currentUserId : false,
+      author: m.fromId && m.fromId !== currentUserId ? (m.from?.name || '') : '',
       text: m.text,
       t: m.createdAt.toISOString(),
     })),
@@ -860,7 +901,7 @@ export async function listChatsAction() {
 async function chatsOf(user) {
   if (!user) return [];
   const chats = await prisma.chat.findMany({
-    where: { OR: [{ userId: user.id }, { partnerId: user.id }] },
+    where: chatMemberOf(user.id),
     include: chatListWith,
     orderBy: { createdAt: 'desc' },
   });
@@ -877,6 +918,7 @@ export async function startChatAction(lotId) {
 
   let chat = await prisma.chat.findFirst({
     where: {
+      kind: 'direct',
       OR: [
         { userId: user.id, partnerId: lot.ownerId },
         { userId: lot.ownerId, partnerId: user.id },
@@ -886,7 +928,12 @@ export async function startChatAction(lotId) {
   });
   if (!chat) {
     chat = await prisma.chat.create({
-      data: { userId: user.id, partnerId: lot.ownerId },
+      data: {
+        kind: 'direct',
+        userId: user.id,
+        partnerId: lot.ownerId,
+        members: { create: [{ userId: user.id }, { userId: lot.ownerId }] },
+      },
       include: chatWith,
     });
   }
@@ -897,7 +944,7 @@ export async function getChatAction(chatId) {
   const user = await getCurrentUser();
   if (!user) return null;
   const chat = await prisma.chat.findFirst({
-    where: { id: chatId, OR: [{ userId: user.id }, { partnerId: user.id }] },
+    where: { id: chatId, ...chatMemberOf(user.id) },
     include: chatWith,
   });
   return chat ? serializeChat(chat, user.id) : null;
@@ -907,7 +954,7 @@ export async function getDealChatAction(dealId) {
   const user = await getCurrentUser();
   if (!user) return null;
   const chat = await prisma.chat.findFirst({
-    where: { dealId, OR: [{ userId: user.id }, { partnerId: user.id }] },
+    where: { dealId, ...chatMemberOf(user.id) },
     include: chatWith,
   });
   return chat ? serializeChat(chat, user.id) : null;
@@ -919,7 +966,7 @@ export async function sendMessageAction(chatId, text) {
   const msg = (text || '').trim();
   if (!msg) return { ok: false, error: 'Пустое сообщение' };
   const chat = await prisma.chat.findFirst({
-    where: { id: chatId, OR: [{ userId: user.id }, { partnerId: user.id }] },
+    where: { id: chatId, ...chatMemberOf(user.id) },
   });
   if (!chat) return { ok: false, error: 'Чат не найден' };
   const saved = await prisma.message.create({
@@ -929,63 +976,548 @@ export async function sendMessageAction(chatId, text) {
 }
 
 // ---------- chains ----------
+//
+// Жизненный цикл: candidate → pending → active → done.
+// Из pending можно уйти в failed (отказ) или expired (вышло время).
+// Уведомления рассылает только смена состояния — молча статус не меняем
+// никогда, иначе человек узнаёт о своей цепочке случайно.
 
-const chainWith = { steps: { orderBy: { order: 'asc' } } };
+const chainWith = {
+  steps: {
+    orderBy: { order: 'asc' },
+    include: {
+      user: { select: { id: true, name: true, avatar: true } },
+      toUser: { select: { id: true, name: true, avatar: true } },
+      lot: { select: { id: true, title: true, photoUrl: true, photo: true, value: true } },
+    },
+  },
+  chat: { select: { id: true } },
+};
 
-function serializeChain(c) {
+function serializeChain(c, meId) {
+  const steps = c.steps.map(s => ({
+    order: s.order,
+    user: { id: s.user.id, name: s.user.id === meId ? 'Вы' : s.user.name, avatar: s.user.avatar || '' },
+    toUser: { id: s.toUser.id, name: s.toUser.id === meId ? 'Вы' : s.toUser.name },
+    lot: s.lot ? { id: s.lot.id, title: s.lot.title, photoUrl: s.lot.photoUrl || s.lot.photo || '', value: s.lot.value } : null,
+    value: s.value,
+    topup: s.topup,
+    edgeScore: s.edgeScore,
+    state: s.state,
+    sent: !!s.sentAt,
+    received: !!s.receivedAt,
+    isMe: s.user.id === meId,
+  }));
+
+  const mine = c.steps.find(s => s.userId === meId) || null;
+  // что достаётся мне — вещь того, кто отдаёт в мою сторону
+  const incoming = c.steps.find(s => s.toUserId === meId) || null;
+  const accepted = c.steps.filter(s => s.state === 'accepted').length;
+
   return {
     id: c.id,
+    kind: c.kind,
+    status: c.status,
     score: c.score,
     note: c.note,
-    steps: c.steps.map(s => ({
-      who: s.who, gives: s.gives, photoUrl: s.photoUrl, to: s.to, value: s.value,
-    })),
+    city: c.city,
+    chatId: c.chat?.id || null,
+    expiresAt: c.expiresAt ? c.expiresAt.toISOString() : null,
+    accepted,
+    total: c.steps.length,
+    steps,
+    me: mine ? {
+      state: mine.state,
+      topup: mine.topup,
+      gives: mine.lot ? { id: mine.lot.id, title: mine.lot.title, value: mine.lot.value, photoUrl: mine.lot.photoUrl || mine.lot.photo || '' } : null,
+      receives: incoming?.lot ? { id: incoming.lot.id, title: incoming.lot.title, value: incoming.lot.value, photoUrl: incoming.lot.photoUrl || incoming.lot.photo || '' } : null,
+      sent: !!mine.sentAt,
+      received: !!incoming?.receivedAt,
+      isInitiator: c.initiatorId === meId,
+    } : null,
   };
 }
 
+const chainOf = (id) => prisma.chain.findUnique({ where: { id }, include: chainWith });
+
 export async function listChainsAction() {
-  return chainsList();
+  return chainsList(await getCurrentUser());
 }
 
-async function chainsList() {
-  const chains = await prisma.chain.findMany({ where: { status: 'active' }, include: chainWith, orderBy: { score: 'desc' } });
-  return chains.map(serializeChain);
+async function chainsList(user) {
+  if (!user) return [];
+  await expireStaleChains();
+  const chains = await prisma.chain.findMany({
+    where: {
+      steps: { some: { userId: user.id } },
+      status: { in: ['candidate', 'pending', 'active'] },
+    },
+    include: chainWith,
+    orderBy: [{ status: 'asc' }, { score: 'desc' }],
+  });
+  // В работе — выше кандидатов: незакрытое действие важнее новой возможности.
+  const rank = { active: 0, pending: 1, candidate: 2 };
+  return chains
+    .map(c => serializeChain(c, user.id))
+    .sort((a, b) => (rank[a.status] - rank[b.status]) || (b.score - a.score));
 }
 
-export async function joinChainAction(chainId) {
+export async function getChainAction(chainId) {
+  const user = await getCurrentUser();
+  if (!user) return null;
+  const chain = await chainOf(chainId);
+  if (!chain || !chain.steps.some(s => s.userId === user.id)) return null;
+  return serializeChain(chain, user.id);
+}
+
+// Пересчёт кандидатов — тяжёлая фоновая операция (эмбеддинги + граф),
+// поэтому не чаще раза в REFRESH_COOLDOWN на процесс.
+const REFRESH_COOLDOWN_MS = 10 * 60000;
+// Ключ — город: движок и так считает по городу, и общий кулдаун молча
+// отказывал бы всем, кроме того, кто нажал первым.
+const lastRefreshAt = new Map();
+
+export async function refreshChainsAction() {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: 'Требуется вход' };
-  const chain = await prisma.chain.findUnique({ where: { id: chainId }, include: chainWith });
+  const city = user.city || '';
+  if (Date.now() - (lastRefreshAt.get(city) || 0) < REFRESH_COOLDOWN_MS) {
+    return { ok: true, skipped: true, chains: await chainsList(user) };
+  }
+  lastRefreshAt.set(city, Date.now());
+  try {
+    await refreshChainCandidates({ city });
+  } catch (e) {
+    console.warn('[chains] refresh failed:', e.message);
+  }
+  return { ok: true, chains: await chainsList(user) };
+}
+
+// Просроченные pending снимаем лениво, на любом чтении цепочек: отдельного
+// планировщика в проекте нет, а держать «живой» цепочку с истёкшим TTL —
+// значит врать про таймер, который видят все участники.
+async function expireStaleChains() {
+  const stale = await prisma.chain.findMany({
+    where: { status: 'pending', expiresAt: { lt: new Date() } },
+    include: { steps: { select: { userId: true } } },
+  });
+  if (!stale.length) return;
+
+  await prisma.chain.updateMany({
+    where: { id: { in: stale.map(c => c.id) }, status: 'pending' },
+    data: { status: 'expired' },
+  });
+  await notify(stale.flatMap(c => c.steps.map(s => ({
+    userId: s.userId,
+    type: 'chain_expired',
+    title: 'Цепочка не собралась',
+    body: 'Не все участники успели ответить за сутки. Доплаты не списывались.',
+    entityType: 'chain',
+    entityId: c.id,
+  }))));
+}
+
+const chainNames = (chain, exceptId) => chain.steps
+  .filter(s => s.userId !== exceptId)
+  .map(s => s.user?.name)
+  .filter(Boolean);
+
+// Текст приглашения начинается с того, что человек получает: механика
+// «кто кому что отдаёт» интересна вторым делом, а решение принимается по
+// первой строке уведомления.
+function inviteBody(chain, step) {
+  const incoming = chain.steps.find(s => s.toUserId === step.userId);
+  const gets = incoming?.lot?.title
+    ? `Вам — «${incoming.lot.title}».`
+    : `Вам — ${Math.abs(step.topup)} Б.`;
+  const gives = step.lot?.title
+    ? ` Ваш «${step.lot.title}» уходит к ${chain.steps.find(s => s.userId === step.toUserId)?.user?.name || 'участнику'}.`
+    : '';
+  const money = step.topup > 0
+    ? ` Доплата: ${step.topup} Б.`
+    : (step.topup < 0 ? ` Вам начислят ${Math.abs(step.topup)} Б.` : ' Без доплаты.');
+  return `${gets}${gives}${money}`;
+}
+
+export async function startChainAction(chainId) {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: 'Требуется вход' };
+
+  const chain = await chainOf(chainId);
   if (!chain) return { ok: false, error: 'Цепочка не найдена' };
-  if (!chain.steps.length) return { ok: false, error: 'В цепочке нет шагов' };
+  const mine = chain.steps.find(s => s.userId === user.id);
+  if (!mine) return { ok: false, error: 'Вы не участник этой цепочки' };
+  if (chain.status !== 'candidate') return { ok: false, error: 'Цепочка уже запущена' };
+  if (mine.topup > 0 && user.balance < mine.topup) {
+    return { ok: false, error: `Не хватает ${mine.topup - user.balance} Б для доплаты — пополните кошелёк` };
+  }
 
-  const last = chain.steps[chain.steps.length - 1];
-  const myStep = chain.steps.find(s => s.who === 'me');
-  const credits = Math.max(0, last.value - (myStep ? myStep.value : 0));
-
-  // pick the lot I receive from the last step (best-effort by title, else first active)
-  const received = await prisma.lot.findFirst({
-    where: { status: 'active', ownerId: { not: user.id }, title: { contains: last.gives.split(' ')[0] } },
-    orderBy: { sortOrder: 'asc' },
+  const expiresAt = new Date(Date.now() + CHAIN_ACCEPT_WINDOW_MS);
+  // Условный UPDATE: если двое нажали «я в деле» одновременно, запускает
+  // цепочку только первый, второй получает её уже в pending.
+  const claimed = await prisma.chain.updateMany({
+    where: { id: chain.id, status: 'candidate' },
+    data: { status: 'pending', initiatorId: user.id, expiresAt },
   });
-  const target = received || await prisma.lot.findFirst({ where: { status: 'active', ownerId: { not: user.id } }, orderBy: { sortOrder: 'asc' } });
-  // lotId — обязательная ссылка: раньше при отсутствии лота писалась пустая
-  // строка и получалась сделка, указывающая в никуда.
-  if (!target) return { ok: false, error: 'Нет доступных лотов для этой цепочки' };
+  if (claimed.count !== 1) return { ok: false, error: 'Цепочку только что запустил другой участник — обновите страницу' };
 
-  const deal = await prisma.$transaction(async (tx) => {
-    const d = await tx.deal.create({
-      data: { userId: user.id, lotId: target.id, credits, stage: 'created', status: 'active' },
-    });
-    const chat = await tx.chat.create({
-      data: { userId: user.id, partnerId: target.ownerId, dealId: d.id },
-    });
-    await tx.message.create({
-      data: { chatId: chat.id, text: `Вступил(а) в цепочку «${chain.note}» — ${credits} Б в эскроу.` },
-    });
-    return d;
+  await prisma.chainStep.update({
+    where: { id: mine.id },
+    data: { state: 'accepted', respondedAt: new Date() },
   });
-  return { ok: true, dealId: deal.id };
+
+  await notify(chain.steps.filter(s => s.userId !== user.id).map(s => ({
+    userId: s.userId,
+    type: 'chain_invite',
+    title: `${user.name} собирает цепочку — нужен ваш ответ`,
+    body: `${inviteBody(chain, s)} Ответить нужно за 24 часа.`,
+    entityType: 'chain',
+    entityId: chain.id,
+  })));
+
+  return { ok: true, chain: serializeChain(await chainOf(chain.id), user.id) };
+}
+
+export async function respondChainAction(chainId, accept) {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: 'Требуется вход' };
+
+  const chain = await chainOf(chainId);
+  if (!chain) return { ok: false, error: 'Цепочка не найдена' };
+  const mine = chain.steps.find(s => s.userId === user.id);
+  if (!mine) return { ok: false, error: 'Вы не участник этой цепочки' };
+  if (chain.status !== 'pending') return { ok: false, error: 'Цепочка больше не ждёт ответов' };
+  if (mine.state !== 'pending') return { ok: false, error: 'Вы уже ответили' };
+
+  if (!accept) return declineChain(chain, user);
+
+  if (mine.topup > 0 && user.balance < mine.topup) {
+    return { ok: false, error: `Не хватает ${mine.topup - user.balance} Б для доплаты — пополните кошелёк` };
+  }
+
+  const claimed = await prisma.chainStep.updateMany({
+    where: { id: mine.id, state: 'pending' },
+    data: { state: 'accepted', respondedAt: new Date() },
+  });
+  if (claimed.count !== 1) return { ok: false, error: 'Ответ уже записан — обновите страницу' };
+
+  const fresh = await chainOf(chain.id);
+  const waiting = fresh.steps.filter(s => s.state === 'pending');
+
+  if (!waiting.length) {
+    const res = await activateChain(fresh);
+    if (!res.ok) return res;
+    return { ok: true, chain: serializeChain(await chainOf(chain.id), user.id) };
+  }
+
+  if (waiting.length === 1) {
+    // Последнему — отдельный текст: на нём одном держится вся цепочка,
+    // и это самое сильное место во всей механике.
+    const [last] = waiting;
+    await notify({
+      userId: last.userId,
+      type: 'chain_last_call',
+      title: `${chainNames(fresh, last.userId).join(' и ')} ждут только вас`,
+      body: `${inviteBody(fresh, last)} Цепочка соберётся, как только вы подтвердите.`,
+      entityType: 'chain',
+      entityId: fresh.id,
+    });
+  } else {
+    await notify(fresh.steps
+      .filter(s => s.userId !== user.id && s.state === 'accepted')
+      .map(s => ({
+        userId: s.userId,
+        type: 'chain_progress',
+        title: `${user.name} в деле`,
+        body: `Согласились ${fresh.steps.length - waiting.length} из ${fresh.steps.length}.`,
+        entityType: 'chain',
+        entityId: fresh.id,
+      })));
+  }
+
+  return { ok: true, chain: serializeChain(fresh, user.id) };
+}
+
+// Отказ не должен ощущаться как «всё пропало»: сразу ищем замену
+// отказавшемуся и предлагаем новую цепочку тем, кто уже был согласен.
+async function declineChain(chain, user) {
+  await prisma.$transaction([
+    prisma.chainStep.updateMany({
+      where: { id: chain.steps.find(s => s.userId === user.id).id, state: 'pending' },
+      data: { state: 'declined', respondedAt: new Date() },
+    }),
+    prisma.chain.updateMany({
+      where: { id: chain.id, status: 'pending' },
+      data: { status: 'failed' },
+    }),
+  ]);
+
+  const others = chain.steps.filter(s => s.userId !== user.id);
+  let replacement = null;
+  try {
+    const found = await findReplacement({
+      city: chain.city,
+      keepUserId: chain.initiatorId || others[0]?.userId,
+      excludeUserIds: [user.id],
+    });
+    if (found) replacement = await createReplacementChain(found, chain.id);
+  } catch (e) {
+    console.warn('[chains] replacement search failed:', e.message);
+  }
+
+  if (replacement) {
+    await notify(replacement.steps.map(s => ({
+      userId: s.userId,
+      type: 'chain_replaced',
+      title: 'Нашли замену — цепочка снова в сборе',
+      body: `${inviteBody(replacement, s)} Один из участников отказался, состав пересобран.`,
+      entityType: 'chain',
+      entityId: replacement.id,
+    })));
+  } else {
+    await notify(others.map(s => ({
+      userId: s.userId,
+      type: 'chain_failed',
+      title: 'Цепочка распалась',
+      body: `${user.name} отказался, замены пока нет. Доплаты не списывались — предложим новый вариант, как только он появится.`,
+      entityType: 'chain',
+      entityId: chain.id,
+    })));
+  }
+
+  return { ok: true, declined: true, replacementId: replacement?.id || null };
+}
+
+async function createReplacementChain(found, replacesId) {
+  try {
+    const created = await prisma.chain.create({
+      data: {
+        kind: found.kind,
+        score: found.score,
+        note: found.note,
+        city: found.city,
+        status: 'pending',
+        fingerprint: found.fingerprint,
+        replacesId,
+        expiresAt: new Date(Date.now() + CHAIN_ACCEPT_WINDOW_MS),
+        steps: {
+          create: found.steps.map(s => ({
+            order: s.order, userId: s.userId, lotId: s.lotId, toUserId: s.toUserId,
+            value: s.value, topup: s.topup, edgeScore: s.edgeScore, state: 'pending',
+          })),
+        },
+      },
+    });
+    return chainOf(created.id);
+  } catch (e) {
+    // такой состав уже есть в БД — заменой он быть не может
+    if (e?.code === 'P2002') return null;
+    throw e;
+  }
+}
+
+// Все согласились: блокируем лоты, замораживаем доплаты, открываем общий чат.
+async function activateChain(chain) {
+  const payers = chain.steps.filter(s => s.topup > 0);
+  const lotIds = chain.steps.map(s => s.lotId).filter(Boolean);
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      for (const s of payers) {
+        const debited = await tx.user.updateMany({
+          where: { id: s.userId, balance: { gte: s.topup } },
+          data: { balance: { decrement: s.topup } },
+        });
+        if (debited.count !== 1) throw new InsufficientFunds(s.userId);
+        await tx.transaction.create({
+          data: {
+            userId: s.userId,
+            kind: 'escrow-in',
+            title: 'Эскроу · цепочка',
+            sub: 'Доплата заморожена до подтверждения передач',
+            amt: s.topup,
+            status: 'held',
+            refType: 'chain',
+            refId: chain.id,
+          },
+        });
+      }
+
+      // Лот, ушедший в активную цепочку, исчезает из ленты: иначе на него
+      // продолжают приходить прямые предложения по уже занятой вещи.
+      await tx.lot.updateMany({ where: { id: { in: lotIds } }, data: { status: 'in_chain' } });
+
+      const chat = await tx.chat.create({
+        data: {
+          kind: 'chain',
+          chainId: chain.id,
+          members: { create: chain.steps.map(s => ({ userId: s.userId })) },
+        },
+      });
+      await tx.message.create({
+        data: {
+          chatId: chat.id,
+          text: 'Цепочка собралась. Договоритесь о передаче: каждый отдаёт свою вещь следующему участнику и отмечает передачу в приложении.',
+        },
+      });
+
+      // Шаг закрытия баллами передавать нечего — он закрыт сразу.
+      await tx.chainStep.updateMany({
+        where: { chainId: chain.id, lotId: null },
+        data: { sentAt: new Date(), receivedAt: new Date() },
+      });
+
+      await tx.chain.update({ where: { id: chain.id }, data: { status: 'active' } });
+    });
+  } catch (e) {
+    if (e instanceof InsufficientFunds) {
+      await prisma.chain.updateMany({ where: { id: chain.id, status: 'pending' }, data: { status: 'failed' } });
+      const brokeName = chain.steps.find(s => s.userId === e.userId)?.user?.name || 'один из участников';
+      await notify(chain.steps.map(s => ({
+        userId: s.userId,
+        type: 'chain_failed',
+        title: 'Цепочка не собралась',
+        body: `У участника ${brokeName} не хватило баллов на доплату. Ничего не списано.`,
+        entityType: 'chain',
+        entityId: chain.id,
+      })));
+      return { ok: false, error: 'У одного из участников не хватило баллов — цепочка отменена' };
+    }
+    throw e;
+  }
+
+  const active = await chainOf(chain.id);
+  await notify(active.steps.map(s => ({
+    userId: s.userId,
+    type: 'chain_active',
+    title: 'Цепочка собралась!',
+    body: `Все ${active.steps.length} участника согласились. Открыт общий чат — договоритесь о передаче.`,
+    entityType: 'chain',
+    entityId: active.id,
+  })));
+  return { ok: true };
+}
+
+// ---- передача вещей ----
+//
+// В паре обмен симметричный, в тройке каждый везёт вещь не тому, от кого
+// получает. Поэтому подтверждений два на каждое звено: отдал и получил.
+
+async function markTransfer(chainId, user, field) {
+  const chain = await chainOf(chainId);
+  if (!chain) return { ok: false, error: 'Цепочка не найдена' };
+  if (chain.status !== 'active') return { ok: false, error: 'Цепочка не в работе' };
+
+  const step = field === 'sentAt'
+    ? chain.steps.find(s => s.userId === user.id)
+    : chain.steps.find(s => s.toUserId === user.id);
+  if (!step) return { ok: false, error: 'Вы не участник этой цепочки' };
+  if (!step.lotId) return { ok: false, error: 'В этом звене вещь не передаётся' };
+  if (field === 'receivedAt' && !step.sentAt) {
+    return { ok: false, error: 'Отправитель ещё не отметил передачу' };
+  }
+  if (step[field]) return { ok: false, error: 'Уже отмечено' };
+
+  const claimed = await prisma.chainStep.updateMany({
+    where: { id: step.id, [field]: null },
+    data: { [field]: new Date() },
+  });
+  if (claimed.count !== 1) return { ok: false, error: 'Статус изменился — обновите страницу' };
+
+  const fresh = await chainOf(chainId);
+  if (fresh.steps.every(s => s.sentAt && s.receivedAt)) await completeChain(fresh);
+
+  return { ok: true, chain: serializeChain(await chainOf(chainId), user.id) };
+}
+
+export async function confirmChainSentAction(chainId) {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: 'Требуется вход' };
+  return markTransfer(chainId, user, 'sentAt');
+}
+
+export async function confirmChainReceivedAction(chainId) {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: 'Требуется вход' };
+  return markTransfer(chainId, user, 'receivedAt');
+}
+
+// Все передачи подтверждены: эскроу раскрывается, получатели доплат
+// забирают баллы, лоты уходят из ленты.
+async function completeChain(chain) {
+  const receivers = chain.steps.filter(s => s.topup < 0);
+  const lotIds = chain.steps.map(s => s.lotId).filter(Boolean);
+
+  await prisma.$transaction([
+    prisma.transaction.updateMany({
+      where: { refType: 'chain', refId: chain.id, status: 'held' },
+      data: { status: 'done' },
+    }),
+    ...receivers.flatMap(s => [
+      prisma.transaction.create({
+        data: {
+          userId: s.userId,
+          kind: 'earn',
+          title: 'Цепочка · разница в стоимости',
+          sub: 'Переведено из эскроу',
+          amt: -s.topup,
+          status: 'done',
+          refType: 'chain',
+          refId: chain.id,
+        },
+      }),
+      prisma.user.update({ where: { id: s.userId }, data: { balance: { increment: -s.topup } } }),
+    ]),
+    ...chain.steps.map(s => prisma.user.update({
+      where: { id: s.userId },
+      data: { dealsCount: { increment: 1 } },
+    })),
+    prisma.lot.updateMany({ where: { id: { in: lotIds } }, data: { status: 'traded' } }),
+    prisma.chain.update({ where: { id: chain.id }, data: { status: 'done' } }),
+  ]);
+
+  await notify(chain.steps.map(s => ({
+    userId: s.userId,
+    type: 'chain_done',
+    title: 'Цепочка закрыта',
+    body: 'Все передачи подтверждены, баллы разморожены. Спасибо!',
+    entityType: 'chain',
+    entityId: chain.id,
+  })));
+}
+
+// ---------- notifications ----------
+
+const NOTIFICATIONS_LIMIT = 50;
+
+export async function listNotificationsAction() {
+  const user = await getCurrentUser();
+  return notificationsOf(user);
+}
+
+async function notificationsOf(user) {
+  if (!user) return { items: [], unread: 0 };
+  const [rows, unread] = await Promise.all([
+    prisma.notification.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'desc' },
+      take: NOTIFICATIONS_LIMIT,
+    }),
+    prisma.notification.count({ where: { userId: user.id, readAt: null } }),
+  ]);
+  return { items: rows.map(serializeNotification), unread };
+}
+
+export async function markNotificationsReadAction(ids) {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: 'Требуется вход' };
+  const list = Array.isArray(ids) ? ids.filter(Boolean) : null;
+  await prisma.notification.updateMany({
+    // без списка помечаем всё: это «открыл колокольчик»
+    where: { userId: user.id, readAt: null, ...(list ? { id: { in: list } } : {}) },
+    data: { readAt: new Date() },
+  });
+  return { ok: true };
 }
 
 // ---------- OAuth (Yandex ID / VK ID) ----------

@@ -9,5 +9,7 @@ out/
 next-env.d.ts
 prisma/*.db
 prisma/*.db-journal
+prisma/*.db-shm
+prisma/*.db-wal
 
 /data
