@@ -23,11 +23,17 @@ async function main() {
   for (const chat of chats) {
     const ids = [chat.userId, chat.partnerId].filter(Boolean);
     for (const userId of new Set(ids)) {
-      const res = await prisma.chatMember.createMany({
-        data: [{ chatId: chat.id, userId }],
-        skipDuplicates: true,
-      });
-      created += res.count;
+      // createMany({ skipDuplicates }) коннектор SQLite не поддерживает —
+      // вызов падал, и контейнер не доходил до старта сервера.
+      // upsert по @@unique([chatId, userId]) даёт ту же идемпотентность.
+      const before = await prisma.chatMember.count({ where: { chatId: chat.id, userId } });
+      if (before) continue;
+      try {
+        await prisma.chatMember.create({ data: { chatId: chat.id, userId } });
+        created++;
+      } catch (e) {
+        if (e.code !== 'P2002') throw e;   // гонка — участник уже добавлен
+      }
     }
   }
 
