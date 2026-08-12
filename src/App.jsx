@@ -18,6 +18,7 @@ import { parseRoute, tabPath, screenPath, readPath } from './router.js';
 import { Logo, AppBar, IconBtn, TabBar, SplashScreen, PullToRefresh } from './ui.jsx';
 import { Icon } from './icons.jsx';
 import { useTweaks } from './tweaks-panel.jsx';
+import { registerServiceWorker, useInstallPrompt, InstallBanner } from './pwa.jsx';
 
 const useMediaQuery = (query) => {
   const [matches, setMatches] = React.useState(() => typeof window !== 'undefined' ? window.matchMedia(query).matches : false);
@@ -150,6 +151,10 @@ export default function App() {
   const resetTo = (id) => { navigate(tabPath(id), { replace: true }); };
 
   React.useEffect(() => { applyAccent(t.accent); }, [t.accent]);
+
+  // Сервис-воркер: офлайн-заглушка вместо браузерной ошибки и приём push.
+  React.useEffect(() => { registerServiceWorker(); }, []);
+  const installPrompt = useInstallPrompt();
 
   const loadAuthedData = async () => {
     const d = await loadAuthedDataAction();
@@ -848,6 +853,7 @@ export default function App() {
         }}
       />
       {snack && <div className="snack" role="alert" onClick={() => setSnack('')}><Icon name="info" size={16} color="#fff" />{snack}</div>}
+      <InstallBanner {...installPrompt} />
     </>
   );
 

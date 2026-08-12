@@ -4,6 +4,7 @@ import { Icon } from './icons.jsx';
 import { WISH_GROUPS, ALL_WISHES } from './wishes.js';
 import { Logo, Credit, AppBar, IconBtn, TabBar, Photo, Sheet, LotCard, PullToRefresh } from './ui.jsx';
 import { updateProfileAction, updateAvatarAction, changePasswordAction, updateSettingsAction, broadcastInfoAction, broadcastAction } from './server/actions.js';
+import { enablePush, disablePush, pushState } from './pwa.jsx';
 import { PhoneField, CityField } from './fields.jsx';
 
 function StatBox({ value, label }) {
@@ -848,6 +849,28 @@ export function SettingsScreen({ user, profile, onBack, onLogout, onProfileSaved
     if (res.ok && res.user && onProfileSaved) onProfileSaved(res.user);
   };
 
+  // Выключатель push раньше просто писал флаг в профиль. Теперь он делает
+  // то, что обещает: спрашивает разрешение и подписывает браузер — иначе
+  // включённый тумблер означал ровно ничего.
+  const [push, setPush] = React.useState({ supported: true, subscribed: false });
+  const [pushNote, setPushNote] = React.useState('');
+  React.useEffect(() => { pushState().then(setPush).catch(() => {}); }, []);
+
+  const togglePush = async () => {
+    setPushNote('');
+    if (push.subscribed) {
+      await disablePush();
+      setPush(p => ({ ...p, subscribed: false }));
+      if (setting('notifyPush')) await toggleSetting('notifyPush');
+      return;
+    }
+    const res = await enablePush();
+    if (!res.ok) { setPushNote(res.error); return; }
+    setPush(p => ({ ...p, subscribed: true, permission: 'granted' }));
+    if (!setting('notifyPush')) await toggleSetting('notifyPush');
+    setPushNote('Уведомления придут на это устройство');
+  };
+
   const shareInvite = async () => {
     const origin = typeof window !== 'undefined' ? window.location.origin : 'https://dayberry.ru';
     const text = `Дайбери — обмен без денег. Присоединяйся: ${origin}`;
@@ -873,7 +896,12 @@ export function SettingsScreen({ user, profile, onBack, onLogout, onProfileSaved
 
       <SectionHeader title="Уведомления" />
       <GroupCard>
-        <SettingsRow icon="bell" label="Push-уведомления" right={<Switch on={setting('notifyPush')} onChange={() => toggleSetting('notifyPush')} />} />
+        <SettingsRow
+          icon="bell"
+          label="Push-уведомления"
+          sub={push.supported ? (pushNote || (push.subscribed ? 'Это устройство подписано' : 'Приходят, даже когда приложение закрыто')) : 'Браузер не умеет push'}
+          right={<Switch on={push.subscribed && setting('notifyPush')} onChange={togglePush} />}
+        />
         <Divider />
         <SettingsRow icon="mail" label="Email-рассылка" right={<Switch on={setting('notifyEmail')} onChange={() => toggleSetting('notifyEmail')} />} />
         <Divider />

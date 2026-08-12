@@ -4,6 +4,7 @@ import { prisma } from '../../lib/prisma';
 import { analyzeListing, computeMatches } from '../../lib/ai';
 import { refreshChainCandidates, findReplacement, CHAIN_ACCEPT_WINDOW_MS } from '../../lib/chains';
 import { notify, serializeNotification } from '../../lib/notify';
+import { pushEnabled, pushPublicKey } from '../../lib/push';
 import { vkAuthStart, yandexAuthStart } from '../../lib/oauth';
 import { saveDataUrl, saveDataUrls, isStorableImage } from '../../lib/storage';
 import { cookies } from 'next/headers';
@@ -1740,6 +1741,39 @@ async function completeChain(chain) {
 // ---------- notifications ----------
 
 const NOTIFICATIONS_LIMIT = 50;
+
+// ---------- push ----------
+
+// Публичный VAPID-ключ отдаём с сервера, а не через NEXT_PUBLIC_: иначе он
+// вмораживается в сборку, и смена ключа требует пересборки образа.
+export async function pushConfigAction() {
+  return { enabled: pushEnabled(), publicKey: pushPublicKey() };
+}
+
+export async function savePushSubscriptionAction(sub) {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: 'Требуется вход' };
+  const endpoint = String(sub?.endpoint || '');
+  const p256dh = String(sub?.keys?.p256dh || '');
+  const auth = String(sub?.keys?.auth || '');
+  if (!endpoint || !p256dh || !auth) return { ok: false, error: 'Некорректная подписка' };
+
+  // Один и тот же endpoint может достаться другому аккаунту на общем
+  // устройстве — тогда подписку перевешиваем, а не плодим вторую.
+  await prisma.pushSubscription.upsert({
+    where: { endpoint },
+    update: { userId: user.id, p256dh, auth },
+    create: { userId: user.id, endpoint, p256dh, auth },
+  });
+  return { ok: true };
+}
+
+export async function deletePushSubscriptionAction(endpoint) {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false };
+  await prisma.pushSubscription.deleteMany({ where: { endpoint: String(endpoint || ''), userId: user.id } });
+  return { ok: true };
+}
 
 // ---------- рассылка ----------
 //

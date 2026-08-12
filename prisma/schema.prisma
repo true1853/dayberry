@@ -36,6 +36,7 @@ model User {
   favorites    Favorite[]
   chatMemberships ChatMember[]
   notifications   Notification[]
+  pushSubs        PushSubscription[]
   chainSteps      ChainStep[]   @relation("chainGiver")
   chainStepsTo    ChainStep[]   @relation("chainReceiver")
   chainsStarted   Chain[]       @relation("chainInitiator")
@@ -286,6 +287,20 @@ model ChainStep {
   @@unique([chainId, userId])
   @@index([chainId, order])
   @@index([userId, state])
+}
+
+// Подписка браузера на web-push. У одного человека их столько, сколько
+// устройств: телефон, рабочий ноутбук, планшет — каждое со своим endpoint.
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 model Notification {

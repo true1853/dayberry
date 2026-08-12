@@ -310,3 +310,18 @@ button { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 .skel-card { overflow: hidden; }
 @keyframes skel-shimmer { from { background-position: 100% 50%; } to { background-position: 0 50%; } }
 @media (prefers-reduced-motion: reduce) { .skel { animation: none; } }
+
+/* предложение установить приложение — над таббаром, не поверх контента */
+.install-banner {
+  position: fixed;
+  left: 12px; right: 12px;
+  bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  z-index: 90;
+  background: var(--card, #fff);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: var(--sh-3);
+  padding: 14px;
+  animation: rise .28s cubic-bezier(.2,.8,.2,1);
+}
+@keyframes rise { from { transform: translateY(16px); opacity: 0; } to { transform: none; opacity: 1; } }

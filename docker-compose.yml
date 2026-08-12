@@ -16,6 +16,10 @@ services:
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET is required}
       # кому доступен экран рассылки: список email через запятую
       ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      # web-push: пара ключей VAPID, публичный уходит в браузер при подписке
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:hello@dayberry.ru}
       AI_API_KEY: ${AI_API_KEY:-}
       AI_BASE_URL: ${AI_BASE_URL:-https://routerai.ru/api/v1}
       AI_MODEL: ${AI_MODEL:-qwen/qwen3-vl-30b-a3b-instruct}
