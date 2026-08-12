@@ -4,8 +4,8 @@ import { CITIES, REMOTE, VLADIMIR_REGION } from './cities.js';
 import { CAT, CAT_IDS, catOf, normalizeCat } from './data.js';
 import { Icon } from './icons.jsx';
 import { fmt, Logo, Credit, Photo, Avatar, Stars, CatTag, AIBadge } from './ui.jsx';
-import { EditProfileSheet, resizeImage } from './screen-profile.jsx';
-import { updateAvatarAction } from './server/actions.js';
+import { EditProfileSheet, resizeImage, SettingsScreen, BroadcastScreen } from './screen-profile.jsx';
+import { updateAvatarAction, broadcastInfoAction } from './server/actions.js';
 import { DealStatus } from './screen-deal.jsx';
 import { ChatThread } from './screen-chat.jsx';
 import { FeedChain, ChainDetail } from './screen-chain.jsx';
@@ -24,7 +24,7 @@ function fmtDate(iso) {
 }
 
 // ---------------- top nav ----------------
-function WebNav({ view, setView, user, avatar, query, setQuery, onLogout, onCreate, authed = true, onAuthRequired, chatUnread = 0 }) {
+function WebNav({ view, setView, user, avatar, query, setQuery, onLogout, onCreate, authed = true, onAuthRequired, chatUnread = 0, isAdmin = false, onSettings, onBroadcast }) {
   const [menu, setMenu] = React.useState(false);
   const [q, setQ] = React.useState(query || '');
   const tabs = [
@@ -77,6 +77,11 @@ function WebNav({ view, setView, user, avatar, query, setQuery, onLogout, onCrea
                   <button className="web-drop-item" onClick={() => goTab('profile')}><Icon name="user" size={17} color="var(--ink-2)" />Профиль</button>
                   <button className="web-drop-item" onClick={() => goTab('deals')}><Icon name="chat" size={17} color="var(--ink-2)" />Мои сделки</button>
                   <button className="web-drop-item" onClick={() => goTab('favorites')}><Icon name="heart" size={17} color="var(--ink-2)" />Избранное</button>
+                  <div className="web-drop-sep" />
+                  <button className="web-drop-item" onClick={() => { setMenu(false); onSettings && onSettings(); }}><Icon name="settings" size={17} color="var(--ink-2)" />Настройки</button>
+                  {isAdmin && (
+                    <button className="web-drop-item" onClick={() => { setMenu(false); onBroadcast && onBroadcast(); }}><Icon name="send" size={17} color="var(--ink-2)" />Рассылка</button>
+                  )}
                   <div className="web-drop-sep" />
                   <button className="web-drop-item danger" onClick={() => { setMenu(false); onLogout(); }}><Icon name="close" size={17} color="var(--berry-700)" />Выйти</button>
                 </>
@@ -727,13 +732,22 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
 
   const favIds = React.useMemo(() => new Set((favorites || []).map(f => f.id)), [favorites]);
   const chatUnread = React.useMemo(() => (chats || []).reduce((n, c) => n + (c.unread || 0), 0), [chats]);
+  // Настроек на десктопе не было вовсе — ни смены пароля, ни уведомлений,
+  // ни рассылки. Переиспользуем мобильные экраны в модалке, как чат и сделку.
+  const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const [broadcastOpen, setBroadcastOpen] = React.useState(false);
+  const [isAdmin, setIsAdmin] = React.useState(false);
+  React.useEffect(() => {
+    if (!authed) { setIsAdmin(false); return; }
+    broadcastInfoAction().then(r => setIsAdmin(!!r?.admin)).catch(() => {});
+  }, [authed]);
 
   const goHome = () => { setView('home'); setSelLot(null); setSelDeal(null); setSelChat(null); setSelChain(null); };
   const dealOpen = selDeal ? deals.find(x => x.id === selDeal) || null : null;
 
   return (
     <div className="web">
-      <WebNav view={view} setView={setView} user={user} avatar={avatar} query={query} setQuery={setQuery} onLogout={onLogout} onCreate={onCreate} authed={authed} onAuthRequired={onAuthRequired} chatUnread={chatUnread} />
+      <WebNav view={view} setView={setView} user={user} avatar={avatar} query={query} setQuery={setQuery} onLogout={onLogout} onCreate={onCreate} authed={authed} onAuthRequired={onAuthRequired} chatUnread={chatUnread} isAdmin={isAdmin} onSettings={() => setSettingsOpen(true)} onBroadcast={() => setBroadcastOpen(true)} />
       <div className="web-body">
         {view === 'home' && <HomeView lots={lots} lotsLoading={lotsLoading} myLots={myLots} myCity={(profile && profile.city) || (user && user.city) || ''} matches={matches} query={query} setQuery={setQuery} cat={cat} setCat={setCat} city={city} setCity={setCity} onOpen={(id) => { setSelLot(id); setView('lot'); }} onChains={() => setView('chains')} favIds={favIds} onToggleFav={onToggleFav} />}
         {view === 'favorites' && <FavoritesView lots={favorites} onBack={goHome} onOpen={(id) => { setSelLot(id); setView('lot'); }} onToggleFav={onToggleFav} />}
@@ -745,6 +759,32 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
         {view === 'profile' && <ProfileView user={user} profile={profile} myLots={myLots} onOpenLot={(id) => { setSelLot(id); setView('lot'); }} onLogout={onLogout} onProfileSaved={onProfileSaved} onWallet={goHome} onEditLot={onEditLot} />}
       </div>
       <WebFooter />
+
+      {settingsOpen && (
+        <div className="web-modal">
+          <div className="app">
+            <div className="safe-top" />
+            <SettingsScreen
+              user={user}
+              profile={profile}
+              onBack={() => setSettingsOpen(false)}
+              onLogout={() => { setSettingsOpen(false); onLogout(); }}
+              onProfileSaved={onProfileSaved}
+              onGoWallet={() => setSettingsOpen(false)}
+              onBroadcast={() => { setSettingsOpen(false); setBroadcastOpen(true); }}
+            />
+          </div>
+        </div>
+      )}
+
+      {broadcastOpen && (
+        <div className="web-modal">
+          <div className="app">
+            <div className="safe-top" />
+            <BroadcastScreen onBack={() => setBroadcastOpen(false)} />
+          </div>
+        </div>
+      )}
 
       {selDeal && dealOpen ? (
         <div className="web-modal">

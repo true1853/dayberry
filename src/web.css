@@ -334,7 +334,9 @@
 .web-modal {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  /* выше шапки (100): она перекрывала верх модалки вместе с кнопкой «назад»,
+     и выйти из чата или сделки на десктопе было нечем */
+  z-index: 300;
   background: var(--bg);
   overflow: hidden;
 }
