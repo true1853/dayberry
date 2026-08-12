@@ -1,7 +1,7 @@
 'use server';
 
 import { prisma } from '../../lib/prisma';
-import { analyzeListing, computeMatches, askWants } from '../../lib/ai';
+import { analyzeListing, computeMatches } from '../../lib/ai';
 import { refreshChainCandidates, findReplacement, CHAIN_ACCEPT_WINDOW_MS } from '../../lib/chains';
 import { notify, serializeNotification } from '../../lib/notify';
 import { vkAuthStart, yandexAuthStart } from '../../lib/oauth';
@@ -1550,18 +1550,6 @@ export async function getOAuthUrlAction(provider, origin) {
 
 // ---------- AI listing analysis ----------
 
-export async function askWantsAction(input) {
-  const user = await getCurrentUser();
-  if (!user) return { ok: false, error: 'Требуется вход' };
-  try {
-    const context = Array.isArray(input?.context) ? input.context : [];
-    const res = await askWants(context);
-    return { ok: true, ...res };
-  } catch (e) {
-    console.error('[ai] askWantsAction failed:', e);
-    return { ok: false, error: 'Не удалось получить ответ ИИ' };
-  }
-}
 
 export async function analyzeListingAction(input) {
   const user = await getCurrentUser();

@@ -3,7 +3,7 @@ import React from 'react';
 import { Icon } from './icons.jsx';
 import { WISH_GROUPS, ALL_WISHES } from './wishes.js';
 import { Logo, Credit, AppBar, IconBtn, TabBar, Photo, Sheet, LotCard } from './ui.jsx';
-import { updateProfileAction, updateAvatarAction, changePasswordAction, updateSettingsAction, askWantsAction } from './server/actions.js';
+import { updateProfileAction, updateAvatarAction, changePasswordAction, updateSettingsAction } from './server/actions.js';
 import { PhoneField, CityField } from './fields.jsx';
 
 function StatBox({ value, label }) {
@@ -224,7 +224,6 @@ export function EditProfileSheet({ user, open, onClose, onSaved }) {
   const [phone, setPhone] = React.useState(user?.phone || '');
   const [error, setError] = React.useState('');
   const [saving, setSaving] = React.useState(false);
-  const [wizardOpen, setWizardOpen] = React.useState(false);
   const [pickerOpen, setPickerOpen] = React.useState(false);
   const avatarRef = React.useRef(null);
 
@@ -297,16 +296,13 @@ export function EditProfileSheet({ user, open, onClose, onSaved }) {
           <textarea value={bio} onChange={e => setBio(e.target.value)} placeholder="Чем меняетесь, где, как любите договариваться…" rows={4} style={{ ...fieldStyle, resize: 'none', lineHeight: 1.5 }} />
         </div>
         <div className="col gap6">
-          <div className="row gap8" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-            <label className="cap">Вишлист</label>
-            <button onClick={() => setWizardOpen(true)} style={{ background: 'var(--berry-50)', border: 'none', borderRadius: 999, padding: '6px 11px', color: 'var(--berry)', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'var(--font)' }}><Icon name="ai" size={14} color="var(--berry)" />Сформировать с ИИ</button>
-          </div>
+          <label className="cap">Вишлист</label>
           <WishList value={wants} onChange={setWants} editable />
           <button className="btn btn-soft btn-block" onClick={() => setPickerOpen(true)}>
             <Icon name="plusCircle" size={18} color="var(--berry)" />
             {parseWishes(wants).length ? 'Изменить список' : 'Выбрать из списка'}
           </button>
-          <span className="cap">Список используют умный мэтчинг и ИИ при создании объявлений.</span>
+          <span className="cap">По списку подбираются обмены в «Умном мэтчинге».</span>
         </div>
         {error && <div style={ERR_BOX}>{error}</div>}
         <button className="btn btn-primary btn-block btn-lg" onClick={save} disabled={saving} style={{ opacity: saving ? 0.7 : 1 }}>
@@ -314,94 +310,10 @@ export function EditProfileSheet({ user, open, onClose, onSaved }) {
         </button>
       </div>
       <WishPicker open={pickerOpen} onClose={() => setPickerOpen(false)} value={wants} onChange={setWants} />
-      <WantsWizard open={wizardOpen} onClose={() => setWizardOpen(false)} onResult={(w) => { setWants(w); setWizardOpen(false); }} />
     </Sheet>
   );
 }
 
-export function WantsWizard({ open, onClose, onResult }) {
-  const [steps, setSteps] = React.useState([]);
-  const [question, setQuestion] = React.useState('');
-  const [suggestions, setSuggestions] = React.useState([]);
-  const [answer, setAnswer] = React.useState('');
-  const [busy, setBusy] = React.useState(false);
-  const [error, setError] = React.useState('');
-  const [result, setResult] = React.useState(null);
-
-  React.useEffect(() => {
-    if (open) {
-      setSteps([]);
-      setQuestion('');
-      setSuggestions([]);
-      setAnswer('');
-      setError('');
-      setResult(null);
-      askNext([]);
-    }
-  }, [open]);
-
-  const askNext = async (ctx) => {
-    setBusy(true);
-    setError('');
-    const res = await askWantsAction({ context: ctx });
-    setBusy(false);
-    if (!res.ok) { setError(res.error || 'Не удалось получить ответ ИИ'); return; }
-    if (res.done) setResult(res.wants || '');
-    else {
-      setQuestion(res.question || 'Что вам сейчас нужно?');
-      setSuggestions(res.suggestions || []);
-    }
-  };
-
-  const answerFn = async (val) => {
-    const v = (val || answer || '').trim();
-    if (!v) return;
-    const next = [...steps, { q: question, a: v }];
-    setSteps(next);
-    setAnswer('');
-    askNext(next);
-  };
-
-  return (
-    <Sheet open={open} onClose={onClose} title="Хочу получить · с ИИ">
-      <div className="px col gap14" style={{ paddingBottom: 10 }}>
-        {error && <div style={ERR_BOX}>{error}</div>}
-        {result !== null ? (
-          <>
-            <div className="row gap6"><Icon name="checkCircle" size={20} color="var(--ok)" /><span className="title">Вот что получилось</span></div>
-            <div className="row gap6" style={{ flexWrap: 'wrap' }}>
-              {result.split(',').map(s => s.trim()).filter(Boolean).map((s, i) => (
-                <span key={i} className="chip chip-berry" style={{ fontSize: 13 }}>{s}</span>
-              ))}
-            </div>
-            <button className="btn btn-primary btn-block btn-lg" onClick={() => onResult(result)}>Вставить в профиль</button>
-            <button className="btn btn-soft btn-block" onClick={() => setResult(null)}>Задать ещё вопросы</button>
-          </>
-        ) : busy ? (
-          <div className="col" style={{ alignItems: 'center', gap: 10, padding: '22px 0' }}>
-            <span className="spin" />
-            <span className="cap">ИИ думает…</span>
-          </div>
-        ) : (
-          <>
-            <div className="card" style={{ padding: 14, background: 'var(--berry-50)', border: '1px solid var(--berry-100)' }}>
-              <span className="body" style={{ lineHeight: 1.5 }}>{question}</span>
-            </div>
-            <input value={answer} onChange={e => setAnswer(e.target.value)} placeholder="Ваш ответ" style={fieldStyle} onKeyDown={e => { if (e.key === 'Enter') answerFn(); }} />
-            {suggestions.length > 0 && (
-              <div className="row gap6" style={{ flexWrap: 'wrap' }}>
-                {suggestions.map((s, i) => (
-                  <button key={i} onClick={() => answerFn(s)} className="chip chip-berry" style={{ fontFamily: 'var(--font)', fontSize: 13, cursor: 'pointer' }}>{s}</button>
-                ))}
-              </div>
-            )}
-            <button className="btn btn-primary btn-block btn-lg" onClick={() => answerFn()} disabled={busy}>Ответить</button>
-          </>
-        )}
-      </div>
-    </Sheet>
-  );
-}
 
 export function ChangePasswordSheet({ open, onClose }) {
   const [current, setCurrent] = React.useState('');
@@ -631,9 +543,12 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, 
             {myLots.map(l => (
               <LotCard key={l.id} lot={l} compact onClick={() => onOpenLot && onOpenLot(l.id)} onEdit={onEditLot} />
             ))}
+            {/* Без aspectRatio: плитка тянется на высоту ряда. Жёсткий квадрат
+                был ниже карточки — та выше на блок с ценой и заголовком, и
+                кнопка «уезжала» вверх. minHeight держит форму, когда она одна. */}
             <div
               className="card col"
-              style={{ overflow: 'hidden', cursor: 'pointer', alignItems: 'center', justifyContent: 'center', gap: 8, aspectRatio: '1/1', border: '2px dashed var(--line)', background: 'transparent', boxShadow: 'none' }}
+              style={{ overflow: 'hidden', cursor: 'pointer', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 180, alignSelf: 'stretch', border: '2px dashed var(--line)', background: 'transparent', boxShadow: 'none' }}
               onClick={onCreate}
             >
               <Icon name="plusCircle" size={28} color="var(--berry-200)" />
@@ -694,8 +609,11 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, 
 export function MyLotsScreen({ myLots = [], go, onEdit, onCreate }) {
   return (
     <div className="app-scroll">
+      {/* .appbar — flex-контейнер, и без grow внутренний ряд сжимался по
+          содержимому: кнопка «плюс» вставала вплотную к заголовку вместо
+          правого края. */}
       <div className="appbar" style={{ paddingBottom: 10 }}>
-        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="row grow" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
           <div className="col gap2">
             <span className="h2">Мои объявления</span>
             <span className="cap">{myLots.length} активных</span>
