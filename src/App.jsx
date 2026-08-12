@@ -15,7 +15,7 @@ import { ProfileScreen, SettingsScreen, MyLotsScreen } from './screen-profile.js
 import WebApp from './web-app.jsx';
 import { parseRoute, tabPath, screenPath, readPath } from './router.js';
 
-import { Logo, AppBar, IconBtn, TabBar } from './ui.jsx';
+import { Logo, AppBar, IconBtn, TabBar, SplashScreen } from './ui.jsx';
 import { Icon } from './icons.jsx';
 import { useTweaks } from './tweaks-panel.jsx';
 
@@ -528,6 +528,7 @@ export default function App() {
           chains={chains} favIds={favIds} onToggleFav={toggleFav}
           unread={notifications.unread || 0}
           chatUnread={unreadChats}
+          city={(profile && profile.city) || (currentUser && currentUser.city) || ''}
           onBell={openNotifications}
           chainProps={{
             authed,
@@ -684,7 +685,7 @@ export default function App() {
   if (booting) {
     return (
       <div className="app-root col" style={{ alignItems: 'center', justifyContent: 'center' }}>
-        <div className="pop"><Logo size={56} /></div>
+        <SplashScreen />
       </div>
     );
   }
@@ -818,7 +819,7 @@ const VIEW_MODES = [
 ];
 
 // unread — колокольчик уведомлений, chatUnread — бейдж на вкладке сообщений
-function HomeTab({ t, go, tab, setTab, onCreate, lots, lotsLoading, matches, chains, myLots, favIds, onToggleFav, unread = 0, chatUnread = 0, onBell, chainProps = {} }) {
+function HomeTab({ t, go, tab, setTab, onCreate, lots, lotsLoading, matches, chains, myLots, favIds, onToggleFav, unread = 0, chatUnread = 0, city = '', onBell, chainProps = {} }) {
   const [cat, setCat] = React.useState('all');
   const [view, setView] = React.useState(t.mechanic || 'list');
   const [q, setQ] = React.useState('');
@@ -853,7 +854,7 @@ function HomeTab({ t, go, tab, setTab, onCreate, lots, lotsLoading, matches, cha
             }}>{m.label}</button>
           ))}
         </div>
-        {view === 'list' && <FeedList cat={cat} lots={shown} loading={lotsLoading} matches={matches} hints={t.matchHints} myLots={myLots} myLot={myLots && myLots[0]} onOpen={(id) => go('lot', { lotId: id })} onChains={() => setView('chain')} favIds={favIds} onToggleFav={onToggleFav} />}
+        {view === 'list' && <FeedList cat={cat} city={city} lots={shown} loading={lotsLoading} matches={matches} hints={t.matchHints} myLots={myLots} myLot={myLots && myLots[0]} onOpen={(id) => go('lot', { lotId: id })} onChains={() => setView('chain')} favIds={favIds} onToggleFav={onToggleFav} />}
         {view === 'swipe' && <FeedSwipe cat={cat} lots={shown} myLot={myLots && myLots[0]} onOpen={(id) => go('lot', { lotId: id })} />}
         {view === 'chain' && <FeedChain chains={chains} onOpenChain={(id) => go('chain', { id })} {...chainProps} />}
       </div>

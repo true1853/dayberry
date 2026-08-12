@@ -134,6 +134,28 @@ export function DealsList({ chats = [], deals = [], onOpen, onOpenDeal }) {
   );
 }
 
+// Ссылка в переписке должна открываться, а не переписываться руками.
+// Разрешаем только http(s): текст сообщения — чужой ввод, и превращать
+// его в произвольную схему (javascript:, data:) нельзя.
+const LINK_RE = /(https?:\/\/[^\s<>"']+)/gi;
+const MAX_MESSAGE_LEN = 2000;
+
+function Linkified({ text, me }) {
+  const parts = String(text || '').split(LINK_RE);
+  return parts.map((part, i) => (
+    i % 2 === 1
+      ? <a
+          key={i}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer nofollow"
+          onClick={(e) => e.stopPropagation()}
+          style={{ color: me ? '#fff' : 'var(--berry)', textDecoration: 'underline', wordBreak: 'break-all' }}
+        >{part}</a>
+      : <React.Fragment key={i}>{part}</React.Fragment>
+  ));
+}
+
 // Как часто открытый тред спрашивает сервер о новых сообщениях. Пуш-канала
 // нет, а без опроса чат односторонний: входящие не появлялись до перезахода.
 const POLL_MS = 4000;
@@ -358,7 +380,7 @@ export function ChatThread({ chatId, onBack, onOpenDeal, onRead }) {
               {sep}
               <div style={{ alignSelf: me ? 'flex-end' : 'flex-start', maxWidth: '82%' }}>
                 {showAuthor && <span className="cap" style={{ display: 'block', margin: '2px 0 3px 6px', fontWeight: 700, color: 'var(--berry-700)' }}>{m.author}</span>}
-                <div style={{ padding: '9px 13px', borderRadius: me ? '16px 16px 4px 16px' : '16px 16px 16px 4px', background: me ? 'var(--berry)' : '#fff', color: me ? '#fff' : 'var(--ink)', boxShadow: me ? 'none' : 'var(--sh-1)', fontSize: 14.5, lineHeight: 1.4, whiteSpace: 'pre-wrap', wordBreak: 'break-word', opacity: m.sending ? 0.6 : 1 }}>{m.text}</div>
+                <div style={{ padding: '9px 13px', borderRadius: me ? '16px 16px 4px 16px' : '16px 16px 16px 4px', background: me ? 'var(--berry)' : '#fff', color: me ? '#fff' : 'var(--ink)', boxShadow: me ? 'none' : 'var(--sh-1)', fontSize: 14.5, lineHeight: 1.4, whiteSpace: 'pre-wrap', wordBreak: 'break-word', opacity: m.sending ? 0.6 : 1 }}><Linkified text={m.text} me={me} /></div>
                 <span className="cap" style={{ display: 'block', textAlign: me ? 'right' : 'left', marginTop: 3, padding: '0 4px' }}>
                   {m.failed ? (
                     <button onClick={() => retry(m)} style={{ border: 'none', background: 'none', padding: 0, color: 'var(--berry-700)', fontWeight: 700, fontSize: 11.5, cursor: 'pointer' }}>не отправлено · повторить</button>
@@ -370,6 +392,9 @@ export function ChatThread({ chatId, onBack, onOpenDeal, onRead }) {
         })}
       </div>
 
+      {text.length > MAX_MESSAGE_LEN - 200 && (
+        <div className="cap" style={{ padding: '0 18px 6px', textAlign: 'right' }}>{text.length} / {MAX_MESSAGE_LEN}</div>
+      )}
       <div className="row gap8" style={{ padding: '8px 14px calc(12px + env(safe-area-inset-bottom, 0px) + 24px)', borderTop: '1px solid var(--line)', background: '#fff', alignItems: 'flex-end' }}>
         <textarea
           ref={inputRef}
@@ -377,6 +402,7 @@ export function ChatThread({ chatId, onBack, onOpenDeal, onRead }) {
           onChange={grow}
           onKeyDown={onKeyDown}
           rows={1}
+          maxLength={MAX_MESSAGE_LEN}
           placeholder="Сообщение…"
           style={{ flex: 1, border: '1px solid var(--line)', borderRadius: 20, padding: '11px 16px', fontSize: 15, fontFamily: 'var(--font)', outline: 'none', background: 'var(--bg)', resize: 'none', maxHeight: 120, lineHeight: 1.35 }}
         />

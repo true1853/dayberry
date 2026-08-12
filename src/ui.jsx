@@ -42,10 +42,14 @@ export function Coin({ size = 16 }) {
 // ---- brand logo ----
 // Знак уже фирменного цвета, поэтому подложки под ним нет: на фиолетовом
 // градиенте, каким был старый бейдж «ДБ», он бы просто не читался.
+// Исходный logo.png — 512×512 и 170 КБ, а показываем мы его в 30–56 пикселей.
+// Отдаём два webp-размера и оставляем выбор браузеру по плотности экрана.
 export function Logo({ size = 40 }) {
   return (
     <img
-      src="/logo.png"
+      src="/logo-96.webp"
+      srcSet="/logo-96.webp 96w, /logo-192.webp 192w"
+      sizes={`${size}px`}
       alt="Дайбери"
       width={size}
       height={size}
@@ -53,6 +57,55 @@ export function Logo({ size = 40 }) {
     />
   );
 }
+// Экран загрузки. Пустой логотип на белом читается как «зависло», поэтому
+// показываем, чем вообще меняются: пара реальных примеров обмена и короткая
+// строка про суть. Набор выбирается случайно один раз за загрузку.
+const SPLASH_LINES = [
+  ['Ноутбук', 'ремонт квартиры'],
+  ['Велосипед', 'зимние шины'],
+  ['Диван', 'грузоперевозки'],
+  ['Фотоаппарат', 'лендинг под ключ'],
+  ['Коляска', 'детские игрушки'],
+  ['Гитара', 'уроки английского'],
+  ['Пылесос', 'кресло'],
+  ['Настольные игры', 'книги'],
+  ['Шуруповёрт', 'сборка мебели'],
+  ['Кроссовки', 'абонемент в зал'],
+  ['Микроволновка', 'клининг'],
+  ['Лыжи', 'палатка'],
+];
+
+const SPLASH_NOTES = [
+  'Меняем вещи и услуги без денег',
+  'Баллы держит эскроу до подтверждения',
+  'Цепочка обмена сводит тех, кто не сошёлся напрямую',
+  'Оценку подсказывает ИИ — торг остаётся за вами',
+  'Обмен внутри своего города — без пересылок',
+];
+
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+export function SplashScreen() {
+  // Случайное выбираем после монтирования: на сервере и на клиенте выпали бы
+  // разные примеры, и React ругался бы на расхождение разметки. Выбор один
+  // раз за загрузку — моргающий текст раздражает сильнее пустоты.
+  const [shown, setShown] = React.useState(null);
+  React.useEffect(() => { setShown({ pair: pick(SPLASH_LINES), note: pick(SPLASH_NOTES) }); }, []);
+  return (
+    <div className="col" style={{ alignItems: 'center', gap: 18, padding: '0 32px', textAlign: 'center' }}>
+      <div className="pop"><Logo size={56} /></div>
+      <div className="col gap10" style={{ alignItems: 'center', minHeight: 64, opacity: shown ? 1 : 0, transition: 'opacity .25s' }}>
+        <div className="row gap8" style={{ alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
+          <span className="tag" style={{ background: 'var(--berry-50)', color: 'var(--berry-700)', fontSize: 13 }}>{shown ? shown.pair[0] : ''}</span>
+          <Icon name="swap" size={16} color="var(--ink-3)" />
+          <span className="tag" style={{ background: 'var(--line-2)', color: 'var(--ink-2)', fontSize: 13 }}>{shown ? shown.pair[1] : ''}</span>
+        </div>
+        <span className="cap" style={{ maxWidth: 260, lineHeight: 1.5 }}>{shown ? shown.note : ''}</span>
+      </div>
+    </div>
+  );
+}
+
 // amount with coin: <Credit n={48000} />
 export function Credit({ n, size = 15, weight = 700, coin = 14, color, gap = 5, sign = false }) {
   const s = sign && n > 0 ? '+' : '';
@@ -156,7 +209,8 @@ export function LotCard({ lot, onClick, compact, fav = false, onToggleFav, onEdi
     <div className="card" style={{ overflow: 'hidden', cursor: 'pointer' }} onClick={onClick}>
       <div style={{ position: 'relative' }}>
         <Photo label={lot.photo} url={lot.photoUrl} cat={lot.cat} style={{ aspectRatio: compact ? '1/1' : '4/3' }} />
-        <div className="row gap6" style={{ position: 'absolute', top: 10, left: 10 }}>
+        <div className="row gap6" style={{ position: 'absolute', top: 10, left: 10, maxWidth: 'calc(100% - 60px)' }}>
+          <span className="tag ellipsis" style={{ background: 'rgba(255,255,255,0.92)', color: catOf(lot.cat).color, backdropFilter: 'blur(6px)' }}>{catOf(lot.cat).label}</span>
           {lot.hot && <span className="tag" style={{ background: 'rgba(255,255,255,0.9)', color: 'var(--berry)', backdropFilter: 'blur(6px)' }}><Icon name="flame" size={12} color="var(--berry)" />Хит</span>}
         </div>
         {onEdit && (
@@ -202,6 +256,12 @@ export function LotCard({ lot, onClick, compact, fav = false, onToggleFav, onEdi
           <span className="cap row gap4" title={`${lot.views} просмотров`}><Icon name="eye" size={13} color="var(--ink-3)" />{lot.views ?? 0}</span>
         </div>
         <div className="title clamp2" style={{ minHeight: 38 }}>{lot.title}</div>
+        {lot.wants ? (
+          <div className="row gap4" style={{ minWidth: 0 }}>
+            <Icon name="swap" size={12} color="var(--ink-3)" style={{ flex: 'none' }} />
+            <span className="cap ellipsis">{lot.wants}</span>
+          </div>
+        ) : null}
         <div className="row gap6" style={{ justifyContent: 'space-between' }}>
           <div className="row gap6" style={{ minWidth: 0 }}>
             <Avatar user={lot.ownerName} url={lot.ownerAvatar} size={20} />

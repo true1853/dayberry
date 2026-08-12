@@ -1090,11 +1090,23 @@ export async function getDealChatAction(dealId) {
   return chat ? serializeChat(chat, user.id) : null;
 }
 
+// Потолок одного сообщения. Переписка — не место для мегабайтных вставок:
+// список чатов тянет последнее сообщение на каждой загрузке приложения.
+const MAX_MESSAGE_LEN = 2000;
+// Поток сообщений в минуту с одного аккаунта. Живой человек столько не пишет,
+// а скрипт — легко: каждое сообщение это запись в БД и уведомления соседям.
+const MESSAGE_RATE = { max: 40, windowMs: 60 * 1000 };
+
 export async function sendMessageAction(chatId, text) {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: 'Требуется вход' };
   const msg = (text || '').trim();
   if (!msg) return { ok: false, error: 'Пустое сообщение' };
+  if (msg.length > MAX_MESSAGE_LEN) {
+    return { ok: false, error: `Слишком длинное сообщение — максимум ${MAX_MESSAGE_LEN} символов` };
+  }
+  const gate = rateLimit.hit(`msg:${user.id}`, MESSAGE_RATE);
+  if (!gate.ok) return { ok: false, error: 'Слишком много сообщений подряд — подождите минуту' };
   const chat = await prisma.chat.findFirst({
     where: { id: chatId, ...chatMemberOf(user.id) },
     include: { members: { select: { userId: true } } },
