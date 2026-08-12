@@ -1,7 +1,7 @@
 'use client';
 // App.jsx — root: navigation, phone frame scaling, tweaks
 import React from 'react';
-import { bootstrapAction, loadAuthedDataAction, logoutAction, createLotAction, updateLotAction, getWalletAction, listDealsAction, listChatsAction, getMatchesAction, createDealAction, confirmReceiptAction, confirmPartnerAction, cancelDealAction, createReviewAction, topUpAction, startChatAction, getDealChatAction, toggleFavoriteAction, listChainsAction, refreshChainsAction, startChainAction, respondChainAction, confirmChainSentAction, confirmChainReceivedAction, listNotificationsAction, markNotificationsReadAction } from './server/actions.js';
+import { bootstrapAction, loadAuthedDataAction, logoutAction, createLotAction, updateLotAction, getWalletAction, listDealsAction, listChatsAction, getMatchesAction, createDealAction, confirmReceiptAction, confirmPartnerAction, cancelDealAction, createReviewAction, topUpAction, startChatAction, getDealChatAction, toggleFavoriteAction, listChainsAction, refreshChainsAction, startChainAction, respondChainAction, confirmChainSentAction, confirmChainReceivedAction, listNotificationsAction, markNotificationsReadAction, getArchivedLots, archiveLotAction, restoreLotAction, deleteLotAction } from './server/actions.js';
 import { FeedList, FeedSwipe, CatRow, FavoritesScreen } from './screen-feed.jsx';
 import { FeedChain, ChainDetail } from './screen-chain.jsx';
 import { NotificationsSheet } from './screen-notifications.jsx';
@@ -81,6 +81,7 @@ export default function App() {
   const [lots, setLots] = React.useState([]);
   const [lotsLoading, setLotsLoading] = React.useState(true);
   const [myLots, setMyLots] = React.useState([]);
+  const [archivedLots, setArchivedLots] = React.useState([]);
   const [profile, setProfile] = React.useState(null);
   const [deals, setDeals] = React.useState([]);
   const [wallet, setWallet] = React.useState(null);
@@ -158,6 +159,7 @@ export default function App() {
     setChats(d.chats || []);
     setFavorites(d.favorites || []);
     setNotifications(d.notifications || { items: [], unread: 0 });
+    try { setArchivedLots(await getArchivedLots()); } catch (e) { console.error('archived lots failed', e); }
   };
 
   // ---- цепочки ----
@@ -322,6 +324,56 @@ export default function App() {
     navigate('/');
   };
 
+  // ---- управление своими объявлениями: архив / восстановление / удаление ----
+  const syncLotsAfterChange = (id) => {
+    setLots(ls => ls.filter(x => x.id !== id));
+    setFavorites(fs => fs.filter(x => x.id !== id));
+  };
+
+  const handleArchiveLot = async (L) => {
+    if (!L) return;
+    try {
+      const res = await archiveLotAction(L.id);
+      if (!res.ok) { showSnack(res.error || 'Не удалось архивировать'); return; }
+      setMyLots(ms => ms.filter(x => x.id !== L.id));
+      setArchivedLots(as => (as.some(x => x.id === L.id) ? as : [L, ...as]));
+      syncLotsAfterChange(L.id);
+      showSnack('Объявление в архиве');
+    } catch (e) {
+      console.error('archive failed', e);
+      showSnack('Не удалось архивировать — обновите страницу');
+    }
+  };
+
+  const handleRestoreLot = async (L) => {
+    if (!L) return;
+    try {
+      const res = await restoreLotAction(L.id);
+      if (!res.ok) { showSnack(res.error || 'Не удалось восстановить'); return; }
+      setArchivedLots(as => as.filter(x => x.id !== L.id));
+      setMyLots(ms => (ms.some(x => x.id === L.id) ? ms : [L, ...ms]));
+      showSnack('Объявление снова в ленте');
+    } catch (e) {
+      console.error('restore failed', e);
+      showSnack('Не удалось восстановить — обновите страницу');
+    }
+  };
+
+  const handleDeleteLot = async (L) => {
+    if (!L) return;
+    try {
+      const res = await deleteLotAction(L.id);
+      if (!res.ok) { showSnack(res.error || 'Не удалось удалить'); return; }
+      setMyLots(ms => ms.filter(x => x.id !== L.id));
+      setArchivedLots(as => as.filter(x => x.id !== L.id));
+      syncLotsAfterChange(L.id);
+      showSnack(res.notice || 'Объявление удалено');
+    } catch (e) {
+      console.error('delete failed', e);
+      showSnack('Не удалось удалить — обновите страницу');
+    }
+  };
+
   const publishLot = async (lotData) => {
     if (publishingRef.current) return;
     publishingRef.current = true;
@@ -472,7 +524,16 @@ export default function App() {
     );
     if (tab === 'mylots') return (
       <div className="app"><div className="safe-top" />
-        <MyLotsScreen myLots={myLots} go={go} onCreate={onCreate} onEdit={(L) => requireAuth('Редактировать объявление можно после регистрации', () => setEditingLot(L))} />
+        <MyLotsScreen
+          myLots={myLots}
+          archivedLots={archivedLots}
+          go={go}
+          onCreate={onCreate}
+          onEdit={(L) => requireAuth('Редактировать объявление можно после регистрации', () => setEditingLot(L))}
+          onArchive={handleArchiveLot}
+          onRestore={handleRestoreLot}
+          onDelete={handleDeleteLot}
+        />
         <TabBar tab={tab} setTab={guardedTab} onCreate={onCreate} unread={0} />
       </div>
     );

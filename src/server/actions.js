@@ -340,6 +340,61 @@ async function myLotsOf(user) {
   return lots.map(l => mapLot(l, l.owner?.city || ''));
 }
 
+export async function getArchivedLots() {
+  const user = await getCurrentUser();
+  if (!user) return [];
+  const lots = await prisma.lot.findMany({
+    where: { ownerId: user.id, status: 'archived' },
+    include: { owner: { select: { city: true, name: true, avatar: true, rating: true, reviewsCount: true, dealsCount: true } }, lotPhotos: { orderBy: { order: 'asc' } } },
+    orderBy: { createdAt: 'desc' },
+  });
+  return lots.map(l => mapLot(l, l.owner?.city || ''));
+}
+
+async function ownLotOrNull(lotId, userId) {
+  if (!lotId || !userId) return null;
+  const lot = await prisma.lot.findUnique({ where: { id: lotId } });
+  return lot && lot.ownerId === userId ? lot : null;
+}
+
+export async function archiveLotAction(lotId) {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: 'Требуется вход' };
+  const lot = await ownLotOrNull(lotId, user.id);
+  if (!lot) return { ok: false, error: 'Объявление не найдено' };
+  await prisma.lot.update({ where: { id: lotId }, data: { status: 'archived' } });
+  return { ok: true, id: lotId, status: 'archived' };
+}
+
+export async function restoreLotAction(lotId) {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: 'Требуется вход' };
+  const lot = await ownLotOrNull(lotId, user.id);
+  if (!lot) return { ok: false, error: 'Объявление не найдено' };
+  await prisma.lot.update({ where: { id: lotId }, data: { status: 'active' } });
+  return { ok: true, id: lotId, status: 'active' };
+}
+
+export async function deleteLotAction(lotId) {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: 'Требуется вход' };
+  const lot = await ownLotOrNull(lotId, user.id);
+  if (!lot) return { ok: false, error: 'Объявление не найдено' };
+
+  // Если на объявлении есть активные сделки — физически удалить нельзя
+  // (сломаются сделки). Переносим в архив.
+  const activeDeals = await prisma.deal.count({
+    where: { OR: [{ lotId }, { myLotId: lotId }], status: 'active' },
+  });
+  if (activeDeals > 0) {
+    await prisma.lot.update({ where: { id: lotId }, data: { status: 'archived' } });
+    return { ok: true, id: lotId, status: 'archived', notice: 'На объявлении есть активные сделки — оно перемещено в архив' };
+  }
+
+  await prisma.lot.delete({ where: { id: lotId } });
+  return { ok: true, id: lotId, status: 'deleted' };
+}
+
 // Счётчик просмотров нигде не увеличивался — во всех карточках стоял ноль.
 // Считаем открытие карточки лота; свои просмотры не учитываем, иначе
 // счётчик накручивается автором.
@@ -384,7 +439,7 @@ export async function listFavoritesAction() {
 async function favoritesOf(user) {
   if (!user) return [];
   const favs = await prisma.favorite.findMany({
-    where: { userId: user.id },
+    where: { userId: user.id, lot: { status: 'active' } },
     include: {
       lot: {
         include: {

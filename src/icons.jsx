@@ -3,7 +3,7 @@ import {
   Home, Search, Plus, MessageSquare, User, Heart, ChevronLeft, ChevronRight,
   ChevronDown, X, Sparkles, ShieldCheck, ArrowLeftRight, Link2, Wallet,
   Check, CheckCircle, Lock, Clock, Star, Map, SlidersHorizontal, Bell,
-  Camera, ArrowRight, Send, PlusCircle, Flame, Eye, EyeOff, Tag, Gift, Info, Mail, Bot, Pencil, Settings, LayoutGrid,
+  Camera, ArrowRight, Send, PlusCircle, Flame, Eye, EyeOff, Tag, Gift, Info, Mail, Bot, Pencil, Settings, LayoutGrid, MoreHorizontal, Archive,
 } from 'lucide-react';
 
 const MAP = {
@@ -46,6 +46,8 @@ const MAP = {
   edit:        Pencil,
   settings:    Settings,
   grid:        LayoutGrid,
+  dots:        MoreHorizontal,
+  archive:     Archive,
 };
 
 export function Icon({ name, size = 22, sw = 1.9, color = 'currentColor', fill = 'none', style }) {

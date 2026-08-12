@@ -150,7 +150,7 @@ export function AIBadge({ children = 'AI', tone = 'berry' }) {
 }
 
 // ---- lot card (feed) ----
-export function LotCard({ lot, onClick, compact, fav = false, onToggleFav, onEdit }) {
+export function LotCard({ lot, onClick, compact, fav = false, onToggleFav, onEdit, onMenu }) {
   const ownerCity = lot.ownerCity || '';
   return (
     <div className="card" style={{ overflow: 'hidden', cursor: 'pointer' }} onClick={onClick}>
@@ -164,13 +164,24 @@ export function LotCard({ lot, onClick, compact, fav = false, onToggleFav, onEdi
             aria-label="Редактировать"
             title="Редактировать"
             className="row"
-            style={{ position: 'absolute', top: 8, right: 8, width: 34, height: 34, borderRadius: 999, border: 'none', background: 'rgba(255,255,255,0.92)', justifyContent: 'center', boxShadow: 'var(--sh-1)', cursor: 'pointer' }}
+            style={{ position: 'absolute', top: 8, right: onMenu ? 48 : 8, width: 34, height: 34, borderRadius: 999, border: 'none', background: 'rgba(255,255,255,0.92)', justifyContent: 'center', boxShadow: 'var(--sh-1)', cursor: 'pointer' }}
             onClick={(e) => { e.stopPropagation(); onEdit(lot); }}
           >
             <Icon name="edit" size={17} color="var(--berry)" />
           </button>
         )}
-        {onToggleFav && !onEdit && (
+        {onMenu && (
+          <button
+            aria-label="Ещё"
+            title="Ещё"
+            className="row"
+            style={{ position: 'absolute', top: 8, right: 8, width: 34, height: 34, borderRadius: 999, border: 'none', background: 'rgba(255,255,255,0.92)', justifyContent: 'center', boxShadow: 'var(--sh-1)', cursor: 'pointer' }}
+            onClick={(e) => { e.stopPropagation(); onMenu(lot); }}
+          >
+            <Icon name="dots" size={17} color="var(--ink)" />
+          </button>
+        )}
+        {onToggleFav && !onEdit && !onMenu && (
           <button
             aria-label={fav ? 'Убрать из избранного' : 'В избранное'}
             aria-pressed={fav}

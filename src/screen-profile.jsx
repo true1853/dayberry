@@ -606,39 +606,84 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, 
   );
 }
 
-export function MyLotsScreen({ myLots = [], go, onEdit, onCreate }) {
+export function MyLotsScreen({ myLots = [], archivedLots = [], go, onEdit, onCreate, onArchive, onRestore, onDelete }) {
+  const [tab, setTab] = React.useState('active'); // 'active' | 'archived'
+  const [menuLot, setMenuLot] = React.useState(null);
+  const [confirmLot, setConfirmLot] = React.useState(null);
+  const list = tab === 'active' ? myLots : archivedLots;
+
   return (
     <div className="app-scroll">
-      {/* .appbar — flex-контейнер, и без grow внутренний ряд сжимался по
-          содержимому: кнопка «плюс» вставала вплотную к заголовку вместо
-          правого края. */}
       <div className="appbar" style={{ paddingBottom: 10 }}>
         <div className="row grow" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
           <div className="col gap2">
             <span className="h2">Мои объявления</span>
-            <span className="cap">{myLots.length} активных</span>
+            <span className="cap">{list.length} {tab === 'active' ? 'активных' : 'в архиве'}</span>
           </div>
           <IconBtn name="plusCircle" onClick={onCreate} />
         </div>
       </div>
+      <div className="row gap8" style={{ padding: '0 18px 10px', flexShrink: 0 }}>
+        {[['active', 'Активные'], ['archived', 'Архив']].map(([id, label]) => (
+          <button key={id} onClick={() => setTab(id)} style={{
+            padding: '7px 16px', borderRadius: 20, border: 'none', cursor: 'pointer', fontFamily: 'var(--font)',
+            fontSize: 13.5, fontWeight: 600, transition: 'all .15s',
+            background: tab === id ? 'var(--berry)' : 'var(--line-2)',
+            color: tab === id ? '#fff' : 'var(--ink-2)',
+          }}>{label}{id === 'archived' && archivedLots.length ? ` · ${archivedLots.length}` : ''}</button>
+        ))}
+      </div>
       <div className="px" style={{ paddingBottom: 20 }}>
-        {myLots.length ? (
+        {list.length ? (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            {myLots.map(l => (
-              <div key={l.id} className="col gap6">
-                <LotCard lot={l} compact onClick={() => go('lot', { lotId: l.id })} onEdit={onEdit} />
-              </div>
+            {list.map(l => (
+              <LotCard
+                key={l.id}
+                lot={l}
+                compact
+                onClick={() => go('lot', { lotId: l.id })}
+                onEdit={tab === 'active' ? onEdit : undefined}
+                onMenu={(lot) => setMenuLot(lot)}
+              />
             ))}
           </div>
-        ) : (
+        ) : tab === 'active' ? (
           <div className="col gap10" style={{ alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
             <div className="avatar" style={{ width: 56, height: 56, background: 'var(--berry-50)' }}><Icon name="plusCircle" size={26} color="var(--berry)" /></div>
             <span className="title">Пока нет объявлений</span>
             <span className="sub" style={{ maxWidth: 260 }}>Создайте первое — и начните обмениваться без денег</span>
             <button className="btn btn-primary" style={{ marginTop: 4 }} onClick={onCreate}><Icon name="plus" size={18} color="#fff" />Создать объявление</button>
           </div>
+        ) : (
+          <div className="col gap10" style={{ alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
+            <div className="avatar" style={{ width: 56, height: 56, background: 'var(--line-2)' }}><Icon name="archive" size={26} color="var(--ink-3)" /></div>
+            <span className="title">В архиве пусто</span>
+            <span className="sub" style={{ maxWidth: 260 }}>Архивированные объявления прячутся из ленты, но сохраняются здесь</span>
+          </div>
         )}
       </div>
+
+      <Sheet open={!!menuLot} onClose={() => setMenuLot(null)} title="Действия с объявлением">
+        <div className="px col gap10" style={{ paddingBottom: 8 }}>
+          {tab === 'active' && (
+            <button className="btn btn-soft btn-block" onClick={() => { const l = menuLot; setMenuLot(null); onEdit(l); }}><Icon name="edit" size={18} color="var(--berry)" />Редактировать</button>
+          )}
+          {tab === 'active' ? (
+            <button className="btn btn-soft btn-block" onClick={() => { const l = menuLot; setMenuLot(null); onArchive(l); }}><Icon name="archive" size={18} color="var(--ink-2)" />Архивировать</button>
+          ) : (
+            <button className="btn btn-soft btn-block" onClick={() => { const l = menuLot; setMenuLot(null); onRestore(l); }}><Icon name="check" size={18} color="var(--ok)" />Восстановить</button>
+          )}
+          <button className="btn btn-soft btn-block" style={{ color: 'var(--warn)' }} onClick={() => { setConfirmLot(menuLot); setMenuLot(null); }}><Icon name="close" size={18} color="var(--warn)" />Удалить</button>
+        </div>
+      </Sheet>
+
+      <Sheet open={!!confirmLot} onClose={() => setConfirmLot(null)} title="Удалить объявление?">
+        <div className="px col gap14" style={{ paddingBottom: 8 }}>
+          <span className="body">«{confirmLot ? confirmLot.title : ''}» будет удалено навсегда. Если на нём есть активные сделки — вместо удаления оно уйдёт в архив.</span>
+          <button className="btn btn-block btn-lg" style={{ background: 'var(--warn)', color: '#fff' }} onClick={() => { const l = confirmLot; setConfirmLot(null); onDelete(l); }}><Icon name="close" size={20} color="#fff" />Да, удалить</button>
+          <button className="btn btn-soft btn-block" onClick={() => setConfirmLot(null)}>Отмена</button>
+        </div>
+      </Sheet>
     </div>
   );
 }
