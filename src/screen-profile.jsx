@@ -1,6 +1,7 @@
 // screen-profile.jsx — user profile screen
 import React from 'react';
 import { Icon } from './icons.jsx';
+import { WISH_GROUPS, ALL_WISHES } from './wishes.js';
 import { Logo, Credit, AppBar, IconBtn, TabBar, Photo, Sheet, LotCard } from './ui.jsx';
 import { updateProfileAction, updateAvatarAction, changePasswordAction, updateSettingsAction, askWantsAction } from './server/actions.js';
 import { PhoneField, CityField } from './fields.jsx';
@@ -94,6 +95,76 @@ const ERR_BOX = { padding: '10px 14px', borderRadius: 12, background: 'var(--ber
 export const parseWishes = (str) => String(str || '').split(',').map(s => s.trim()).filter(Boolean);
 export const joinWishes = (list) => list.join(', ');
 
+// Выбор из каталога: поиск, группы по категориям, свой вариант. Раньше в
+// настройках было одно пустое поле — приходилось придумывать формулировки
+// самому, и вишлист оставался незаполненным.
+export function WishPicker({ open, onClose, value, onChange }) {
+  const [q, setQ] = React.useState('');
+  const chosen = parseWishes(value);
+  const has = (w) => chosen.some(x => x.toLowerCase() === w.toLowerCase());
+  const toggle = (w) => onChange(joinWishes(has(w) ? chosen.filter(x => x.toLowerCase() !== w.toLowerCase()) : [...chosen, w]));
+
+  const ql = q.trim().toLowerCase();
+  const groups = WISH_GROUPS
+    .map(g => ({ ...g, items: ql ? g.items.filter(i => i.toLowerCase().includes(ql)) : g.items }))
+    .filter(g => g.items.length);
+  // своё значение предлагаем добавить, если в каталоге такого нет
+  const custom = q.trim();
+  const canAddCustom = custom.length > 1 && !ALL_WISHES.some(i => i.toLowerCase() === custom.toLowerCase()) && !has(custom);
+
+  React.useEffect(() => { if (open) setQ(''); }, [open]);
+
+  return (
+    <Sheet open={open} onClose={onClose} title={`Что вы хотите получить${chosen.length ? ` · ${chosen.length}` : ''}`}>
+      <div className="px col gap12" style={{ paddingBottom: 8 }}>
+        <input
+          value={q}
+          onChange={e => setQ(e.target.value)}
+          placeholder="Поиск или свой вариант"
+          style={fieldStyle}
+        />
+
+        {canAddCustom && (
+          <button className="btn btn-soft btn-block" onClick={() => { toggle(custom); setQ(''); }}>
+            <Icon name="plus" size={17} color="var(--berry)" />Добавить «{custom}»
+          </button>
+        )}
+
+        <div className="col gap14" style={{ maxHeight: '46vh', overflowY: 'auto' }}>
+          {groups.map(g => (
+            <div key={g.id} className="col gap8">
+              <span className="over" style={{ color: g.color }}>{g.label}</span>
+              <div className="row gap6" style={{ flexWrap: 'wrap' }}>
+                {g.items.map(w => (
+                  <button
+                    key={w}
+                    onClick={() => toggle(w)}
+                    aria-pressed={has(w)}
+                    className="chip"
+                    style={{
+                      padding: '7px 13px', fontSize: 13.5,
+                      background: has(w) ? 'var(--berry)' : 'var(--card)',
+                      color: has(w) ? '#fff' : 'var(--ink-2)',
+                      borderColor: has(w) ? 'var(--berry)' : 'var(--line)',
+                    }}
+                  >
+                    {has(w) && <Icon name="check" size={13} color="#fff" />}{w}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+          {!groups.length && !canAddCustom && (
+            <span className="sub" style={{ padding: '10px 0' }}>Ничего не нашлось — впишите свой вариант.</span>
+          )}
+        </div>
+
+        <button className="btn btn-primary btn-block btn-lg" onClick={onClose}>Готово</button>
+      </div>
+    </Sheet>
+  );
+}
+
 export function WishList({ value, onChange, editable = false }) {
   const items = parseWishes(value);
   const [draft, setDraft] = React.useState('');
@@ -154,6 +225,7 @@ export function EditProfileSheet({ user, open, onClose, onSaved }) {
   const [error, setError] = React.useState('');
   const [saving, setSaving] = React.useState(false);
   const [wizardOpen, setWizardOpen] = React.useState(false);
+  const [pickerOpen, setPickerOpen] = React.useState(false);
   const avatarRef = React.useRef(null);
 
   React.useEffect(() => {
@@ -230,6 +302,10 @@ export function EditProfileSheet({ user, open, onClose, onSaved }) {
             <button onClick={() => setWizardOpen(true)} style={{ background: 'var(--berry-50)', border: 'none', borderRadius: 999, padding: '6px 11px', color: 'var(--berry)', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'var(--font)' }}><Icon name="ai" size={14} color="var(--berry)" />Сформировать с ИИ</button>
           </div>
           <WishList value={wants} onChange={setWants} editable />
+          <button className="btn btn-soft btn-block" onClick={() => setPickerOpen(true)}>
+            <Icon name="plusCircle" size={18} color="var(--berry)" />
+            {parseWishes(wants).length ? 'Изменить список' : 'Выбрать из списка'}
+          </button>
           <span className="cap">Список используют умный мэтчинг и ИИ при создании объявлений.</span>
         </div>
         {error && <div style={ERR_BOX}>{error}</div>}
@@ -237,6 +313,7 @@ export function EditProfileSheet({ user, open, onClose, onSaved }) {
           {saving ? 'Сохраняем…' : 'Сохранить'}
         </button>
       </div>
+      <WishPicker open={pickerOpen} onClose={() => setPickerOpen(false)} value={wants} onChange={setWants} />
       <WantsWizard open={wizardOpen} onClose={() => setWizardOpen(false)} onResult={(w) => { setWants(w); setWizardOpen(false); }} />
     </Sheet>
   );

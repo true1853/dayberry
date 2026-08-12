@@ -4,7 +4,8 @@ import { Icon } from './icons.jsx';
 import { Logo, fmt, Photo, IconBtn, Coin } from './ui.jsx';
 import { analyzeListingAction, updateProfileWantsAction } from './server/actions.js';
 import { CAT, CAT_IDS, normalizeCat } from './data.js';
-import { WishList, parseWishes, joinWishes } from './screen-profile.jsx';
+import { WishList, WishPicker, parseWishes, joinWishes } from './screen-profile.jsx';
+import { WISH_QUICK } from './wishes.js';
 
 const SLIDES = [
   {
@@ -58,18 +59,10 @@ function OnboardArt({ kind }) {
   );
 }
 
-// Подсказки под каждую категорию: вишлист заполняли двое из семи, потому что
-// пустое поле в профиле никто не ищет. Здесь достаточно потыкать в чипы.
-const WISH_SUGGESTIONS = [
-  'Ноутбук', 'Смартфон', 'Наушники', 'Пылесос',
-  'Велосипед', 'Лыжи', 'Детские товары', 'Коляска',
-  'Мебель', 'Матрас', 'Одежда', 'Книги',
-  'Шины', 'Запчасти', 'Клининг', 'Ремонт', 'Перевозка', 'Услуги дизайна',
-];
-
 // Шаг вишлиста в конце онбординга. Без него мэтчинг падает на перекрёстный
 // спрос, который заметно слабее: алгоритму просто нечего сопоставлять.
 function WishStep({ value, onChange, onSubmit, onSkip, saving }) {
+  const [pickerOpen, setPickerOpen] = React.useState(false);
   const chosen = parseWishes(value);
   const has = (w) => chosen.some(x => x.toLowerCase() === w.toLowerCase());
   const toggle = (w) => onChange(joinWishes(has(w) ? chosen.filter(x => x.toLowerCase() !== w.toLowerCase()) : [...chosen, w]));
@@ -86,7 +79,7 @@ function WishStep({ value, onChange, onSubmit, onSkip, saving }) {
         </div>
 
         <div className="row gap6" style={{ flexWrap: 'wrap' }}>
-          {WISH_SUGGESTIONS.map(w => (
+          {WISH_QUICK.map(w => (
             <button
               key={w}
               onClick={() => toggle(w)}
@@ -104,10 +97,18 @@ function WishStep({ value, onChange, onSubmit, onSkip, saving }) {
           ))}
         </div>
 
-        <div className="col gap6">
-          <span className="cap">Своё</span>
-          <WishList value={value} onChange={onChange} editable />
-        </div>
+        <button className="btn btn-soft btn-block" onClick={() => setPickerOpen(true)}>
+          <Icon name="search" size={17} color="var(--berry)" />Ещё варианты или своё
+        </button>
+
+        {chosen.length > 0 && (
+          <div className="col gap6">
+            <span className="cap">Выбрано</span>
+            <WishList value={value} onChange={onChange} editable />
+          </div>
+        )}
+
+        <WishPicker open={pickerOpen} onClose={() => setPickerOpen(false)} value={value} onChange={onChange} />
       </div>
 
       <div className="col gap10" style={{ padding: '12px 26px calc(24px + env(safe-area-inset-bottom))' }}>
