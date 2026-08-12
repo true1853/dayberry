@@ -118,7 +118,42 @@ export function ChainCard({ chain, onOpen }) {
 // лента цепочек
 // ---------------------------------------------------------------------------
 
-export function FeedChain({ onOpenChain, chains = [], onRefresh, refreshing = false, authed = true, hasLots = true, hasWants = true }) {
+// Почему цепочек нет — по цифрам последнего поиска. Пустой экран без
+// объяснения читается как поломка, а «попробуйте позже» ничем не помогает:
+// человек не понимает, ждать ему или что-то исправить у себя.
+function emptyReason({ authed, hasLots, hasWants, stats, scope }) {
+  if (!authed) return 'Войдите, чтобы система искала цепочки с вашими вещами.';
+  if (!hasLots) return 'Добавьте хотя бы одно объявление — без вашей вещи круг не замкнуть.';
+  if (!hasWants) return 'Заполните вишлист в профиле: цепочка собирается по тому, что вы хотите получить.';
+  if (!stats) return 'Цепочка собирается, когда желания трёх человек складываются в круг. Проверим — это занимает несколько секунд.';
+
+  const where = scope === 'any' ? 'по всем городам' : 'в вашем регионе';
+  const people = stats.people || 0;
+  if (people < 3) {
+    return `Пока ${where} ${people} ${plural(people, 'участник', 'участника', 'участников')} с объявлениями — для круга нужно хотя бы трое.`;
+  }
+  const base = `Искали ${where}: ${people} ${plural(people, 'участник', 'участника', 'участников')}, ${stats.lots || 0} ${plural(stats.lots || 0, 'вещь', 'вещи', 'вещей')}.`;
+  if (!stats.edges) {
+    return `${base} Совпадений по интересам пока нет — попробуйте описать в вишлисте, что ищете, конкретнее.`;
+  }
+  if (stats.droppedTopup) {
+    return `${base} Совпадения есть, но круг не сходится по цене: вещи слишком разные по стоимости, доплата вышла бы больше трети.`;
+  }
+  if (stats.droppedGeo && scope !== 'any') {
+    return `${base} Подходящие участники нашлись, но в разных городах. Попробуйте поиск по всем городам — услуги и цифру можно получить откуда угодно.`;
+  }
+  return `${base} Круг пока не замыкается — не хватает вещи, которая свяжет цепочку.`;
+}
+
+const plural = (n, one, few, many) => {
+  const m10 = n % 10;
+  const m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few;
+  return many;
+};
+
+export function FeedChain({ onOpenChain, chains = [], onRefresh, refreshing = false, authed = true, hasLots = true, hasWants = true, stats = null, scope = 'region', onScope }) {
   const inWork = chains.filter(c => c.status !== 'candidate');
   const found = chains.filter(c => c.status === 'candidate');
 
@@ -135,6 +170,27 @@ export function FeedChain({ onOpenChain, chains = [], onRefresh, refreshing = fa
           </div>
         </div>
       </div>
+
+      {authed && onScope && (
+        <div className="col gap6">
+          <span className="over">Где искать</span>
+          <div className="row gap8">
+            {[['region', 'Мой регион'], ['any', 'Любой город']].map(([id, label]) => (
+              <button
+                key={id}
+                onClick={() => onScope(id)}
+                className={'chip chip-berry' + (scope === id ? ' is-on' : '')}
+                style={{ border: 'none', cursor: 'pointer', fontFamily: 'var(--font)' }}
+              >{label}</button>
+            ))}
+          </div>
+          <span className="cap">
+            {scope === 'any'
+              ? 'Участники могут быть из разных городов — подходит для услуг: дизайн, реклама, консультации.'
+              : 'Только те, до кого вещь доедет. Услуги, которые оказывают удалённо, ищутся и за пределами региона.'}
+          </span>
+        </div>
+      )}
 
       {inWork.length > 0 && (
         <div className="col gap10">
@@ -156,15 +212,7 @@ export function FeedChain({ onOpenChain, chains = [], onRefresh, refreshing = fa
           <span className="title" style={{ fontSize: 15 }}>Пока цепочек нет</span>
           {/* Пустой экран без объяснения выглядит как поломка. Говорим,
               чего именно не хватает системе, чтобы собрать цепочку. */}
-          <span className="sub" style={{ lineHeight: 1.5 }}>
-            {!authed
-              ? 'Войдите, чтобы система искала цепочки с вашими вещами.'
-              : !hasLots
-                ? 'Добавьте хотя бы одно объявление — без вашей вещи круг не замкнуть.'
-                : !hasWants
-                  ? 'Заполните вишлист в профиле: цепочка собирается по тому, что вы хотите получить.'
-                  : 'Цепочка собирается, когда желания трёх человек складываются в круг. Проверим ещё раз — это занимает несколько секунд.'}
-          </span>
+          <span className="sub" style={{ lineHeight: 1.5 }}>{emptyReason({ authed, hasLots, hasWants, stats, scope })}</span>
           {authed && onRefresh && (
             <button className="btn btn-ghost" onClick={onRefresh} disabled={refreshing}>
               {refreshing ? 'Ищем…' : 'Поискать цепочки'}

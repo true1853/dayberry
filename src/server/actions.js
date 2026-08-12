@@ -1238,21 +1238,31 @@ const REFRESH_COOLDOWN_MS = 10 * 60000;
 // Ключ — город: движок и так считает по городу, и общий кулдаун молча
 // отказывал бы всем, кроме того, кто нажал первым.
 const lastRefreshAt = new Map();
+// Итоги последнего поиска — чтобы на пустом экране объяснить, чего не хватило.
+const chainStats = new Map();
 
-export async function refreshChainsAction() {
+// Область поиска выбирает человек: вещь через полстраны не поедет, а дизайн,
+// таргет или консультацию можно получить откуда угодно.
+export async function refreshChainsAction(scope = 'region') {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: 'Требуется вход' };
+  const mode = scope === 'any' ? 'any' : 'region';
   const city = user.city || '';
-  if (Date.now() - (lastRefreshAt.get(city) || 0) < REFRESH_COOLDOWN_MS) {
-    return { ok: true, skipped: true, chains: await chainsList(user) };
+  const key = `${city}|${mode}`;
+  const lastStats = chainStats.get(key) || null;
+  if (Date.now() - (lastRefreshAt.get(key) || 0) < REFRESH_COOLDOWN_MS) {
+    return { ok: true, skipped: true, chains: await chainsList(user), stats: lastStats };
   }
-  lastRefreshAt.set(city, Date.now());
+  lastRefreshAt.set(key, Date.now());
+  let stats = null;
   try {
-    await refreshChainCandidates({ city });
+    const res = await refreshChainCandidates({ city, scope: mode });
+    stats = res?.stats || null;
+    if (stats) chainStats.set(key, stats);
   } catch (e) {
     console.warn('[chains] refresh failed:', e.message);
   }
-  return { ok: true, chains: await chainsList(user) };
+  return { ok: true, chains: await chainsList(user), stats };
 }
 
 // Просроченные pending снимаем лениво, на любом чтении цепочек: отдельного

@@ -38,6 +38,7 @@ const TWEAK_DEFAULTS = {
 };
 
 const ONBOARDED_KEY = 'dayberry_onboarded';
+const CHAIN_SCOPE_KEY = 'dayberry_chain_scope';
 
 const ACCENTS = {
   // фирменный — совпадает со значениями в design.css
@@ -77,6 +78,7 @@ export default function App() {
   const [deal, setDeal] = React.useState(null);
   const [creating, setCreating] = React.useState(false);
   const [editingLot, setEditingLot] = React.useState(null);
+  const [chainStats, setChainStats] = React.useState(null);
   const [infoOpen, setInfoOpen] = React.useState(false);
   const [lots, setLots] = React.useState([]);
   const [lotsLoading, setLotsLoading] = React.useState(true);
@@ -214,17 +216,33 @@ export default function App() {
     }
   };
 
-  const searchChains = async () => {
+  // Область поиска — выбор человека, и он должен пережить перезагрузку.
+  const [chainScope, setChainScope] = React.useState('region');
+  React.useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(CHAIN_SCOPE_KEY);
+      if (saved === 'any' || saved === 'region') setChainScope(saved);
+    } catch {}
+  }, []);
+
+  const searchChains = async (scope = chainScope) => {
     setChainsRefreshing(true);
     try {
-      const res = await refreshChainsAction();
+      const res = await refreshChainsAction(scope);
       if (res?.chains) setChains(res.chains);
-      if (res?.ok && !res.chains?.length) showSnack('Подходящих цепочек пока не нашлось — попробуйте позже');
+      if (res?.stats) setChainStats(res.stats);
+      if (res?.ok && !res.chains?.length) showSnack('Подходящих цепочек пока не нашлось');
     } catch (e) {
       console.error('chains refresh failed', e);
     } finally {
       setChainsRefreshing(false);
     }
+  };
+
+  const changeChainScope = (scope) => {
+    setChainScope(scope);
+    try { window.localStorage.setItem(CHAIN_SCOPE_KEY, scope); } catch {}
+    requireAuth('Искать цепочки можно после регистрации', () => searchChains(scope));
   };
 
   const openNotifications = async () => {
@@ -535,7 +553,10 @@ export default function App() {
             hasLots: myLots.length > 0,
             hasWants: !!(profile?.wants || currentUser?.wants),
             refreshing: chainsRefreshing,
-            onRefresh: () => requireAuth('Искать цепочки можно после регистрации', searchChains),
+            stats: chainStats,
+            scope: chainScope,
+            onScope: changeChainScope,
+            onRefresh: () => requireAuth('Искать цепочки можно после регистрации', () => searchChains()),
           }}
         />
       );
@@ -623,7 +644,10 @@ export default function App() {
             hasLots={myLots.length > 0}
             hasWants={!!(profile?.wants || currentUser?.wants)}
             refreshing={chainsRefreshing}
-            onRefresh={() => requireAuth('Искать цепочки можно после регистрации', searchChains)}
+            stats={chainStats}
+            scope={chainScope}
+            onScope={changeChainScope}
+            onRefresh={() => requireAuth('Искать цепочки можно после регистрации', () => searchChains())}
             onOpenChain={(id) => go('chain', { id })}
           />
         </div>
@@ -721,7 +745,10 @@ export default function App() {
             hasLots: myLots.length > 0,
             hasWants: !!(profile?.wants || currentUser?.wants),
             refreshing: chainsRefreshing,
-            onRefresh: () => requireAuth('Искать цепочки можно после регистрации', searchChains),
+            stats: chainStats,
+            scope: chainScope,
+            onScope: changeChainScope,
+            onRefresh: () => requireAuth('Искать цепочки можно после регистрации', () => searchChains()),
           }}
           chainActions={{
             onStart: (ch) => requireAuth('Вступить в цепочку можно после регистрации', () =>
