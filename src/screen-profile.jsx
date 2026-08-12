@@ -355,15 +355,15 @@ export function ChangePasswordSheet({ open, onClose }) {
           <>
             <div className="col gap6">
               <label className="cap">Текущий пароль</label>
-              <input type="password" value={current} onChange={e => setCurrent(e.target.value)} placeholder="••••••••" style={passField} />
+              <input className="ym-hide-content ym-disable-keys" type="password" value={current} onChange={e => setCurrent(e.target.value)} placeholder="••••••••" style={passField} />
             </div>
             <div className="col gap6">
               <label className="cap">Новый пароль</label>
-              <input type="password" value={next} onChange={e => setNext(e.target.value)} placeholder="Минимум 6 символов" style={passField} />
+              <input className="ym-hide-content ym-disable-keys" type="password" value={next} onChange={e => setNext(e.target.value)} placeholder="Минимум 6 символов" style={passField} />
             </div>
             <div className="col gap6">
               <label className="cap">Повторите новый пароль</label>
-              <input type="password" value={repeat} onChange={e => setRepeat(e.target.value)} placeholder="••••••••" style={passField} />
+              <input className="ym-hide-content ym-disable-keys" type="password" value={repeat} onChange={e => setRepeat(e.target.value)} placeholder="••••••••" style={passField} />
             </div>
             {error && <div style={ERR_BOX}>{error}</div>}
             <button className="btn btn-primary btn-block btn-lg" onClick={save} disabled={saving} style={{ opacity: saving ? 0.7 : 1 }}>

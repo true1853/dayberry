@@ -13,6 +13,7 @@ function Field({ label, type = 'text', value, onChange, placeholder, autoComplet
       <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-2)' }}>{label}</label>
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
         <input
+          className="ym-hide-content ym-disable-keys"
           type={isPassword && show ? 'text' : type}
           value={value}
           onChange={e => onChange(e.target.value)}

@@ -19,6 +19,7 @@ import { Logo, AppBar, IconBtn, TabBar, SplashScreen, PullToRefresh } from './ui
 import { Icon } from './icons.jsx';
 import { useTweaks } from './tweaks-panel.jsx';
 import { registerServiceWorker, useInstallPrompt, InstallBanner } from './pwa.jsx';
+import { trackGoal } from '../app/metrika.jsx';
 
 const useMediaQuery = (query) => {
   const [matches, setMatches] = React.useState(() => typeof window !== 'undefined' ? window.matchMedia(query).matches : false);
@@ -353,6 +354,9 @@ export default function App() {
     setCurrentUser(user);
     setAuthed(true);
     setAuthOpen(false);
+    // Цели Метрики: без них в отчётах видно только «ходили по страницам»,
+    // а нам нужна воронка до реального обмена.
+    trackGoal('auth');
     try { await loadAuthedData(); } catch (e) { console.error('load after auth failed', e); }
     loadMatches();
     const next = pendingActionRef.current;
@@ -474,6 +478,7 @@ export default function App() {
       } else {
         setLots(ls => [res.lot, ...ls]);
         setMyLots(ms => [res.lot, ...ms]);
+        trackGoal('lot_created', { cat: res.lot.cat });
       }
       setCreating(false);
       setEditingLot(null);
@@ -503,6 +508,7 @@ export default function App() {
     try {
       const res = target.role === 'partner' ? await confirmPartnerAction(target.id) : await confirmReceiptAction(target.id);
       if (!res.ok) { showSnack(res.error || 'Не удалось подтвердить'); return; }
+      if (res.deal?.stage === 'done') trackGoal('deal_done', { credits: res.deal.credits });
       setDeal(res.deal);
       setDeals(ds => ds.map(x => x.id === res.deal.id ? res.deal : x));
       await refreshWallet();
@@ -848,6 +854,7 @@ export default function App() {
         setOfferLot(null);
         try {
           const res = await createDealAction({ lotId: L.id, credits, myLotId });
+          if (res?.ok) trackGoal('deal_created', { credits });
           if (!res.ok) { showSnack(res.error || 'Не удалось создать сделку'); return; }
           const de = await listDealsAction();
           setDeals(de || []);

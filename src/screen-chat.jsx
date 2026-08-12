@@ -117,7 +117,7 @@ export function DealsList({ chats = [], deals = [], onOpen, onOpenDeal, bell = n
                     <span className="cap">{last ? fmtDate(last.t) : ''}</span>
                   </div>
                   <div className="row gap8" style={{ alignItems: 'center' }}>
-                    <span className="sub ellipsis grow" style={{ fontWeight: unread ? 600 : 400, color: unread ? 'var(--ink)' : undefined }}>
+                    <span className="sub ellipsis grow ym-hide-content" style={{ fontWeight: unread ? 600 : 400, color: unread ? 'var(--ink)' : undefined }}>
                       {last ? `${last.me ? 'Вы: ' : ''}${last.text}` : 'Нет сообщений'}
                     </span>
                     {unread > 0 && (
@@ -351,7 +351,8 @@ export function ChatThread({ chatId, onBack, onOpenDeal, onRead }) {
         </div>
       )}
 
-      <div className="app-scroll" ref={scroller} onScroll={onScroll} style={{ padding: '6px 18px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {/* ym-hide-content — вебвизор Метрики не должен записывать переписку */}
+      <div className="app-scroll ym-hide-content" ref={scroller} onScroll={onScroll} style={{ padding: '6px 18px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
         {!items.length && (
           <div className="col" style={{ alignItems: 'center', textAlign: 'center', gap: 8, margin: 'auto', padding: '30px 20px' }}>
             <div className="avatar" style={{ width: 52, height: 52, background: 'var(--berry-50)' }}><Icon name="chat" size={24} color="var(--berry)" /></div>
@@ -400,6 +401,7 @@ export function ChatThread({ chatId, onBack, onOpenDeal, onRead }) {
       <div className="row gap8" style={{ padding: '8px 14px calc(12px + env(safe-area-inset-bottom, 0px) + 24px)', borderTop: '1px solid var(--line)', background: '#fff', alignItems: 'flex-end' }}>
         <textarea
           ref={inputRef}
+          className="ym-hide-content ym-disable-keys"
           value={text}
           onChange={grow}
           onKeyDown={onKeyDown}

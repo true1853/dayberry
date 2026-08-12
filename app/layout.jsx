@@ -1,4 +1,5 @@
 import React from 'react';
+import Metrika from './metrika.jsx';
 import './globals.css';
 import '../src/design.css';
 import '../src/web.css';
@@ -33,6 +34,7 @@ export default function RootLayout({ children }) {
     <html lang="ru">
       <body style={{ margin: 0, height: '100%', overflow: 'hidden', background: '#ffffff' }}>
         {children}
+        <Metrika />
       </body>
     </html>
   );
