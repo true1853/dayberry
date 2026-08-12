@@ -14,6 +14,13 @@
   --berry-100: #E9E6F9;
   --berry-50:  #F4F2FC;
 
+  /* Валюта — бартер-кредиты. Заданный #22B96B даёт всего 2.55:1 на белом,
+     поэтому сама монета собрана из затемнённой пары (5.1:1 и 6.6:1 под
+     белую «Б»), а фирменный оттенок остаётся светлым концом градиента. */
+  --coin:      #22B96B;
+  --coin-mid:  #177E49;
+  --coin-dark: #146B3E;
+
   /* Лаванда — только декор: 2.86:1 на белом, текстом и иконками нельзя */
   --lavender:  #9A8AF7;
   --brand-gradient: linear-gradient(135deg, #4B2BC9 0%, #5B35E6 52%, #9A8AF7 100%);
@@ -117,7 +124,7 @@
 .coin {
   display: inline-flex; align-items: center; justify-content: center;
   border-radius: 999px;
-  background: linear-gradient(145deg, var(--berry-500), var(--berry-700));
+  background: linear-gradient(145deg, var(--coin-mid), var(--coin-dark));
   color: #fff; font-weight: 800; font-family: var(--font);
   box-shadow: inset 0 1px 1px rgba(255,255,255,0.35), 0 1px 2px rgba(0,0,0,0.12);
   flex: none;

@@ -322,6 +322,23 @@ async function myLotsOf(user) {
   return lots.map(l => mapLot(l, l.owner?.city || ''));
 }
 
+// Счётчик просмотров нигде не увеличивался — во всех карточках стоял ноль.
+// Считаем открытие карточки лота; свои просмотры не учитываем, иначе
+// счётчик накручивается автором.
+export async function trackLotViewAction(lotId) {
+  const user = await getCurrentUser();
+  if (!lotId) return { ok: false };
+  const lot = await prisma.lot.findUnique({ where: { id: lotId }, select: { ownerId: true } });
+  if (!lot) return { ok: false };
+  if (user && lot.ownerId === user.id) return { ok: true, skipped: true };
+  const updated = await prisma.lot.update({
+    where: { id: lotId },
+    data: { views: { increment: 1 } },
+    select: { views: true },
+  });
+  return { ok: true, views: updated.views };
+}
+
 export async function toggleFavoriteAction(lotId) {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: 'Требуется вход' };

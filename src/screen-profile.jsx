@@ -87,6 +87,64 @@ function Switch({ on, onChange }) {
 
 const ERR_BOX = { padding: '10px 14px', borderRadius: 12, background: 'var(--berry-50)', border: '1px solid var(--berry-200)', color: 'var(--berry-700)', fontSize: 13.5, fontWeight: 500 };
 
+// Вишлист. Хранится по-прежнему одной строкой через запятую — на неё завязаны
+// умный мэтчинг (myWants) и подсказки ИИ при создании объявления, — но
+// редактируется и показывается как список: строку в поле люди заполняли
+// сплошным текстом, и мэтчингу было не за что зацепиться.
+export const parseWishes = (str) => String(str || '').split(',').map(s => s.trim()).filter(Boolean);
+export const joinWishes = (list) => list.join(', ');
+
+export function WishList({ value, onChange, editable = false }) {
+  const items = parseWishes(value);
+  const [draft, setDraft] = React.useState('');
+
+  const add = () => {
+    const v = draft.trim().replace(/,+$/, '');
+    if (!v) return;
+    if (items.some(x => x.toLowerCase() === v.toLowerCase())) { setDraft(''); return; }
+    onChange(joinWishes([...items, v]));
+    setDraft('');
+  };
+  const remove = (i) => onChange(joinWishes(items.filter((_, k) => k !== i)));
+
+  if (!editable && !items.length) {
+    return <span className="sub">Пока пусто. Добавьте, что ищете — мэтчинг найдёт подходящие лоты.</span>;
+  }
+
+  return (
+    <div className="col gap8">
+      {items.length > 0 && (
+        <div className="row gap6" style={{ flexWrap: 'wrap' }}>
+          {items.map((w, i) => (
+            <span key={w + i} className="tag" style={{ background: 'var(--berry-50)', color: 'var(--berry)', padding: '6px 10px', fontSize: 13, gap: 6 }}>
+              {w}
+              {editable && (
+                <button onClick={() => remove(i)} aria-label={`Убрать ${w}`} style={{ border: 'none', background: 'none', padding: 0, display: 'flex', cursor: 'pointer' }}>
+                  <Icon name="close" size={13} color="var(--berry)" />
+                </button>
+              )}
+            </span>
+          ))}
+        </div>
+      )}
+      {editable && (
+        <div className="row gap6">
+          <input
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); add(); } }}
+            placeholder="Например: ноутбук"
+            style={{ ...fieldStyle, flex: 1 }}
+          />
+          <button className="btn btn-soft" style={{ padding: '0 16px', flex: 'none' }} onClick={add} disabled={!draft.trim()}>
+            <Icon name="plus" size={17} color="var(--berry)" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function EditProfileSheet({ user, open, onClose, onSaved }) {
   const [name, setName] = React.useState(user?.name || '');
   const [city, setCity] = React.useState(user?.city || '');
@@ -168,11 +226,11 @@ export function EditProfileSheet({ user, open, onClose, onSaved }) {
         </div>
         <div className="col gap6">
           <div className="row gap8" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-            <label className="cap">Хочу получить</label>
+            <label className="cap">Вишлист</label>
             <button onClick={() => setWizardOpen(true)} style={{ background: 'var(--berry-50)', border: 'none', borderRadius: 999, padding: '6px 11px', color: 'var(--berry)', fontWeight: 600, fontSize: 12.5, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'var(--font)' }}><Icon name="ai" size={14} color="var(--berry)" />Сформировать с ИИ</button>
           </div>
-          <input value={wants} onChange={e => setWants(e.target.value)} placeholder="Например: ноутбук, клининг, услуги дизайна" style={fieldStyle} />
-          <span className="cap">Эти хотелки используют умный мэтчинг и AI при создании объявлений.</span>
+          <WishList value={wants} onChange={setWants} editable />
+          <span className="cap">Список используют умный мэтчинг и ИИ при создании объявлений.</span>
         </div>
         {error && <div style={ERR_BOX}>{error}</div>}
         <button className="btn btn-primary btn-block btn-lg" onClick={save} disabled={saving} style={{ opacity: saving ? 0.7 : 1 }}>
@@ -351,7 +409,7 @@ export function AboutSheet({ open, onClose }) {
   );
 }
 
-export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, myLots = [], onProfileSaved, onEditLot, onOpenSettings }) {
+export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, myLots = [], onProfileSaved, onEditLot, onOpenLot, onOpenSettings }) {
   const [activeTab, setActiveTab] = React.useState('lots'); // 'lots' | 'reviews'
   const [editing, setEditing] = React.useState(false);
   const avatarRef = React.useRef(null);
@@ -465,11 +523,9 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, 
           <div className="card" style={{ width: '100%', padding: '12px 14px', gap: 6 }}>
             <div className="row gap6" style={{ alignItems: 'center' }}>
               <Icon name="ai" size={15} color="var(--berry)" />
-              <span className="over" style={{ color: 'var(--berry)' }}>Хочу получить</span>
+              <span className="over" style={{ color: 'var(--berry)' }}>Вишлист</span>
             </div>
-            <span style={{ fontSize: 14, color: 'var(--ink-2)', lineHeight: 1.5 }}>
-              {wants || 'Пока не указано. Добавьте хотелки — мэтчинг найдёт нужные лоты.'}
-            </span>
+            <WishList value={wants} onChange={() => {}} />
           </div>
 
           <button className="btn btn-soft" style={{ padding: '10px 18px', fontSize: 14 }} onClick={() => setEditing(true)}>
@@ -492,15 +548,11 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, 
 
         {activeTab === 'lots' && (
           <div style={{ padding: '0 16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, paddingBottom: 16 }}>
+            {/* Раньше по всей карточке открывалось редактирование — промахнуться
+                было невозможно, а посмотреть своё объявление как его видят
+                другие нельзя. Теперь тап открывает лот, правка — по кнопке. */}
             {myLots.map(l => (
-              <div key={l.id} className="card" style={{ overflow: 'hidden', cursor: 'pointer' }} onClick={() => onEditLot && onEditLot(l)}>
-                <Photo label={l.photo} url={l.photoUrl} cat={l.cat} style={{ aspectRatio: '1/1' }} />
-                <div className="col" style={{ padding: '10px 12px 12px', gap: 4 }}>
-                  <Credit n={l.value} size={15} coin={14} />
-                  <span className="title" style={{ fontSize: 13, lineHeight: 1.3 }}>{l.title}</span>
-                  <span className="cap">{l.condition} · {l.posted}</span>
-                </div>
-              </div>
+              <LotCard key={l.id} lot={l} compact onClick={() => onOpenLot && onOpenLot(l.id)} onEdit={onEditLot} />
             ))}
             <div
               className="card col"
@@ -579,8 +631,7 @@ export function MyLotsScreen({ myLots = [], go, onEdit, onCreate }) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             {myLots.map(l => (
               <div key={l.id} className="col gap6">
-                <LotCard lot={l} compact onClick={() => go('lot', { lotId: l.id })} />
-                <button className="btn btn-soft" style={{ padding: '9px', justifyContent: 'center' }} onClick={() => onEdit(l)}><Icon name="edit" size={15} color="var(--berry)" />Редактировать</button>
+                <LotCard lot={l} compact onClick={() => go('lot', { lotId: l.id })} onEdit={onEdit} />
               </div>
             ))}
           </div>

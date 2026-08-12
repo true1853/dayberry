@@ -1,7 +1,8 @@
 // screen-lot.jsx — lot detail + AI valuation + make-offer flow
 import React from 'react';
 import { Icon } from './icons.jsx';
-import { fmt, Credit, Photo, Avatar, Stars, CatTag, AIBadge, IconBtn, Sheet } from './ui.jsx';
+import { fmt, Credit, Photo, Avatar, Stars, CatTag, AIBadge, IconBtn, Sheet, timeAgo, fmtDateTime } from './ui.jsx';
+import { trackLotViewAction } from './server/actions.js';
 
 function AIValuation({ L }) {
   const pct = Math.max(6, Math.min(94, ((L.value - L.aiLow) / (L.aiHigh - L.aiLow)) * 100));
@@ -33,6 +34,18 @@ function AIValuation({ L }) {
 export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, lots, fav = false, onToggleFav }) {
   const L = (lots || []).find(l => l.id === lotId) || null;
   const [g, setG] = React.useState(0);
+  const [views, setViews] = React.useState(null);
+
+  // Просмотр засчитывается один раз на открытие карточки; свои лоты сервер
+  // не считает, чтобы автор не накручивал себе счётчик.
+  React.useEffect(() => {
+    if (!lotId) return;
+    let cancelled = false;
+    trackLotViewAction(lotId)
+      .then(r => { if (!cancelled && r && typeof r.views === 'number') setViews(r.views); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [lotId]);
   if (!L) return null;
   const urls = (L.photoUrls || []).filter(Boolean);
   const shownUrl = urls[Math.min(g, Math.max(0, urls.length - 1))] || L.photoUrl;
@@ -75,7 +88,7 @@ export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, lots, fav = fal
         <div className="col gap8">
           <div className="row gap6"><CatTag cat={L.cat} /><span className="tag" style={{ background: 'var(--line-2)', color: 'var(--ink-2)' }}>{L.condition}</span>{L.hot && <span className="tag" style={{ background: 'var(--berry-50)', color: 'var(--berry)' }}><Icon name="flame" size={12} color="var(--berry)" />Хит</span>}</div>
           <span className="h2">{L.title}</span>
-          <div className="row gap10 cap"><span className="row gap4"><Icon name="eye" size={14} color="var(--ink-3)" />{L.views}</span><span className="row gap4"><Icon name="map" size={14} color="var(--ink-3)" />{owner.city}</span><span>{L.posted}</span></div>
+          <div className="row gap10 cap"><span className="row gap4"><Icon name="eye" size={14} color="var(--ink-3)" />{views ?? L.views ?? 0}</span><span className="row gap4"><Icon name="map" size={14} color="var(--ink-3)" />{owner.city}</span><span title={fmtDateTime(L.createdAt)}>{timeAgo(L.createdAt) || L.posted}</span></div>
         </div>
 
         <AIValuation L={L} />

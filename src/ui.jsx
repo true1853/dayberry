@@ -3,6 +3,33 @@ import React from 'react';
 import { catOf } from './data.js';
 import { Icon } from './icons.jsx';
 
+// Поле posted — статичная строка «только что», записанная при создании и
+// никогда не обновлявшаяся: у всех лотов навсегда оставалось «только что».
+// Считаем от реального createdAt.
+export function timeAgo(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  const min = Math.floor((Date.now() - d.getTime()) / 60000);
+  if (min < 1) return 'только что';
+  if (min < 60) return `${min} мин назад`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h} ч назад`;
+  const days = Math.floor(h / 24);
+  if (days === 1) return 'вчера';
+  if (days < 7) return `${days} дн назад`;
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', ...(sameYear ? {} : { year: 'numeric' }) });
+}
+
+// Точные дата и время — для подписи под карточкой и в карточке лота.
+export function fmtDateTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  return d.toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
 export const fmt = (n) => Math.round(n).toLocaleString('ru-RU').replace(/,/g, ' ');
 
 // ---- credit coin mark ----
@@ -123,7 +150,7 @@ export function AIBadge({ children = 'AI', tone = 'berry' }) {
 }
 
 // ---- lot card (feed) ----
-export function LotCard({ lot, onClick, compact, fav = false, onToggleFav }) {
+export function LotCard({ lot, onClick, compact, fav = false, onToggleFav, onEdit }) {
   const ownerCity = lot.ownerCity || '';
   return (
     <div className="card" style={{ overflow: 'hidden', cursor: 'pointer' }} onClick={onClick}>
@@ -132,7 +159,18 @@ export function LotCard({ lot, onClick, compact, fav = false, onToggleFav }) {
         <div className="row gap6" style={{ position: 'absolute', top: 10, left: 10 }}>
           {lot.hot && <span className="tag" style={{ background: 'rgba(255,255,255,0.9)', color: 'var(--berry)', backdropFilter: 'blur(6px)' }}><Icon name="flame" size={12} color="var(--berry)" />Хит</span>}
         </div>
-        {onToggleFav && (
+        {onEdit && (
+          <button
+            aria-label="Редактировать"
+            title="Редактировать"
+            className="row"
+            style={{ position: 'absolute', top: 8, right: 8, width: 34, height: 34, borderRadius: 999, border: 'none', background: 'rgba(255,255,255,0.92)', justifyContent: 'center', boxShadow: 'var(--sh-1)', cursor: 'pointer' }}
+            onClick={(e) => { e.stopPropagation(); onEdit(lot); }}
+          >
+            <Icon name="edit" size={17} color="var(--berry)" />
+          </button>
+        )}
+        {onToggleFav && !onEdit && (
           <button
             aria-label={fav ? 'Убрать из избранного' : 'В избранное'}
             aria-pressed={fav}
@@ -150,7 +188,7 @@ export function LotCard({ lot, onClick, compact, fav = false, onToggleFav }) {
       <div className="col gap8" style={{ padding: '11px 13px 13px' }}>
         <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
           <Credit n={lot.value} size={17} coin={16} />
-          <span className="cap row gap4"><Icon name="eye" size={13} color="var(--ink-3)" />{lot.views}</span>
+          <span className="cap row gap4" title={`${lot.views} просмотров`}><Icon name="eye" size={13} color="var(--ink-3)" />{lot.views ?? 0}</span>
         </div>
         <div className="title clamp2" style={{ minHeight: 38 }}>{lot.title}</div>
         <div className="row gap6" style={{ justifyContent: 'space-between' }}>
@@ -158,7 +196,7 @@ export function LotCard({ lot, onClick, compact, fav = false, onToggleFav }) {
             <Avatar user={lot.ownerName} url={lot.ownerAvatar} size={20} />
             <span className="cap ellipsis">{lot.ownerCity || ''}</span>
           </div>
-          <span className="cap">{lot.posted}</span>
+          <span className="cap" title={fmtDateTime(lot.createdAt)}>{timeAgo(lot.createdAt) || lot.posted}</span>
         </div>
       </div>
     </div>

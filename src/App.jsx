@@ -433,6 +433,7 @@ export default function App() {
         profile={profile}
         myLots={myLots}
         onEditLot={(L) => setEditingLot(L)}
+        onOpenLot={(id) => go('lot', { lotId: id })}
         onOpenSettings={() => go('settings')}
         onProfileSaved={(updated) => {
           setCurrentUser(updated);
