@@ -68,7 +68,7 @@ export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, lots, myLots = 
     <div className="app-scroll">
       <div style={{ position: 'relative' }}>
         <div style={{ cursor: urls.length > 1 ? 'pointer' : 'default' }} onClick={() => urls.length > 1 && setG(x => (x + 1) % urls.length)}>
-          <Photo label={L.photo} url={shownUrl} cat={L.cat} style={{ aspectRatio: '1/1' }} full />
+          <Photo label={L.photo} url={shownUrl} cat={L.cat} style={{ aspectRatio: '1/1' }} full fit="contain" />
         </div>
         <div style={{ position: 'absolute', top: 'calc(8px + 48px)', left: 14, right: 14 }} className="row" >
           <IconBtn name="back" onClick={onBack} />

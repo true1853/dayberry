@@ -139,7 +139,9 @@ function WebLotCard({ L, onOpen, onEdit, fav = false, onToggleFav }) {
   return (
     <div className="web-lot" onClick={() => onOpen(L.id)}>
       <div className="web-lot-photo">
-        <Photo label={L.photo} url={L.photoUrl} cat={L.cat} />
+        {/* рамка карточки квадратная — обёртка фото должна её заполнить,
+            иначе снизу остаётся полоса фона под широким кадром */}
+        <Photo label={L.photo} url={L.photoUrl} cat={L.cat} style={{ position: 'absolute', inset: 0 }} />
         {L.hot
           ? <span className="web-lot-badge"><Icon name="flame" size={11} color="var(--berry)" /> Хит</span>
           : <span className="web-lot-badge" style={{ color: catOf(L.cat).color }}>{catOf(L.cat).label}</span>}
@@ -399,7 +401,7 @@ function LotView({ L, isMine = false, onBack, onOffer, onOwnerChat, onEdit }) {
 
       <div className="web-detail-photos">
         {webPhotos.map((u, i) => (
-          <div key={i} className="ph"><Photo label={L.photo} url={u} cat={L.cat} full /></div>
+          <div key={i} className="ph"><Photo label={L.photo} url={u} cat={L.cat} full fit="contain" style={{ position: 'absolute', inset: 0 }} /></div>
         ))}
       </div>
 

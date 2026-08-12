@@ -128,13 +128,33 @@ export function thumbUrl(url) {
 // ---- photo placeholder or real image ----
 // По умолчанию показывается превью: почти везде картинка рендерится мелко
 // (сетки, аватарки лотов, строки сделок). full нужен галерее и свайпу.
-export function Photo({ label, url, cat = 'other', style, rounded = 0, badge, children, full = false }) {
+// fit: 'cover' — кадрируем под рамку, так лента остаётся ровной сеткой;
+// 'contain' — показываем кадр целиком, а пустоту закрываем размытой копией
+// той же фотографии. Второе для карточки объявления: там обрезать нельзя,
+// иначе половина вещи уезжает за границу кадра.
+export function Photo({ label, url, cat = 'other', style, rounded = 0, badge, children, full = false, fit = 'cover' }) {
   const c = catOf(cat);
   const src = full ? url : thumbUrl(url);
   if (url) {
     return (
-      <div className="photo" style={{ background: c.soft, borderRadius: rounded, ...style, overflow: 'hidden', position: 'relative' }}>
-        <img src={src} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} loading="lazy" decoding="async" />
+      <div className="photo" style={{ background: c.soft, borderRadius: rounded, overflow: 'hidden', position: 'relative', ...style }}>
+        {fit === 'contain' && (
+          <img
+            src={src}
+            alt=""
+            aria-hidden="true"
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(18px)', transform: 'scale(1.15)', opacity: 0.55 }}
+            loading="lazy"
+            decoding="async"
+          />
+        )}
+        <img
+          src={src}
+          alt={label}
+          style={{ position: 'relative', width: '100%', height: '100%', objectFit: fit, display: 'block' }}
+          loading="lazy"
+          decoding="async"
+        />
         {badge}
         {children}
       </div>
