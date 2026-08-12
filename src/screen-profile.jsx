@@ -2,7 +2,7 @@
 import React from 'react';
 import { Icon } from './icons.jsx';
 import { WISH_GROUPS, ALL_WISHES } from './wishes.js';
-import { Logo, Credit, AppBar, IconBtn, TabBar, Photo, Sheet, LotCard } from './ui.jsx';
+import { Logo, Credit, AppBar, IconBtn, TabBar, Photo, Sheet, LotCard, PullToRefresh } from './ui.jsx';
 import { updateProfileAction, updateAvatarAction, changePasswordAction, updateSettingsAction, broadcastInfoAction, broadcastAction } from './server/actions.js';
 import { PhoneField, CityField } from './fields.jsx';
 
@@ -398,7 +398,7 @@ export function AboutSheet({ open, onClose }) {
   );
 }
 
-export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, myLots = [], onProfileSaved, onEditLot, onOpenLot, onOpenSettings, bell = null }) {
+export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, myLots = [], onProfileSaved, onEditLot, onOpenLot, onOpenSettings, bell = null, onRefresh }) {
   const [activeTab, setActiveTab] = React.useState('lots'); // 'lots' | 'reviews'
   const [editing, setEditing] = React.useState(false);
   const avatarRef = React.useRef(null);
@@ -440,7 +440,7 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, 
       <div className="safe-top" />
       <AppBar title="Профиль" right={bell} />
 
-      <div className="app-scroll">
+      <PullToRefresh onRefresh={onRefresh}>
 
         {/* hero */}
         <div className="col" style={{ alignItems: 'center', padding: '8px 24px 24px', gap: 12 }}>
@@ -595,7 +595,7 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, 
         </GroupCard>
 
         <div style={{ height: 32 }} />
-      </div>
+      </PullToRefresh>
 
       <TabBar tab={tab} setTab={setTab} onCreate={onCreate} unread={0} />
       <EditProfileSheet user={profile || user} open={editing} onClose={() => setEditing(false)} onSaved={onProfileSaved} />
@@ -603,14 +603,14 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, 
   );
 }
 
-export function MyLotsScreen({ myLots = [], archivedLots = [], go, onEdit, onCreate, onArchive, onRestore, onDelete, bell = null }) {
+export function MyLotsScreen({ myLots = [], archivedLots = [], go, onEdit, onCreate, onArchive, onRestore, onDelete, bell = null, onRefresh }) {
   const [tab, setTab] = React.useState('active'); // 'active' | 'archived'
   const [menuLot, setMenuLot] = React.useState(null);
   const [confirmLot, setConfirmLot] = React.useState(null);
   const list = tab === 'active' ? myLots : archivedLots;
 
   return (
-    <div className="app-scroll">
+    <PullToRefresh onRefresh={onRefresh}>
       <div className="appbar" style={{ paddingBottom: 10 }}>
         <div className="row grow" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
           <div className="col gap2">
@@ -681,7 +681,7 @@ export function MyLotsScreen({ myLots = [], archivedLots = [], go, onEdit, onCre
           <button className="btn btn-soft btn-block" onClick={() => setConfirmLot(null)}>Отмена</button>
         </div>
       </Sheet>
-    </div>
+    </PullToRefresh>
   );
 }
 

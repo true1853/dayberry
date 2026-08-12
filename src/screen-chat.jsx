@@ -1,7 +1,7 @@
 // screen-chat.jsx — deals/chat list + conversation thread (real data)
 import React from 'react';
 import { Icon } from './icons.jsx';
-import { fmt, Avatar, AppBar, IconBtn } from './ui.jsx';
+import { fmt, Avatar, AppBar, IconBtn, PullToRefresh } from './ui.jsx';
 import { getChatAction, sendMessageAction, getChatUpdatesAction, markChatReadAction } from './server/actions.js';
 
 const STAGE_LABEL = {
@@ -41,14 +41,14 @@ function PartyAvatar({ name, url, size = 46, badge, badgeColor = 'var(--berry)',
   );
 }
 
-export function DealsList({ chats = [], deals = [], onOpen, onOpenDeal, bell = null }) {
+export function DealsList({ chats = [], deals = [], onOpen, onOpenDeal, bell = null, onRefresh }) {
   const activeDeals = deals.filter(d => d.status === 'active' && d.stage !== 'done');
   // Тот, кто подтвердил получение первым, экран завершения не увидит:
   // к моменту закрытия сделки он уже ушёл со страницы. Без этого блока
   // половина участников не может оставить отзыв вообще.
   const toRate = deals.filter(d => d.stage === 'done' && !d.reviewed);
   return (
-    <div className="app-scroll">
+    <PullToRefresh onRefresh={onRefresh}>
       {/* фильтра у списка нет — кнопка была декоративной; на её месте
           колокольчик, которого раньше не было ни на одном экране, кроме поиска */}
       <AppBar title="Сделки" big sub="Чаты и активные обмены" right={bell} />
@@ -132,7 +132,7 @@ export function DealsList({ chats = [], deals = [], onOpen, onOpenDeal, bell = n
         </div>
         )}
       </div>
-    </div>
+    </PullToRefresh>
   );
 }
 

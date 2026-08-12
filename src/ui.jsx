@@ -298,6 +298,88 @@ export function LotCard({ lot, onClick, compact, fav = false, onToggleFav, onEdi
   );
 }
 
+// Потянуть вниз — обновить. Свой жест, а не системный: контент скроллится
+// во внутреннем контейнере, поэтому pull-to-refresh браузера здесь не
+// срабатывает, а в Safari его нет вовсе.
+const PULL_TRIGGER = 68;   // после какого растяжения отпускание обновляет
+const PULL_MAX = 110;      // дальше не тянем, чтобы жест не превращался в игру
+
+export function PullToRefresh({ onRefresh, children, className = 'app-scroll', style }) {
+  const box = React.useRef(null);
+  const startY = React.useRef(null);
+  const [pull, setPull] = React.useState(0);
+  const [busy, setBusy] = React.useState(false);
+
+  const onTouchStart = (e) => {
+    if (busy || !box.current || box.current.scrollTop > 0) { startY.current = null; return; }
+    startY.current = e.touches[0].clientY;
+  };
+
+  const onTouchMove = (e) => {
+    if (startY.current === null || busy) return;
+    const dy = e.touches[0].clientY - startY.current;
+    // вверх — обычная прокрутка, вниз у верхней границы — наш жест
+    if (dy <= 0) { setPull(0); return; }
+    if (box.current && box.current.scrollTop > 0) { startY.current = null; setPull(0); return; }
+    // сопротивление: чем дальше тянут, тем труднее идёт
+    setPull(Math.min(PULL_MAX, dy * 0.5));
+    if (e.cancelable) e.preventDefault();
+  };
+
+  const finish = async () => {
+    if (startY.current === null) return;
+    startY.current = null;
+    if (pull < PULL_TRIGGER || busy) { setPull(0); return; }
+    setBusy(true);
+    setPull(PULL_TRIGGER);
+    try {
+      await onRefresh?.();
+    } catch (e) {
+      console.error('refresh failed', e);
+    } finally {
+      setBusy(false);
+      setPull(0);
+    }
+  };
+
+  const ready = pull >= PULL_TRIGGER;
+
+  return (
+    <div
+      ref={box}
+      className={className}
+      style={{ ...style, overscrollBehaviorY: 'contain' }}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={finish}
+      onTouchCancel={finish}
+    >
+      <div
+        aria-hidden={!pull}
+        style={{
+          height: pull,
+          overflow: 'hidden',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          transition: startY.current === null ? 'height .25s ease' : 'none',
+        }}
+      >
+        <span className="row gap6 cap" style={{ opacity: Math.min(1, pull / PULL_TRIGGER) }}>
+          <span
+            className={busy ? 'ptr-spin' : ''}
+            style={{ display: 'flex', transform: busy ? 'none' : `rotate(${pull * 3}deg)` }}
+          >
+            <Icon name="spark" size={16} color="var(--berry)" />
+          </span>
+          {busy ? 'Обновляем…' : ready ? 'Отпустите' : 'Потяните вниз'}
+        </span>
+      </div>
+      {children}
+    </div>
+  );
+}
+
 // ---- top app bar ----
 export function AppBar({ title, sub, left, right, big }) {
   return (

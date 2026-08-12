@@ -15,7 +15,7 @@ import { ProfileScreen, SettingsScreen, MyLotsScreen, BroadcastScreen } from './
 import WebApp from './web-app.jsx';
 import { parseRoute, tabPath, screenPath, readPath } from './router.js';
 
-import { Logo, AppBar, IconBtn, TabBar, SplashScreen } from './ui.jsx';
+import { Logo, AppBar, IconBtn, TabBar, SplashScreen, PullToRefresh } from './ui.jsx';
 import { Icon } from './icons.jsx';
 import { useTweaks } from './tweaks-panel.jsx';
 
@@ -169,6 +169,21 @@ export default function App() {
   // После любого ответа участника состояние меняется у всех сразу (согласие,
   // отказ, замена), поэтому перечитываем список целиком, а не патчим одну
   // карточку: локальная правка разъезжается с тем, что произошло на сервере.
+  // Общее обновление по жесту «потянуть вниз»: лента и данные аккаунта
+  // приезжали только при запуске приложения, и увидеть новое объявление
+  // можно было лишь перезагрузив вкладку.
+  const refreshAll = React.useCallback(async () => {
+    try {
+      const boot = await bootstrapAction();
+      if (boot) setLots(boot.lots || []);
+    } catch (e) {
+      console.error('feed refresh failed', e);
+    }
+    if (authed) {
+      try { await loadAuthedData(); } catch (e) { console.error('data refresh failed', e); }
+    }
+  }, [authed]);
+
   const reloadChains = async () => {
     try { setChains(await listChainsAction() || []); } catch (e) { console.error('chains reload failed', e); }
   };
@@ -561,6 +576,7 @@ export default function App() {
           chains={chains} favIds={favIds} onToggleFav={toggleFav}
           unread={notifications.unread || 0}
           chatUnread={unreadChats}
+          onRefresh={refreshAll}
           city={(profile && profile.city) || (currentUser && currentUser.city) || ''}
           onBell={openNotifications}
           chainProps={{
@@ -578,7 +594,7 @@ export default function App() {
     }
     if (tab === 'favorites') return (
       <div className="app"><div className="safe-top" />
-        <FavoritesScreen lots={favorites} go={go} onToggleFav={toggleFav} bell={bell} />
+        <FavoritesScreen lots={favorites} go={go} onToggleFav={toggleFav} bell={bell} onRefresh={refreshAll} />
         <TabBar tab={tab} setTab={guardedTab} onCreate={onCreate} unread={unreadChats} />
       </div>
     );
@@ -586,6 +602,7 @@ export default function App() {
       <div className="app"><div className="safe-top" />
         <MyLotsScreen
           bell={bell}
+          onRefresh={refreshAll}
           myLots={myLots}
           archivedLots={archivedLots}
           go={go}
@@ -600,13 +617,13 @@ export default function App() {
     );
     if (tab === 'deals') return (
       <div className="app"><div className="safe-top" />
-        <DealsList chats={chats} deals={deals} onOpen={(id) => go('chat', { id })} onOpenDeal={(id) => openDeal(id)} bell={bell} />
+        <DealsList chats={chats} deals={deals} onOpen={(id) => go('chat', { id })} onOpenDeal={(id) => openDeal(id)} bell={bell} onRefresh={refreshAll} />
         <TabBar tab={tab} setTab={guardedTab} onCreate={onCreate} unread={unreadChats} />
       </div>
     );
     if (tab === 'wallet') return (
       <div className="app"><div className="safe-top" />
-        <Wallet bell={bell} wallet={wallet} onInfo={() => setInfoOpen(true)} onTopUp={async (amt) => {
+        <Wallet bell={bell} onRefresh={refreshAll} wallet={wallet} onInfo={() => setInfoOpen(true)} onTopUp={async (amt) => {
           try {
             const res = await topUpAction(amt);
             if (res.ok) await refreshWallet();
@@ -622,6 +639,7 @@ export default function App() {
     if (tab === 'profile') return (
       <ProfileScreen
         bell={bell}
+        onRefresh={refreshAll}
         tab={tab}
         setTab={guardedTab}
         onCreate={onCreate}
@@ -876,7 +894,7 @@ const VIEW_MODES = [
 ];
 
 // unread — колокольчик уведомлений, chatUnread — бейдж на вкладке сообщений
-function HomeTab({ t, go, tab, setTab, onCreate, lots, lotsLoading, matches, chains, myLots, favIds, onToggleFav, unread = 0, chatUnread = 0, city = '', onBell, chainProps = {} }) {
+function HomeTab({ t, go, tab, setTab, onCreate, lots, lotsLoading, matches, chains, myLots, favIds, onToggleFav, unread = 0, chatUnread = 0, city = '', onBell, onRefresh, chainProps = {} }) {
   const [cat, setCat] = React.useState('all');
   const [view, setView] = React.useState(t.mechanic || 'list');
   const [q, setQ] = React.useState('');
@@ -898,7 +916,7 @@ function HomeTab({ t, go, tab, setTab, onCreate, lots, lotsLoading, matches, cha
         <IconBtn name="bell" badge={unread} onClick={onBell} />
       </div>
       {view !== 'chain' && <CatRow active={cat} setActive={setCat} />}
-      <div className="app-scroll">
+      <PullToRefresh onRefresh={onRefresh}>
         {/* Переключатель режимов уехал внутрь прокрутки: режим выбирают редко,
             а 40px постоянной высоты он занимал всегда. */}
         <div className="row gap6" style={{ padding: '2px 18px 12px', overflowX: 'auto', scrollbarWidth: 'none' }}>
@@ -914,7 +932,7 @@ function HomeTab({ t, go, tab, setTab, onCreate, lots, lotsLoading, matches, cha
         {view === 'list' && <FeedList cat={cat} city={city} lots={shown} loading={lotsLoading} matches={matches} hints={t.matchHints} myLots={myLots} myLot={myLots && myLots[0]} onOpen={(id) => go('lot', { lotId: id })} onChains={() => setView('chain')} favIds={favIds} onToggleFav={onToggleFav} />}
         {view === 'swipe' && <FeedSwipe cat={cat} lots={shown} myLot={myLots && myLots[0]} onOpen={(id) => go('lot', { lotId: id })} />}
         {view === 'chain' && <FeedChain chains={chains} onOpenChain={(id) => go('chain', { id })} {...chainProps} />}
-      </div>
+      </PullToRefresh>
       <TabBar tab={tab} setTab={setTab} onCreate={onCreate} unread={chatUnread} />
     </div>
   );

@@ -2,7 +2,7 @@
 import React from 'react';
 import { CAT, CAT_IDS, catOf, normalizeCat } from './data.js';
 import { Icon } from './icons.jsx';
-import { AIBadge, Photo, Credit, LotCard, Sheet } from './ui.jsx';
+import { AIBadge, Photo, Credit, LotCard, Sheet, PullToRefresh } from './ui.jsx';
 
 // ---------- shared: category filter row ----------
 export function CatRow({ active, setActive }) {
@@ -240,9 +240,9 @@ function Stamp({ text, color, show, side, rot }) {
 }
 
 // ---------- favorites ----------
-export function FavoritesScreen({ lots = [], go, onToggleFav, bell = null }) {
+export function FavoritesScreen({ lots = [], go, onToggleFav, bell = null, onRefresh }) {
   return (
-    <div className="app-scroll">
+    <PullToRefresh onRefresh={onRefresh}>
       <div className="appbar" style={{ paddingBottom: 10 }}>
         <div className="col gap2 grow">
           <span className="h2">Избранное</span>
@@ -263,6 +263,6 @@ export function FavoritesScreen({ lots = [], go, onToggleFav, bell = null }) {
           </div>
         )}
       </div>
-    </div>
+    </PullToRefresh>
   );
 }
