@@ -24,14 +24,14 @@ function fmtDate(iso) {
 }
 
 // ---------------- top nav ----------------
-function WebNav({ view, setView, user, avatar, query, setQuery, onLogout, onCreate, authed = true, onAuthRequired }) {
+function WebNav({ view, setView, user, avatar, query, setQuery, onLogout, onCreate, authed = true, onAuthRequired, chatUnread = 0 }) {
   const [menu, setMenu] = React.useState(false);
   const [q, setQ] = React.useState(query || '');
   const tabs = [
     { id: 'home', label: 'Обмен' },
     { id: 'chains', label: 'Цепочки' },
     { id: 'favorites', label: 'Избранное' },
-    { id: 'deals', label: 'Сделки' },
+    { id: 'deals', label: 'Сделки', badge: chatUnread },
     // «Профиль» живёт в меню под аватаром — там его и ищут
   ];
   const goTab = (id) => {
@@ -53,7 +53,7 @@ function WebNav({ view, setView, user, avatar, query, setQuery, onLogout, onCrea
           {tabs.map(t => (
             <button key={t.id} className={'web-tab' + (view === t.id ? ' is-on' : '')} onClick={() => goTab(t.id)}>
               {t.label}
-              {t.new && <span className="web-new">NEW</span>}
+              {t.badge ? <span className="web-new" style={{ background: 'var(--berry)', color: '#fff' }}>{t.badge > 99 ? '99+' : t.badge}</span> : null}
             </button>
           ))}
         </div>
@@ -487,7 +487,9 @@ function FavoritesView({ lots = [], onBack, onOpen, onToggleFav }) {
 }
 
 function DealsView({ onBack, chats = [], deals = [], onOpenDeal, onOpenChat }) {
-  const sorted = [...chats].sort((a, b) => (b.messages?.[b.messages.length - 1]?.t || b.createdAt || '') < (a.messages?.[a.messages.length - 1]?.t || a.createdAt || '') ? -1 : 1);
+  // порядок задаёт сервер (по последнему сообщению) — вторая сортировка
+  // на клиенте только расходилась с ним
+  const sorted = chats;
   const activeDeals = deals.filter(d => d.status === 'active' && d.stage !== 'done');
   // подтвердивший первым не увидит экран завершения — даём ему вход в оценку отсюда
   const toRate = deals.filter(d => d.stage === 'done' && !d.reviewed);
@@ -543,15 +545,18 @@ function DealsView({ onBack, chats = [], deals = [], onOpenDeal, onOpenChat }) {
             const credits = c.deal && c.deal.credits > 0 ? ` · ${c.deal.credits} Б` : '';
             return (
               <div key={c.id} className="row gap14" style={{ padding: '16px 20px', borderTop: i ? '1px solid var(--line-2)' : 'none', cursor: 'pointer' }} onClick={() => onOpenChat(c.id)}>
-                <Avatar user={c.partner?.name} url={c.partner?.avatar} size={48} />
-                <div className="grow col" style={{ gap: 2 }}>
+                {c.kind === 'chain'
+                  ? <div className="avatar" style={{ width: 48, height: 48, flex: 'none', background: 'var(--berry-50)' }}><Icon name="chain" size={22} color="var(--berry)" /></div>
+                  : <Avatar user={c.partner?.name} url={c.partner?.avatar} size={48} />}
+                <div className="grow col" style={{ gap: 2, minWidth: 0 }}>
                   <div className="row" style={{ justifyContent: 'space-between' }}>
                     <span style={{ fontSize: 15, fontWeight: 600 }}>{c.partner.name}</span>
                     <span className="cap">{fmtChatTime(last?.t || c.createdAt)}</span>
                   </div>
                   <span className="sub">{dealTitle ? `${dealTitle}${credits}` : 'Обсуждение обмена'}</span>
-                  {last && <span className="cap ellipsis" style={{ maxWidth: 500 }}>{last.text}</span>}
+                  {last && <span className="cap ellipsis" style={{ maxWidth: 500, fontWeight: c.unread ? 700 : 400, color: c.unread ? 'var(--ink)' : undefined }}>{last.me ? 'Вы: ' : ''}{last.text}</span>}
                 </div>
+                {c.unread ? <span style={{ flex: 'none', minWidth: 20, height: 20, padding: '0 6px', borderRadius: 999, background: 'var(--berry)', color: '#fff', fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{c.unread > 99 ? '99+' : c.unread}</span> : null}
                 <Icon name="chevR" size={18} color="var(--ink-3)" />
               </div>
             );
@@ -665,7 +670,7 @@ function ProfileView({ user, profile, myLots, onOpenLot, onLogout, onProfileSave
 }
 
 // ---------------- root ----------------
-export default function WebApp({ lots, lotsLoading = false, myLots, user, profile, onLogout, onProfileSaved, onOffer, onCreate, onEditLot, matches = [], chats = [], chains = [], deals = [], favorites = [], onToggleFav, onConfirmDeal, onCancelDeal, onRateDeal, authed = true, onAuthRequired, onOwnerChat, chainProps = {}, chainActions = {}, chainBusy = false }) {
+export default function WebApp({ lots, lotsLoading = false, myLots, user, profile, onLogout, onProfileSaved, onOffer, onCreate, onEditLot, matches = [], chats = [], chains = [], deals = [], favorites = [], onToggleFav, onConfirmDeal, onCancelDeal, onRateDeal, authed = true, onAuthRequired, onOwnerChat, onChatRead, onChatsChanged, chainProps = {}, chainActions = {}, chainBusy = false }) {
   const [view, setView] = React.useState('home');
   const [cat, setCat] = React.useState('all');
   const [city, setCity] = React.useState('all');
@@ -683,13 +688,14 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
   const selectedIsMine = !!selected && (myLots || []).some(l => l.id === selected.id);
 
   const favIds = React.useMemo(() => new Set((favorites || []).map(f => f.id)), [favorites]);
+  const chatUnread = React.useMemo(() => (chats || []).reduce((n, c) => n + (c.unread || 0), 0), [chats]);
 
   const goHome = () => { setView('home'); setSelLot(null); setSelDeal(null); setSelChat(null); setSelChain(null); };
   const dealOpen = selDeal ? deals.find(x => x.id === selDeal) || null : null;
 
   return (
     <div className="web">
-      <WebNav view={view} setView={setView} user={user} avatar={avatar} query={query} setQuery={setQuery} onLogout={onLogout} onCreate={onCreate} authed={authed} onAuthRequired={onAuthRequired} />
+      <WebNav view={view} setView={setView} user={user} avatar={avatar} query={query} setQuery={setQuery} onLogout={onLogout} onCreate={onCreate} authed={authed} onAuthRequired={onAuthRequired} chatUnread={chatUnread} />
       <div className="web-body">
         {view === 'home' && <HomeView lots={lots} lotsLoading={lotsLoading} myLots={myLots} matches={matches} query={query} setQuery={setQuery} cat={cat} setCat={setCat} city={city} setCity={setCity} onOpen={(id) => { setSelLot(id); setView('lot'); }} onChains={() => setView('chains')} favIds={favIds} onToggleFav={onToggleFav} />}
         {view === 'favorites' && <FavoritesView lots={favorites} onBack={goHome} onOpen={(id) => { setSelLot(id); setView('lot'); }} onToggleFav={onToggleFav} />}
@@ -721,7 +727,8 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
         <div className="web-modal">
           <ChatThread
             chatId={selChat}
-            onBack={() => setSelChat(null)}
+            onRead={onChatRead}
+            onBack={() => { setSelChat(null); onChatsChanged && onChatsChanged(); }}
             onOpenDeal={() => { const c = chats.find(x => x.id === selChat); if (c && c.deal) setSelDeal(c.deal.id); }}
           />
         </div>

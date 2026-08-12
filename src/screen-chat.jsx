@@ -2,7 +2,7 @@
 import React from 'react';
 import { Icon } from './icons.jsx';
 import { fmt, Avatar, AppBar, IconBtn } from './ui.jsx';
-import { getChatAction, sendMessageAction } from './server/actions.js';
+import { getChatAction, sendMessageAction, getChatUpdatesAction, markChatReadAction } from './server/actions.js';
 
 const STAGE_LABEL = {
   meet: { t: 'Встреча назначена', c: 'var(--berry)' },
@@ -103,8 +103,9 @@ export function DealsList({ chats = [], deals = [], onOpen, onOpenDeal }) {
           {chats.map((c, i) => {
             const last = c.messages && c.messages[c.messages.length - 1];
             const st = c.deal ? (STAGE_LABEL[c.deal.stage] || { t: 'Сделка', c: 'var(--ink-2)' }) : null;
+            const unread = c.unread || 0;
             return (
-              <div key={c.id} className="row gap12" style={{ padding: '13px 14px', cursor: 'pointer', borderTop: i ? '1px solid var(--line)' : 'none', alignItems: 'center' }} onClick={() => onOpen(c.id)}>
+              <div key={c.id} className="row gap12" style={{ padding: '13px 14px', cursor: 'pointer', borderTop: i ? '1px solid var(--line)' : 'none', alignItems: 'center', background: unread ? 'var(--berry-50)' : 'transparent' }} onClick={() => onOpen(c.id)}>
                 {c.kind === 'chain'
                   ? <div className="avatar" style={{ width: 48, height: 48, flex: 'none', background: 'var(--berry-50)' }}><Icon name="chain" size={22} color="var(--berry)" /></div>
                   : <Avatar user={c.partner?.name} url={c.partner?.avatar} size={48} />}
@@ -113,7 +114,14 @@ export function DealsList({ chats = [], deals = [], onOpen, onOpenDeal }) {
                     <span className="title ellipsis">{c.partner?.name}</span>
                     <span className="cap">{last ? fmtDate(last.t) : ''}</span>
                   </div>
-                  <span className="sub ellipsis">{last ? last.text : 'Нет сообщений'}</span>
+                  <div className="row gap8" style={{ alignItems: 'center' }}>
+                    <span className="sub ellipsis grow" style={{ fontWeight: unread ? 600 : 400, color: unread ? 'var(--ink)' : undefined }}>
+                      {last ? `${last.me ? 'Вы: ' : ''}${last.text}` : 'Нет сообщений'}
+                    </span>
+                    {unread > 0 && (
+                      <span style={{ flex: 'none', minWidth: 20, height: 20, padding: '0 6px', borderRadius: 999, background: 'var(--berry)', color: '#fff', fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{unread > 99 ? '99+' : unread}</span>
+                    )}
+                  </div>
                   {st && <span className="tag" style={{ alignSelf: 'flex-start', background: `color-mix(in srgb, ${st.c} 12%, white)`, color: st.c, marginTop: 2 }}>{st.t}</span>}
                 </div>
               </div>
@@ -126,42 +134,165 @@ export function DealsList({ chats = [], deals = [], onOpen, onOpenDeal }) {
   );
 }
 
-export function ChatThread({ chatId, onBack, onOpenDeal }) {
+// Как часто открытый тред спрашивает сервер о новых сообщениях. Пуш-канала
+// нет, а без опроса чат односторонний: входящие не появлялись до перезахода.
+const POLL_MS = 4000;
+
+// День считаем по местному времени, а не по UTC из ISO: иначе ночное
+// сообщение по Москве уезжает во «вчера».
+const localDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const dayKey = (iso) => (iso ? localDay(new Date(iso)) : '');
+
+function dayLabel(iso) {
+  const d = new Date(iso);
+  const today = new Date();
+  const yest = new Date(today); yest.setDate(today.getDate() - 1);
+  const key = localDay(d);
+  if (key === localDay(today)) return 'Сегодня';
+  if (key === localDay(yest)) return 'Вчера';
+  const sameYear = d.getFullYear() === today.getFullYear();
+  return d.toLocaleDateString('ru-RU', sameYear ? { day: 'numeric', month: 'long' } : { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+export function ChatThread({ chatId, onBack, onOpenDeal, onRead }) {
   const [chat, setChat] = React.useState(null);
   const [text, setText] = React.useState('');
   const [loading, setLoading] = React.useState(true);
   const [sendError, setSendError] = React.useState('');
+  // Отправленные, но ещё не подтверждённые сервером — показываем сразу,
+  // иначе поле очищается, а сообщения на экране нет.
+  const [pending, setPending] = React.useState([]);
   const scroller = React.useRef(null);
+  const stick = React.useRef(true);
+  const inputRef = React.useRef(null);
+  const readCb = React.useRef(onRead);
+  readCb.current = onRead;
+
+  const lastAt = React.useRef('');
+  React.useEffect(() => {
+    const ms = (chat && chat.messages) || [];
+    lastAt.current = ms.length ? ms[ms.length - 1].t : '';
+  }, [chat]);
+
+  const markRead = React.useCallback(() => {
+    markChatReadAction(chatId)
+      .then(() => { if (readCb.current) readCb.current(chatId); })
+      .catch(() => {});
+  }, [chatId]);
 
   React.useEffect(() => {
+    let alive = true;
     (async () => {
       if (!chatId) { setLoading(false); return; }
       setLoading(true);
       try {
         const c = await getChatAction(chatId);
+        if (!alive) return;
         setChat(c);
+        if (c) markRead();
       } catch (e) {
-        setSendError('Не удалось загрузить чат — обновите страницу');
+        if (alive) setSendError('Не удалось загрузить чат — обновите страницу');
       }
-      setLoading(false);
+      if (alive) setLoading(false);
     })();
-  }, [chatId]);
+    return () => { alive = false; };
+  }, [chatId, markRead]);
 
-  React.useEffect(() => { if (scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight; }, [chat?.messages]);
+  // Опрос новых сообщений. В скрытой вкладке молчим: фоновый тред не должен
+  // долбить сервер, а по возвращении на экран запрос уходит сразу.
+  React.useEffect(() => {
+    if (!chatId) return undefined;
+    let alive = true;
+    let busy = false;
+    const tick = async () => {
+      if (!alive || busy || (typeof document !== 'undefined' && document.hidden)) return;
+      busy = true;
+      try {
+        const res = await getChatUpdatesAction(chatId, lastAt.current);
+        if (!alive || !res || !res.ok) return;
+        const fresh = res.messages || [];
+        if (fresh.length) {
+          setChat(c => {
+            if (!c) return c;
+            const known = new Set(c.messages.map(m => m.id));
+            const add = fresh.filter(m => !known.has(m.id));
+            if (!add.length) return c;
+            return { ...c, messages: [...c.messages, ...add], deal: res.deal || c.deal };
+          });
+          // отметку двигаем только на чужих сообщениях: свои прочитаны всегда
+          if (fresh.some(m => !m.me)) markRead();
+        } else if (res.deal) {
+          setChat(c => (c ? { ...c, deal: res.deal } : c));
+        }
+      } catch (e) {
+        // молча: обрыв связи — не повод показывать ошибку поверх переписки
+      } finally {
+        busy = false;
+      }
+    };
+    const id = setInterval(tick, POLL_MS);
+    const onVis = () => { if (!document.hidden) tick(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => { alive = false; clearInterval(id); document.removeEventListener('visibilitychange', onVis); };
+  }, [chatId, markRead]);
 
-  const send = async () => {
-    if (!text.trim()) return;
-    const msg = text.trim();
-    setText('');
-    setSendError('');
+  const onScroll = () => {
+    const el = scroller.current;
+    if (!el) return;
+    stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+  };
+
+  // Не дёргаем вниз того, кто читает историю выше.
+  React.useEffect(() => {
+    if (scroller.current && stick.current) scroller.current.scrollTop = scroller.current.scrollHeight;
+  }, [chat, pending]);
+
+  const doSend = async (msg, tmpId) => {
     try {
       const res = await sendMessageAction(chatId, msg);
-      if (!res.ok) { setSendError(res.error || 'Не удалось отправить'); return; }
-      setChat(c => c ? { ...c, messages: [...c.messages, res.message] } : c);
+      if (!res.ok) {
+        setPending(p => p.map(m => (m.id === tmpId ? { ...m, sending: false, failed: true } : m)));
+        setSendError(res.error || 'Не удалось отправить');
+        return;
+      }
+      setSendError('');
+      setChat(c => (c ? { ...c, messages: [...c.messages, res.message] } : c));
+      setPending(p => p.filter(m => m.id !== tmpId));
     } catch (e) {
       console.error('send message failed', e);
-      setSendError('Не удалось отправить — обновите страницу и попробуйте ещё раз');
+      setPending(p => p.map(m => (m.id === tmpId ? { ...m, sending: false, failed: true } : m)));
+      setSendError('Не удалось отправить — проверьте связь');
     }
+  };
+
+  const send = () => {
+    const msg = text.trim();
+    if (!msg) return;
+    const tmpId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    setText('');
+    if (inputRef.current) inputRef.current.style.height = 'auto';
+    stick.current = true;
+    setPending(p => [...p, { id: tmpId, me: true, from: 'me', text: msg, t: new Date().toISOString(), sending: true }]);
+    doSend(msg, tmpId);
+  };
+
+  const retry = (m) => {
+    setPending(p => p.map(x => (x.id === m.id ? { ...x, failed: false, sending: true } : x)));
+    setSendError('');
+    doSend(m.text, m.id);
+  };
+
+  // Enter отправляет, Shift+Enter — перенос строки: условия обмена
+  // в одну строку не всегда укладываются.
+  const onKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+  };
+
+  const grow = (e) => {
+    setText(e.target.value);
+    const el = e.target;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(120, el.scrollHeight)}px`;
   };
 
   if (loading) return <div className="app" style={{ position: 'absolute' }}><div className="safe-top" /><div className="grow col" style={{ alignItems: 'center', justifyContent: 'center' }}><div className="coin pop" style={{ width: 40, height: 40, fontSize: 18 }}>Б</div></div></div>;
@@ -169,18 +300,21 @@ export function ChatThread({ chatId, onBack, onOpenDeal }) {
 
   const u = chat.partner;
   const deal = chat.deal;
+  const group = chat.kind === 'chain';
+  const items = [...chat.messages, ...pending];
 
   return (
     <div className="app" style={{ position: 'absolute' }}>
       <div className="safe-top" />
       <div className="row gap10" style={{ padding: '4px 14px 12px', alignItems: 'center', borderBottom: '1px solid var(--line)' }}>
         <IconBtn name="back" onClick={onBack} />
-        <Avatar user={u.name} size={40} />
-        <div className="col grow" style={{ gap: 1 }}>
-          <span className="title">{u.name}</span>
-          <span className="cap">{u.city}</span>
+        {group
+          ? <div className="avatar" style={{ width: 40, height: 40, flex: 'none', background: 'var(--berry-50)' }}><Icon name="chain" size={20} color="var(--berry)" /></div>
+          : <Avatar user={u.name} url={u.avatar} size={40} />}
+        <div className="col grow" style={{ gap: 1, minWidth: 0 }}>
+          <span className="title ellipsis">{u.name}</span>
+          <span className="cap ellipsis">{group ? (chat.members || []).map(m => m.name).join(', ') : u.city}</span>
         </div>
-        <IconBtn name="info" />
       </div>
 
       {deal && (
@@ -193,27 +327,60 @@ export function ChatThread({ chatId, onBack, onOpenDeal }) {
         </div>
       )}
 
-      <div className="app-scroll" ref={scroller} style={{ padding: '6px 18px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {chat.messages.map((m, i) => {
+      <div className="app-scroll" ref={scroller} onScroll={onScroll} style={{ padding: '6px 18px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {!items.length && (
+          <div className="col" style={{ alignItems: 'center', textAlign: 'center', gap: 8, margin: 'auto', padding: '30px 20px' }}>
+            <div className="avatar" style={{ width: 52, height: 52, background: 'var(--berry-50)' }}><Icon name="chat" size={24} color="var(--berry)" /></div>
+            <span className="title" style={{ fontSize: 15 }}>Начните разговор</span>
+            <span className="sub" style={{ maxWidth: 260 }}>Спросите о состоянии вещи и договоритесь, где и когда встретиться.</span>
+          </div>
+        )}
+        {items.map((m, i) => {
+          const prev = items[i - 1];
+          const sep = !prev || dayKey(prev.t) !== dayKey(m.t) ? (
+            <div className="cap" style={{ alignSelf: 'center', padding: '8px 0 2px' }}>{dayLabel(m.t)}</div>
+          ) : null;
+
           if (m.from === 'sys') return (
-            <div key={m.id || i} className="row gap6" style={{ alignSelf: 'center', maxWidth: '88%', background: 'var(--berry-50)', color: 'var(--berry-700)', padding: '8px 12px', borderRadius: 12, fontSize: 12.5, fontWeight: 600, textAlign: 'center', margin: '4px 0' }}>
-              <Icon name="shield" size={15} color="var(--berry)" style={{ flex: 'none' }} />{m.text}
-            </div>
+            <React.Fragment key={m.id || i}>
+              {sep}
+              <div className="row gap6" style={{ alignSelf: 'center', maxWidth: '88%', background: 'var(--berry-50)', color: 'var(--berry-700)', padding: '8px 12px', borderRadius: 12, fontSize: 12.5, fontWeight: 600, textAlign: 'center', margin: '4px 0' }}>
+                <Icon name="shield" size={15} color="var(--berry)" style={{ flex: 'none' }} />{m.text}
+              </div>
+            </React.Fragment>
           );
+
           const me = m.me;
+          // В цепочке пишут трое: без подписи реплики сливаются в один голос.
+          const showAuthor = !me && group && m.author && (!prev || prev.from === 'sys' || prev.author !== m.author);
           return (
-            <div key={m.id || i} style={{ alignSelf: me ? 'flex-end' : 'flex-start', maxWidth: '82%' }}>
-              <div style={{ padding: '9px 13px', borderRadius: me ? '16px 16px 4px 16px' : '16px 16px 16px 4px', background: me ? 'var(--berry)' : '#fff', color: me ? '#fff' : 'var(--ink)', boxShadow: me ? 'none' : 'var(--sh-1)', fontSize: 14.5, lineHeight: 1.4 }}>{m.text}</div>
-              <span className="cap" style={{ display: 'block', textAlign: me ? 'right' : 'left', marginTop: 3, padding: '0 4px' }}>{fmtTime(m.t)}</span>
-            </div>
+            <React.Fragment key={m.id || i}>
+              {sep}
+              <div style={{ alignSelf: me ? 'flex-end' : 'flex-start', maxWidth: '82%' }}>
+                {showAuthor && <span className="cap" style={{ display: 'block', margin: '2px 0 3px 6px', fontWeight: 700, color: 'var(--berry-700)' }}>{m.author}</span>}
+                <div style={{ padding: '9px 13px', borderRadius: me ? '16px 16px 4px 16px' : '16px 16px 16px 4px', background: me ? 'var(--berry)' : '#fff', color: me ? '#fff' : 'var(--ink)', boxShadow: me ? 'none' : 'var(--sh-1)', fontSize: 14.5, lineHeight: 1.4, whiteSpace: 'pre-wrap', wordBreak: 'break-word', opacity: m.sending ? 0.6 : 1 }}>{m.text}</div>
+                <span className="cap" style={{ display: 'block', textAlign: me ? 'right' : 'left', marginTop: 3, padding: '0 4px' }}>
+                  {m.failed ? (
+                    <button onClick={() => retry(m)} style={{ border: 'none', background: 'none', padding: 0, color: 'var(--berry-700)', fontWeight: 700, fontSize: 11.5, cursor: 'pointer' }}>не отправлено · повторить</button>
+                  ) : m.sending ? 'отправляется…' : fmtTime(m.t)}
+                </span>
+              </div>
+            </React.Fragment>
           );
         })}
       </div>
 
-      <div className="row gap8" style={{ padding: '8px 14px calc(12px + env(safe-area-inset-bottom, 0px) + 24px)', borderTop: '1px solid var(--line)', background: '#fff', alignItems: 'center' }}>
-        <button style={{ width: 40, height: 40, borderRadius: 999, border: 'none', background: 'var(--line-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none', cursor: 'pointer' }}><Icon name="plusCircle" size={22} color="var(--ink-2)" /></button>
-        <input value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()} placeholder="Сообщение…" style={{ flex: 1, border: '1px solid var(--line)', borderRadius: 999, padding: '11px 16px', fontSize: 15, fontFamily: 'var(--font)', outline: 'none', background: 'var(--bg)' }} />
-        <button onClick={send} style={{ width: 40, height: 40, borderRadius: 999, border: 'none', background: 'var(--berry)', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none', cursor: 'pointer' }}><Icon name="send" size={20} color="#fff" /></button>
+      <div className="row gap8" style={{ padding: '8px 14px calc(12px + env(safe-area-inset-bottom, 0px) + 24px)', borderTop: '1px solid var(--line)', background: '#fff', alignItems: 'flex-end' }}>
+        <textarea
+          ref={inputRef}
+          value={text}
+          onChange={grow}
+          onKeyDown={onKeyDown}
+          rows={1}
+          placeholder="Сообщение…"
+          style={{ flex: 1, border: '1px solid var(--line)', borderRadius: 20, padding: '11px 16px', fontSize: 15, fontFamily: 'var(--font)', outline: 'none', background: 'var(--bg)', resize: 'none', maxHeight: 120, lineHeight: 1.35 }}
+        />
+        <button onClick={send} disabled={!text.trim()} style={{ width: 40, height: 40, borderRadius: 999, border: 'none', background: text.trim() ? 'var(--berry)' : 'var(--line-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none', cursor: text.trim() ? 'pointer' : 'default' }}><Icon name="send" size={20} color={text.trim() ? '#fff' : 'var(--ink-3)'} /></button>
       </div>
       {sendError && <div style={{ padding: '8px 14px', background: 'var(--warn-soft)', color: '#7a5410', fontSize: 12.5, fontWeight: 600, borderTop: '1px solid var(--warn-soft)' }}>{sendError}</div>}
     </div>

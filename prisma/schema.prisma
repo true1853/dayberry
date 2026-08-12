@@ -208,6 +208,10 @@ model ChatMember {
   userId   String
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   joinedAt DateTime @default(now())
+  // до какого момента участник прочитал переписку; null — не открывал ни разу.
+  // Счётчик непрочитанного живёт здесь, а не на Message: в групповом чате
+  // цепочки одно и то же сообщение прочитано одним и не прочитано другим.
+  lastReadAt DateTime?
 
   @@unique([chatId, userId])
   @@index([userId])

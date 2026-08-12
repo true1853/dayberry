@@ -17,6 +17,7 @@ const TONE = {
   chain_done: { icon: 'checkCircle', color: 'var(--ok)', bg: 'var(--ok-soft)' },
   chain_failed: { icon: 'info', color: 'var(--ink-2)', bg: 'var(--line-2)' },
   chain_expired: { icon: 'clock', color: 'var(--ink-2)', bg: 'var(--line-2)' },
+  message: { icon: 'chat', color: 'var(--berry)', bg: 'var(--berry-50)' },
 };
 
 const toneOf = (type) => TONE[type] || { icon: 'bell', color: 'var(--ink-2)', bg: 'var(--line-2)' };
@@ -34,7 +35,7 @@ export function NotificationsSheet({ open, onClose, items = [], onOpenEntity }) 
         )}
         {items.map(n => {
           const tone = toneOf(n.type);
-          const clickable = n.entityType === 'chain' && !!n.entityId;
+          const clickable = (n.entityType === 'chain' || n.entityType === 'chat') && !!n.entityId;
           return (
             <div
               key={n.id}

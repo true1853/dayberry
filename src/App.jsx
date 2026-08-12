@@ -171,6 +171,28 @@ export default function App() {
     try { setChains(await listChainsAction() || []); } catch (e) { console.error('chains reload failed', e); }
   };
 
+  // Суммарный бейдж на вкладке «Сообщения». Обнуляем локально сразу после
+  // открытия чата — ждать ответа сервера, чтобы погасить свой же счётчик,
+  // незачем.
+  const unreadChats = React.useMemo(() => chats.reduce((n, c) => n + (c.unread || 0), 0), [chats]);
+  const markChatRead = React.useCallback((chatId) => {
+    setChats(cs => cs.map(c => (c.id === chatId ? { ...c, unread: 0 } : c)));
+  }, []);
+
+  const reloadChats = React.useCallback(async () => {
+    try { setChats(await listChatsAction() || []); } catch (e) { console.error('chats reload failed', e); }
+  }, []);
+
+  // Пока человек на вкладке сообщений — подтягиваем список: иначе новая
+  // переписка и счётчик появятся только после перезагрузки приложения.
+  React.useEffect(() => {
+    if (!authed || tab !== 'deals') return undefined;
+    const tick = () => { if (!document.hidden) reloadChats(); };
+    const id = setInterval(tick, 20000);
+    document.addEventListener('visibilitychange', tick);
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', tick); };
+  }, [authed, tab, reloadChats]);
+
   const reloadNotifications = async () => {
     try { setNotifications(await listNotificationsAction()); } catch (e) { console.error('notifications failed', e); }
   };
@@ -505,6 +527,7 @@ export default function App() {
           lots={lots} lotsLoading={lotsLoading} myLots={myLots} matches={matches}
           chains={chains} favIds={favIds} onToggleFav={toggleFav}
           unread={notifications.unread || 0}
+          chatUnread={unreadChats}
           onBell={openNotifications}
           chainProps={{
             authed,
@@ -519,7 +542,7 @@ export default function App() {
     if (tab === 'favorites') return (
       <div className="app"><div className="safe-top" />
         <FavoritesScreen lots={favorites} go={go} onToggleFav={toggleFav} />
-        <TabBar tab={tab} setTab={guardedTab} onCreate={onCreate} unread={0} />
+        <TabBar tab={tab} setTab={guardedTab} onCreate={onCreate} unread={unreadChats} />
       </div>
     );
     if (tab === 'mylots') return (
@@ -534,13 +557,13 @@ export default function App() {
           onRestore={handleRestoreLot}
           onDelete={handleDeleteLot}
         />
-        <TabBar tab={tab} setTab={guardedTab} onCreate={onCreate} unread={0} />
+        <TabBar tab={tab} setTab={guardedTab} onCreate={onCreate} unread={unreadChats} />
       </div>
     );
     if (tab === 'deals') return (
       <div className="app"><div className="safe-top" />
         <DealsList chats={chats} deals={deals} onOpen={(id) => go('chat', { id })} onOpenDeal={(id) => openDeal(id)} />
-        <TabBar tab={tab} setTab={guardedTab} onCreate={onCreate} unread={0} />
+        <TabBar tab={tab} setTab={guardedTab} onCreate={onCreate} unread={unreadChats} />
       </div>
     );
     if (tab === 'wallet') return (
@@ -555,7 +578,7 @@ export default function App() {
             return { ok: false, error: 'Не удалось пополнить — обновите страницу и попробуйте ещё раз' };
           }
         }} />
-        <TabBar tab={tab} setTab={guardedTab} onCreate={onCreate} unread={0} />
+        <TabBar tab={tab} setTab={guardedTab} onCreate={onCreate} unread={unreadChats} />
       </div>
     );
     if (tab === 'profile') return (
@@ -639,7 +662,7 @@ export default function App() {
       );
     }
     if (top.name === 'chat') return (
-      <ChatThread chatId={top.params.id} onBack={back} onOpenDeal={() => { const c = chats.find(x => x.id === top.params.id); openDeal(c && c.deal ? c.deal.id : undefined); }} />
+      <ChatThread chatId={top.params.id} onRead={markChatRead} onBack={() => { back(); reloadChats(); }} onOpenDeal={() => { const c = chats.find(x => x.id === top.params.id); openDeal(c && c.deal ? c.deal.id : undefined); }} />
     );
     if (top.name === 'settings') return (
       <div className="app"><div className="safe-top" />
@@ -688,6 +711,8 @@ export default function App() {
           onOwnerChat={handleOwnerChat}
           matches={matches}
           chats={chats}
+          onChatRead={markChatRead}
+          onChatsChanged={reloadChats}
           chains={chains}
           chainBusy={chainBusy}
           chainProps={{
@@ -744,7 +769,7 @@ export default function App() {
         open={notifOpen}
         items={notifications.items}
         onClose={() => setNotifOpen(false)}
-        onOpenEntity={(n) => { setNotifOpen(false); go('chain', { id: n.entityId }); }}
+        onOpenEntity={(n) => { setNotifOpen(false); go(n.entityType === 'chat' ? 'chat' : 'chain', { id: n.entityId }); }}
       />
       {snack && <div className="snack" role="alert" onClick={() => setSnack('')}><Icon name="info" size={16} color="#fff" />{snack}</div>}
     </>
@@ -792,7 +817,8 @@ const VIEW_MODES = [
   { id: 'chain', label: 'Цепочки' },
 ];
 
-function HomeTab({ t, go, tab, setTab, onCreate, lots, lotsLoading, matches, chains, myLots, favIds, onToggleFav, unread = 0, onBell, chainProps = {} }) {
+// unread — колокольчик уведомлений, chatUnread — бейдж на вкладке сообщений
+function HomeTab({ t, go, tab, setTab, onCreate, lots, lotsLoading, matches, chains, myLots, favIds, onToggleFav, unread = 0, chatUnread = 0, onBell, chainProps = {} }) {
   const [cat, setCat] = React.useState('all');
   const [view, setView] = React.useState(t.mechanic || 'list');
   const [q, setQ] = React.useState('');
@@ -831,7 +857,7 @@ function HomeTab({ t, go, tab, setTab, onCreate, lots, lotsLoading, matches, cha
         {view === 'swipe' && <FeedSwipe cat={cat} lots={shown} myLot={myLots && myLots[0]} onOpen={(id) => go('lot', { lotId: id })} />}
         {view === 'chain' && <FeedChain chains={chains} onOpenChain={(id) => go('chain', { id })} {...chainProps} />}
       </div>
-      <TabBar tab={tab} setTab={setTab} onCreate={onCreate} unread={0} />
+      <TabBar tab={tab} setTab={setTab} onCreate={onCreate} unread={chatUnread} />
     </div>
   );
 }

@@ -880,7 +880,7 @@ const chatBase = {
   partner: { select: { id: true, name: true, city: true, avatar: true } },
   user: { select: { id: true, name: true, city: true, avatar: true } },
   deal: { select: { id: true, stage: true, credits: true, status: true, lot: { select: { title: true } } } },
-  members: { select: { user: { select: { id: true, name: true, city: true, avatar: true } } } },
+  members: { select: { userId: true, lastReadAt: true, user: { select: { id: true, name: true, city: true, avatar: true } } } },
 };
 
 // Состав чата — в ChatMember, и для парного тоже: групповой чат цепочки
@@ -947,6 +947,10 @@ async function serializeChat(c, currentUserId) {
       t: m.createdAt.toISOString(),
     })),
     createdAt: c.createdAt.toISOString(),
+    // список сортируется по активности переписки, а не по дате её заведения
+    // из БД сообщения приходят по убыванию — свежее всегда первое
+    lastAt: (c.messages && c.messages.length ? c.messages[0].createdAt : c.createdAt).toISOString(),
+    unread: 0,
   };
 }
 
@@ -959,9 +963,79 @@ async function chatsOf(user) {
   const chats = await prisma.chat.findMany({
     where: chatMemberOf(user.id),
     include: chatListWith,
-    orderBy: { createdAt: 'desc' },
   });
-  return Promise.all(chats.map(c => serializeChat(c, user.id)));
+  const out = await Promise.all(chats.map(c => serializeChat(c, user.id)));
+
+  // Непрочитанное — одним запросом на все переписки: у каждой свой порог
+  // (когда этот участник её открывал), поэтому условия собираются в OR.
+  const conds = chats
+    .map(c => {
+      const mine = (c.members || []).find(m => m.userId === user.id);
+      return { chatId: c.id, createdAt: { gt: mine?.lastReadAt || new Date(0) } };
+    });
+  if (conds.length) {
+    const rows = await prisma.message.groupBy({
+      by: ['chatId'],
+      where: { fromId: { not: user.id }, OR: conds },
+      _count: { _all: true },
+    });
+    const byChat = new Map(rows.map(r => [r.chatId, r._count._all]));
+    for (const c of out) c.unread = byChat.get(c.id) || 0;
+  }
+
+  // Сортировка по активности: чат, заведённый давно, но живой сегодня,
+  // должен быть сверху — раньше список шёл по дате создания чата.
+  out.sort((a, b) => (a.lastAt < b.lastAt ? 1 : a.lastAt > b.lastAt ? -1 : 0));
+  return out;
+}
+
+// Отметить переписку прочитанной. Порог живёт на участнике, поэтому
+// в групповом чате отметка одного не гасит бейдж остальным.
+export async function markChatReadAction(chatId) {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false };
+  await prisma.chatMember.updateMany({
+    where: { chatId, userId: user.id },
+    data: { lastReadAt: new Date() },
+  });
+  return { ok: true };
+}
+
+// Догрузка новых сообщений открытого треда. Отдаём только то, что появилось
+// после известной клиенту отметки — поллинг не должен возить историю целиком.
+export async function getChatUpdatesAction(chatId, afterIso) {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, messages: [] };
+  const chat = await prisma.chat.findFirst({
+    where: { id: chatId, ...chatMemberOf(user.id) },
+    select: { id: true, deal: { select: { id: true, stage: true, credits: true, status: true, lot: { select: { title: true } } } } },
+  });
+  if (!chat) return { ok: false, messages: [] };
+  const after = afterIso ? new Date(afterIso) : new Date(0);
+  const rows = await prisma.message.findMany({
+    where: { chatId, createdAt: { gt: Number.isNaN(after.getTime()) ? new Date(0) : after } },
+    orderBy: { createdAt: 'asc' },
+    take: THREAD_MESSAGE_LIMIT,
+    include: { from: { select: { id: true, name: true } } },
+  });
+  return {
+    ok: true,
+    messages: rows.map(m => ({
+      id: m.id,
+      from: !m.fromId ? 'sys' : (m.fromId === user.id ? 'me' : 'them'),
+      me: m.fromId ? m.fromId === user.id : false,
+      author: m.fromId && m.fromId !== user.id ? (m.from?.name || '') : '',
+      text: m.text,
+      t: m.createdAt.toISOString(),
+    })),
+    deal: chat.deal ? {
+      id: chat.deal.id,
+      stage: chat.deal.stage,
+      credits: chat.deal.credits,
+      status: chat.deal.status,
+      title: chat.deal.lot?.title || '',
+    } : null,
+  };
 }
 
 export async function startChatAction(lotId) {
@@ -1023,12 +1097,32 @@ export async function sendMessageAction(chatId, text) {
   if (!msg) return { ok: false, error: 'Пустое сообщение' };
   const chat = await prisma.chat.findFirst({
     where: { id: chatId, ...chatMemberOf(user.id) },
+    include: { members: { select: { userId: true } } },
   });
   if (!chat) return { ok: false, error: 'Чат не найден' };
   const saved = await prisma.message.create({
     data: { chatId: chat.id, fromId: user.id, text: msg },
   });
-  return { ok: true, message: { id: saved.id, me: true, from: 'me', text: msg, t: saved.createdAt.toISOString() } };
+
+  // Своё сообщение прочитано по определению — иначе отправитель сам себе
+  // зажигает бейдж непрочитанного.
+  await prisma.chatMember.updateMany({
+    where: { chatId: chat.id, userId: user.id },
+    data: { lastReadAt: saved.createdAt },
+  });
+
+  // О сообщении узнают так же, как о сделках и цепочках — через колокольчик.
+  const others = (chat.members || []).map(m => m.userId).filter(id => id !== user.id);
+  await notify(others.map(userId => ({
+    userId,
+    type: 'message',
+    title: `Сообщение от ${user.name}`,
+    body: msg,
+    entityType: 'chat',
+    entityId: chat.id,
+  })));
+
+  return { ok: true, message: { id: saved.id, me: true, from: 'me', author: '', text: msg, t: saved.createdAt.toISOString() } };
 }
 
 // ---------- chains ----------
