@@ -1,9 +1,10 @@
 'use client';
 // App.jsx — root: navigation, phone frame scaling, tweaks
 import React from 'react';
-import { bootstrapAction, loadAuthedDataAction, logoutAction, createLotAction, updateLotAction, getWalletAction, listDealsAction, listChatsAction, getMatchesAction, createDealAction, confirmReceiptAction, confirmPartnerAction, cancelDealAction, createReviewAction, topUpAction, joinChainAction, startChatAction, getDealChatAction, toggleFavoriteAction } from './server/actions.js';
+import { bootstrapAction, loadAuthedDataAction, logoutAction, createLotAction, updateLotAction, getWalletAction, listDealsAction, listChatsAction, getMatchesAction, createDealAction, confirmReceiptAction, confirmPartnerAction, cancelDealAction, createReviewAction, topUpAction, startChatAction, getDealChatAction, toggleFavoriteAction, listChainsAction, refreshChainsAction, startChainAction, respondChainAction, confirmChainSentAction, confirmChainReceivedAction, listNotificationsAction, markNotificationsReadAction } from './server/actions.js';
 import { FeedList, FeedSwipe, CatRow, FavoritesScreen } from './screen-feed.jsx';
 import { FeedChain, ChainDetail } from './screen-chain.jsx';
+import { NotificationsSheet } from './screen-notifications.jsx';
 import { LotDetail, OfferSheet } from './screen-lot.jsx';
 import { DealStatus } from './screen-deal.jsx';
 import { DealsList, ChatThread } from './screen-chat.jsx';
@@ -85,6 +86,10 @@ export default function App() {
   const [wallet, setWallet] = React.useState(null);
   const [chats, setChats] = React.useState([]);
   const [chains, setChains] = React.useState([]);
+  const [chainBusy, setChainBusy] = React.useState(false);
+  const [chainsRefreshing, setChainsRefreshing] = React.useState(false);
+  const [notifications, setNotifications] = React.useState({ items: [], unread: 0 });
+  const [notifOpen, setNotifOpen] = React.useState(false);
   const [matches, setMatches] = React.useState([]);
   const [favorites, setFavorites] = React.useState([]);
   const [snack, setSnack] = React.useState('');
@@ -152,6 +157,60 @@ export default function App() {
     setWallet(d.wallet);
     setChats(d.chats || []);
     setFavorites(d.favorites || []);
+    setNotifications(d.notifications || { items: [], unread: 0 });
+  };
+
+  // ---- цепочки ----
+  //
+  // После любого ответа участника состояние меняется у всех сразу (согласие,
+  // отказ, замена), поэтому перечитываем список целиком, а не патчим одну
+  // карточку: локальная правка разъезжается с тем, что произошло на сервере.
+  const reloadChains = async () => {
+    try { setChains(await listChainsAction() || []); } catch (e) { console.error('chains reload failed', e); }
+  };
+
+  const reloadNotifications = async () => {
+    try { setNotifications(await listNotificationsAction()); } catch (e) { console.error('notifications failed', e); }
+  };
+
+  const runChainAction = async (fn, okMessage) => {
+    setChainBusy(true);
+    try {
+      const res = await fn();
+      if (!res?.ok) { showSnack(res?.error || 'Не удалось — обновите страницу и попробуйте ещё раз'); return null; }
+      await Promise.all([reloadChains(), reloadNotifications(), refreshWallet()]);
+      if (okMessage) showSnack(okMessage);
+      return res;
+    } catch (e) {
+      console.error('chain action failed', e);
+      showSnack('Не удалось — обновите страницу и попробуйте ещё раз');
+      return null;
+    } finally {
+      setChainBusy(false);
+    }
+  };
+
+  const searchChains = async () => {
+    setChainsRefreshing(true);
+    try {
+      const res = await refreshChainsAction();
+      if (res?.chains) setChains(res.chains);
+      if (res?.ok && !res.chains?.length) showSnack('Подходящих цепочек пока не нашлось — попробуйте позже');
+    } catch (e) {
+      console.error('chains refresh failed', e);
+    } finally {
+      setChainsRefreshing(false);
+    }
+  };
+
+  const openNotifications = async () => {
+    setNotifOpen(true);
+    if (notifications.unread > 0) {
+      try {
+        await markNotificationsReadAction();
+        setNotifications(n => ({ items: n.items.map(x => ({ ...x, read: true })), unread: 0 }));
+      } catch (e) { console.error('mark read failed', e); }
+    }
   };
 
   // Баланс живёт в трёх местах: кошелёк, карточка пользователя и профиль.
@@ -388,7 +447,22 @@ export default function App() {
 
   const tabRoot = () => {
     if (tab === 'search') {
-      return <HomeTab t={t} go={go} tab={tab} setTab={guardedTab} onCreate={onCreate} lots={lots} lotsLoading={lotsLoading} myLots={myLots} matches={matches} chains={chains} favIds={favIds} onToggleFav={toggleFav} />;
+      return (
+        <HomeTab
+          t={t} go={go} tab={tab} setTab={guardedTab} onCreate={onCreate}
+          lots={lots} lotsLoading={lotsLoading} myLots={myLots} matches={matches}
+          chains={chains} favIds={favIds} onToggleFav={toggleFav}
+          unread={notifications.unread || 0}
+          onBell={openNotifications}
+          chainProps={{
+            authed,
+            hasLots: myLots.length > 0,
+            hasWants: !!(profile?.wants || currentUser?.wants),
+            refreshing: chainsRefreshing,
+            onRefresh: () => requireAuth('Искать цепочки можно после регистрации', searchChains),
+          }}
+        />
+      );
     }
     if (tab === 'favorites') return (
       <div className="app"><div className="safe-top" />
@@ -452,18 +526,46 @@ export default function App() {
     );
     if (top.name === 'chainfeed') return (
       <div className="app"><div className="safe-top" />
-        <AppBar sub="Многосторонний обмен" title="Цепочки" left={<IconBtn name="back" onClick={back} />} />
-        <div className="app-scroll"><FeedChain chains={chains} onOpenChain={(id) => go('chain', { id })} /></div>
+        <AppBar
+          sub="Многосторонний обмен" title="Цепочки"
+          left={<IconBtn name="back" onClick={back} />}
+          right={<IconBtn name="bell" badge={notifications.unread || 0} onClick={openNotifications} />}
+        />
+        <div className="app-scroll">
+          <FeedChain
+            chains={chains}
+            authed={authed}
+            hasLots={myLots.length > 0}
+            hasWants={!!(profile?.wants || currentUser?.wants)}
+            refreshing={chainsRefreshing}
+            onRefresh={() => requireAuth('Искать цепочки можно после регистрации', searchChains)}
+            onOpenChain={(id) => go('chain', { id })}
+          />
+        </div>
       </div>
     );
     if (top.name === 'chain') return (
       <div className="app"><div className="safe-top" />
-        <ChainDetail chainId={top.params.id} chains={chains} onBack={back} onJoin={(ch) => requireAuth('Вступить в цепочку можно после регистрации', async () => {
-          const res = await joinChainAction(ch.id);
-          await refreshWallet();
-          back();
-          if (res.ok) { const de = await listDealsAction(); setDeals(de || []); const dl = de.find(x => x.id === res.dealId); setDeal(dl); go('deal', { id: res.dealId }); }
-        })} />
+        <ChainDetail
+          chainId={top.params.id}
+          chains={chains}
+          busy={chainBusy}
+          onBack={back}
+          onStart={(ch) => requireAuth('Вступить в цепочку можно после регистрации', () =>
+            runChainAction(() => startChainAction(ch.id), 'Позвали остальных — ждём их ответа сутки'))}
+          onRespond={async (ch, accept) => {
+            const res = await runChainAction(
+              () => respondChainAction(ch.id, accept),
+              accept ? null : 'Отказ отправлен',
+            );
+            // Отказ уводит с экрана: цепочки в этом статусе больше нет,
+            // а замена (если нашлась) придёт отдельным уведомлением.
+            if (res && !accept) back();
+          }}
+          onSent={(ch) => runChainAction(() => confirmChainSentAction(ch.id), 'Отметили передачу')}
+          onReceived={(ch) => runChainAction(() => confirmChainReceivedAction(ch.id), 'Отметили получение')}
+          onOpenChat={(chatId) => go('chat', { id: chatId })}
+        />
       </div>
     );
     if (top.name === 'deal') {
@@ -526,6 +628,24 @@ export default function App() {
           matches={matches}
           chats={chats}
           chains={chains}
+          chainBusy={chainBusy}
+          chainProps={{
+            authed,
+            hasLots: myLots.length > 0,
+            hasWants: !!(profile?.wants || currentUser?.wants),
+            refreshing: chainsRefreshing,
+            onRefresh: () => requireAuth('Искать цепочки можно после регистрации', searchChains),
+          }}
+          chainActions={{
+            onStart: (ch) => requireAuth('Вступить в цепочку можно после регистрации', () =>
+              runChainAction(() => startChainAction(ch.id), 'Позвали остальных — ждём их ответа сутки')),
+            onRespond: (ch, accept) => runChainAction(
+              () => respondChainAction(ch.id, accept),
+              accept ? null : 'Отказ отправлен',
+            ),
+            onSent: (ch) => runChainAction(() => confirmChainSentAction(ch.id), 'Отметили передачу'),
+            onReceived: (ch) => runChainAction(() => confirmChainReceivedAction(ch.id), 'Отметили получение'),
+          }}
           deals={deals}
           favorites={favorites}
           onToggleFav={toggleFav}
@@ -559,6 +679,12 @@ export default function App() {
         }
       }} />
       <CreditsInfo open={infoOpen} onClose={() => setInfoOpen(false)} />
+      <NotificationsSheet
+        open={notifOpen}
+        items={notifications.items}
+        onClose={() => setNotifOpen(false)}
+        onOpenEntity={(n) => { setNotifOpen(false); go('chain', { id: n.entityId }); }}
+      />
       {snack && <div className="snack" role="alert" onClick={() => setSnack('')}><Icon name="info" size={16} color="#fff" />{snack}</div>}
     </>
   );
@@ -605,7 +731,7 @@ const VIEW_MODES = [
   { id: 'chain', label: 'Цепочки' },
 ];
 
-function HomeTab({ t, go, tab, setTab, onCreate, lots, lotsLoading, matches, chains, myLots, favIds, onToggleFav }) {
+function HomeTab({ t, go, tab, setTab, onCreate, lots, lotsLoading, matches, chains, myLots, favIds, onToggleFav, unread = 0, onBell, chainProps = {} }) {
   const [cat, setCat] = React.useState('all');
   const [view, setView] = React.useState(t.mechanic || 'list');
   const [q, setQ] = React.useState('');
@@ -624,7 +750,7 @@ function HomeTab({ t, go, tab, setTab, onCreate, lots, lotsLoading, matches, cha
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="Что ищете для обмена?" style={{ border: 'none', outline: 'none', flex: 1, minWidth: 0, fontSize: 15, fontFamily: 'var(--font)', background: 'transparent', color: 'var(--ink)' }} />
           {q ? <button onClick={() => setQ('')} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}><Icon name="close" size={18} color="var(--ink-3)" /></button> : null}
         </div>
-        <IconBtn name="bell" badge={0} />
+        <IconBtn name="bell" badge={unread} onClick={onBell} />
       </div>
       {view !== 'chain' && <CatRow active={cat} setActive={setCat} />}
       <div className="app-scroll">
@@ -642,7 +768,7 @@ function HomeTab({ t, go, tab, setTab, onCreate, lots, lotsLoading, matches, cha
         </div>
         {view === 'list' && <FeedList cat={cat} lots={shown} loading={lotsLoading} matches={matches} hints={t.matchHints} myLots={myLots} myLot={myLots && myLots[0]} onOpen={(id) => go('lot', { lotId: id })} onChains={() => setView('chain')} favIds={favIds} onToggleFav={onToggleFav} />}
         {view === 'swipe' && <FeedSwipe cat={cat} lots={shown} myLot={myLots && myLots[0]} onOpen={(id) => go('lot', { lotId: id })} />}
-        {view === 'chain' && <FeedChain chains={chains} onOpenChain={(id) => go('chain', { id })} />}
+        {view === 'chain' && <FeedChain chains={chains} onOpenChain={(id) => go('chain', { id })} {...chainProps} />}
       </div>
       <TabBar tab={tab} setTab={setTab} onCreate={onCreate} unread={0} />
     </div>

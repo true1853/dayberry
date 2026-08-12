@@ -10,7 +10,8 @@
     "lint": "next lint",
     "postinstall": "prisma generate",
     "db:push": "prisma db push",
-    "migrate:photos": "node scripts/migrate-photos.mjs"
+    "migrate:photos": "node scripts/migrate-photos.mjs",
+    "migrate:chains": "node scripts/migrate-chains.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.2.1",
