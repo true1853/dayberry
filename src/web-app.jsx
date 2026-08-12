@@ -743,6 +743,16 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
   }, [authed]);
 
   const goHome = () => { setView('home'); setSelLot(null); setSelDeal(null); setSelChat(null); setSelChain(null); };
+
+  // Уход в другой раздел закрывает открытую сделку, чат или настройки:
+  // иначе новый раздел откроется под модалкой и человек его не увидит.
+  React.useEffect(() => {
+    setSelDeal(null);
+    setSelChat(null);
+    setSelChain(null);
+    setSettingsOpen(false);
+    setBroadcastOpen(false);
+  }, [view]);
   const dealOpen = selDeal ? deals.find(x => x.id === selDeal) || null : null;
 
   return (
