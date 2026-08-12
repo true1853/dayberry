@@ -10,6 +10,7 @@ import { saveDataUrl, saveDataUrls, isStorableImage } from '../../lib/storage';
 import { cookies } from 'next/headers';
 import { randomUUID, randomBytes } from 'node:crypto';
 import * as rateLimit from '../../lib/rate-limit';
+import { REPORT_REASONS, reasonLabel } from '../reports.js';
 import {
   createSession,
   destroySession,
@@ -327,7 +328,10 @@ export async function listLots() {
 }
 
 async function lotsFeed(user) {
-  const where = { status: 'active' };
+  // hidden сюда не попадает по определению (ищем только active), а вот
+  // лоты заблокированных надо отсекать явно: блокировка прячет их скопом,
+  // но между блокировкой и размещением бывает гонка.
+  const where = { status: 'active', owner: { status: { not: 'blocked' } } };
   if (user) where.ownerId = { not: user.id };
   const lots = await prisma.lot.findMany({
     where,
@@ -360,7 +364,7 @@ export async function getArchivedLots() {
   const user = await getCurrentUser();
   if (!user) return [];
   const lots = await prisma.lot.findMany({
-    where: { ownerId: user.id, status: 'archived' },
+    where: { ownerId: user.id, status: { in: ['archived', 'hidden'] } },
     include: { owner: { select: { city: true, name: true, avatar: true, rating: true, reviewsCount: true, dealsCount: true } }, lotPhotos: { orderBy: { order: 'asc' } } },
     orderBy: { createdAt: 'desc' },
   });
@@ -383,10 +387,15 @@ export async function archiveLotAction(lotId) {
 }
 
 export async function restoreLotAction(lotId) {
+  // hidden — решение модератора, автор его не отменяет; ниже проверка статуса
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: 'Требуется вход' };
   const lot = await ownLotOrNull(lotId, user.id);
   if (!lot) return { ok: false, error: 'Объявление не найдено' };
+  if (lot.status === 'hidden') {
+    return { ok: false, error: 'Объявление скрыто модератором — напишите нам, чтобы вернуть его' };
+  }
+  if (user.status === 'blocked') return { ok: false, error: 'Аккаунт заблокирован' };
   await prisma.lot.update({ where: { id: lotId }, data: { status: 'active' } });
   return { ok: true, id: lotId, status: 'active' };
 }
@@ -472,6 +481,7 @@ async function favoritesOf(user) {
 export async function createLotAction(input) {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: 'Требуется вход' };
+  if (user.status === 'blocked') return { ok: false, error: 'Аккаунт заблокирован — размещать объявления нельзя' };
 
   const { title, cat, value, aiLow, aiHigh, photo, photoUrl, photos, wants, desc, kind, condition, valuationSource } = input || {};
   if (!title || !title.trim()) return { ok: false, error: 'Введите название' };
@@ -665,6 +675,7 @@ async function completeDeal(deal) {
 export async function createDealAction(input) {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: 'Требуется вход' };
+  if (user.status === 'blocked') return { ok: false, error: 'Аккаунт заблокирован — открывать сделки нельзя' };
 
   const { lotId, credits, myLotId } = input || {};
   const lot = await prisma.lot.findUnique({ where: { id: lotId } });
@@ -2217,6 +2228,250 @@ export async function dismissResetRequestAction(requestId) {
   await prisma.passwordReset.updateMany({
     where: { id: String(requestId || ''), status: 'open' },
     data: { status: 'rejected', handledAt: new Date() },
+  });
+  return { ok: true };
+}
+
+// ---------- модерация ----------
+//
+// Постмодерация по жалобам: премодерацию не включаем, пока не случится
+// первый инцидент — при полусотне объявлений в сутки она съедает больше,
+// чем спасает.
+//
+// Блокировка мягкая: человек входит и дописывает начатое в переписке, но
+// его объявления уходят из ленты, новые он не разместит и сделок не
+// откроет. Активные сделки заблокированного уходят в спор — там чужие
+// замороженные баллы, и бросать их нельзя.
+
+const REPORT_RATE = { max: 10, windowMs: 60 * 60 * 1000 };
+const MAX_REPORT_TEXT = 600;
+
+export async function reportLotAction(lotId, reason, text) {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: 'Требуется вход' };
+
+  const lot = await prisma.lot.findUnique({ where: { id: String(lotId || '') }, select: { id: true, ownerId: true, title: true } });
+  if (!lot) return { ok: false, error: 'Объявление не найдено' };
+  if (lot.ownerId === user.id) return { ok: false, error: 'Это ваше объявление' };
+
+  const gate = rateLimit.hit(`report:${user.id}`, REPORT_RATE);
+  if (!gate.ok) return { ok: false, error: 'Слишком много жалоб подряд — попробуйте позже' };
+
+  const known = REPORT_REASONS.some(r => r.id === reason);
+  const already = await prisma.report.findFirst({ where: { lotId: lot.id, authorId: user.id, status: 'open' } });
+  if (already) return { ok: true, duplicate: true };
+
+  await prisma.report.create({
+    data: {
+      lotId: lot.id,
+      authorId: user.id,
+      reason: known ? reason : 'other',
+      text: String(text || '').trim().slice(0, MAX_REPORT_TEXT),
+    },
+  });
+
+  const admins = ADMIN_EMAILS.length
+    ? await prisma.user.findMany({ where: { email: { in: ADMIN_EMAILS } }, select: { id: true } })
+    : [];
+  await notify(admins.map(a => ({
+    userId: a.id,
+    type: 'report',
+    title: 'Жалоба на объявление',
+    body: `«${lot.title}» · ${reasonLabel(reason)}`,
+    entityType: 'lot',
+    entityId: lot.id,
+  })));
+
+  return { ok: true };
+}
+
+export async function listReportsAction() {
+  const admin = await getCurrentUser();
+  if (!isAdmin(admin)) return { admin: false, items: [] };
+
+  const rows = await prisma.report.findMany({
+    where: { status: 'open' },
+    orderBy: { createdAt: 'asc' },
+    take: 100,
+    include: {
+      author: { select: { name: true } },
+      lot: {
+        select: {
+          id: true, title: true, desc: true, value: true, status: true, photoUrl: true, cat: true,
+          owner: { select: { id: true, name: true, status: true, email: true } },
+        },
+      },
+    },
+  });
+
+  // Несколько жалоб на один лот — это одна задача, а не пять.
+  const byLot = new Map();
+  for (const r of rows) {
+    if (!r.lot) continue;
+    const item = byLot.get(r.lotId) || {
+      lotId: r.lotId,
+      title: r.lot.title,
+      desc: r.lot.desc,
+      value: r.lot.value,
+      cat: r.lot.cat,
+      photoUrl: r.lot.photoUrl || '',
+      lotStatus: r.lot.status,
+      ownerId: r.lot.owner?.id || '',
+      ownerName: r.lot.owner?.name || '',
+      ownerBlocked: r.lot.owner?.status === 'blocked',
+      reports: [],
+    };
+    item.reports.push({
+      id: r.id,
+      reason: reasonLabel(r.reason),
+      text: r.text,
+      author: r.author?.name || 'аноним',
+      at: r.createdAt.toISOString(),
+    });
+    byLot.set(r.lotId, item);
+  }
+  return { admin: true, items: [...byLot.values()] };
+}
+
+// Закрывает все открытые жалобы по лоту: решение принимается разом.
+async function closeReports(lotId) {
+  await prisma.report.updateMany({
+    where: { lotId, status: 'open' },
+    data: { status: 'done', handledAt: new Date() },
+  });
+}
+
+export async function hideLotAction(lotId, reason) {
+  const admin = await getCurrentUser();
+  if (!isAdmin(admin)) return { ok: false, error: 'Недостаточно прав' };
+
+  const lot = await prisma.lot.findUnique({ where: { id: String(lotId || '') }, select: { id: true, ownerId: true, title: true } });
+  if (!lot) return { ok: false, error: 'Объявление не найдено' };
+
+  await prisma.lot.update({
+    where: { id: lot.id },
+    data: { status: 'hidden', hiddenReason: String(reason || '').slice(0, 300) },
+  });
+  await closeReports(lot.id);
+
+  await notify({
+    userId: lot.ownerId,
+    type: 'moderation',
+    title: 'Объявление скрыто модератором',
+    body: `«${lot.title}»${reason ? ` — ${reason}` : ''}. Исправьте его и напишите нам, чтобы вернуть в ленту.`,
+    entityType: 'profile',
+    entityId: '',
+  });
+  console.log(`[moderation] ${admin.email} скрыл лот ${lot.id}: ${reason}`);
+  return { ok: true };
+}
+
+export async function unhideLotAction(lotId) {
+  const admin = await getCurrentUser();
+  if (!isAdmin(admin)) return { ok: false, error: 'Недостаточно прав' };
+  const lot = await prisma.lot.findUnique({ where: { id: String(lotId || '') }, select: { id: true, ownerId: true, title: true, status: true } });
+  if (!lot) return { ok: false, error: 'Объявление не найдено' };
+  if (lot.status !== 'hidden') return { ok: false, error: 'Объявление не скрыто' };
+
+  await prisma.lot.update({ where: { id: lot.id }, data: { status: 'active', hiddenReason: '' } });
+  await closeReports(lot.id);
+  await notify({
+    userId: lot.ownerId,
+    type: 'moderation',
+    title: 'Объявление вернулось в ленту',
+    body: `«${lot.title}» снова видно всем.`,
+    entityType: 'profile',
+    entityId: '',
+  });
+  return { ok: true };
+}
+
+export async function dismissReportsAction(lotId) {
+  const admin = await getCurrentUser();
+  if (!isAdmin(admin)) return { ok: false, error: 'Недостаточно прав' };
+  await closeReports(String(lotId || ''));
+  return { ok: true };
+}
+
+/**
+ * Мягкая блокировка: объявления уходят из ленты, новые размещать нельзя,
+ * сделки открывать нельзя. Вход и переписка остаются — иначе человек не
+ * сможет закрыть начатое. Активные сделки уходят в спор.
+ */
+export async function blockUserAction(userId, reason) {
+  const admin = await getCurrentUser();
+  if (!isAdmin(admin)) return { ok: false, error: 'Недостаточно прав' };
+
+  const target = await prisma.user.findUnique({ where: { id: String(userId || '') }, select: { id: true, name: true, email: true, status: true } });
+  if (!target) return { ok: false, error: 'Пользователь не найден' };
+  if (isAdmin(target)) return { ok: false, error: 'Нельзя заблокировать администратора' };
+  if (target.status === 'blocked') return { ok: false, error: 'Уже заблокирован' };
+
+  const note = String(reason || '').slice(0, 300);
+  await prisma.user.update({
+    where: { id: target.id },
+    data: { status: 'blocked', blockReason: note, blockedAt: new Date() },
+  });
+  // Объявления прячем скопом, но авторский архив не трогаем.
+  await prisma.lot.updateMany({
+    where: { ownerId: target.id, status: { in: ['active', 'in_chain'] } },
+    data: { status: 'hidden', hiddenReason: 'Аккаунт заблокирован' },
+  });
+
+  // Активные сделки — в спор: там чужие замороженные баллы.
+  const deals = await prisma.deal.findMany({
+    where: { status: 'active', disputedAt: null, OR: [{ userId: target.id }, { lot: { ownerId: target.id } }] },
+    include: dealWith(),
+  });
+  for (const d of deals) {
+    await prisma.deal.updateMany({
+      where: { id: d.id, status: 'active', disputedAt: null },
+      data: { disputedAt: new Date(), disputeById: admin.id, disputeNote: `Аккаунт участника заблокирован: ${note || 'без пояснения'}` },
+    });
+    const otherId = d.userId === target.id ? d.lot?.ownerId : d.userId;
+    if (otherId) {
+      await notify({
+        userId: otherId,
+        type: 'dispute',
+        title: 'Сделка приостановлена',
+        body: `Аккаунт второй стороны заблокирован. «${(d.lot?.title || '').split(',')[0]}» — баллы заморожены до решения.`,
+        entityType: 'deal',
+        entityId: d.id,
+      });
+    }
+  }
+
+  await notify({
+    userId: target.id,
+    type: 'moderation',
+    title: 'Аккаунт заблокирован',
+    body: `${note || 'Нарушение правил сервиса'}. Объявления скрыты, новые размещать нельзя. Напишите нам, если считаете это ошибкой.`,
+    entityType: 'profile',
+    entityId: '',
+  });
+  console.log(`[moderation] ${admin.email} заблокировал ${target.email}: ${note} (сделок в спор: ${deals.length})`);
+  return { ok: true, disputes: deals.length };
+}
+
+export async function unblockUserAction(userId) {
+  const admin = await getCurrentUser();
+  if (!isAdmin(admin)) return { ok: false, error: 'Недостаточно прав' };
+  const target = await prisma.user.findUnique({ where: { id: String(userId || '') }, select: { id: true, status: true } });
+  if (!target || target.status !== 'blocked') return { ok: false, error: 'Пользователь не заблокирован' };
+
+  await prisma.user.update({ where: { id: target.id }, data: { status: 'active', blockReason: '', blockedAt: null } });
+  // Возвращаем только то, что спрятала сама блокировка.
+  await prisma.lot.updateMany({
+    where: { ownerId: target.id, status: 'hidden', hiddenReason: 'Аккаунт заблокирован' },
+    data: { status: 'active', hiddenReason: '' },
+  });
+  await notify({
+    userId: target.id,
+    type: 'moderation',
+    title: 'Блокировка снята',
+    body: 'Ваши объявления снова в ленте.',
+    entityType: 'profile',
+    entityId: '',
   });
   return { ok: true };
 }

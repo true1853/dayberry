@@ -2,7 +2,8 @@
 import React from 'react';
 import { Icon } from './icons.jsx';
 import { fmt, Credit, Photo, Avatar, Stars, CatTag, AIBadge, IconBtn, Sheet, timeAgo, fmtDateTime } from './ui.jsx';
-import { trackLotViewAction } from './server/actions.js';
+import { trackLotViewAction, reportLotAction } from './server/actions.js';
+import { REPORT_REASONS } from './reports.js';
 
 const plural = (n, one, few, many) => {
   const m10 = n % 10;
@@ -56,6 +57,10 @@ export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, onOpenLot, onEd
   const [g, setG] = React.useState(0);
   const [views, setViews] = React.useState(null);
   const [shared, setShared] = React.useState('');
+  const [reportOpen, setReportOpen] = React.useState(false);
+  const [reportReason, setReportReason] = React.useState('forbidden');
+  const [reportText, setReportText] = React.useState('');
+  const [reportDone, setReportDone] = React.useState('');
 
   const share = async () => {
     const url = lotLink(lotId);
@@ -182,7 +187,69 @@ export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, onOpenLot, onEd
           <Icon name="shield" size={18} color="var(--ink-3)" style={{ flex: 'none' }} />
           <span className="cap" style={{ lineHeight: 1.5 }}>Договаривайтесь и платите только внутри Дайбери: доплата замораживается в эскроу и уходит партнёру после подтверждения обеими сторонами.</span>
         </div>
+
+        {!isMine && (
+          <button
+            className="row gap6"
+            onClick={() => { setReportDone(''); setReportOpen(true); }}
+            style={{ background: 'none', border: 'none', padding: '2px', cursor: 'pointer', alignSelf: 'flex-start', color: 'var(--ink-3)', fontFamily: 'var(--font)', fontSize: 13 }}
+          >
+            <Icon name="info" size={15} color="var(--ink-3)" />Пожаловаться на объявление
+          </button>
+        )}
       </div>
+
+      <Sheet open={reportOpen} onClose={() => setReportOpen(false)} title="Пожаловаться">
+        <div className="px col gap12" style={{ paddingBottom: 8 }}>
+          {reportDone ? (
+            <>
+              <span className="body">{reportDone}</span>
+              <button className="btn btn-primary btn-block btn-lg" onClick={() => setReportOpen(false)}>Понятно</button>
+            </>
+          ) : (
+            <>
+              <span className="sub" style={{ lineHeight: 1.5 }}>Мы посмотрим объявление. Если оно нарушает правила — скроем, а автору объясним причину.</span>
+              <div className="col gap6">
+                {REPORT_REASONS.map(r => (
+                  <button
+                    key={r.id}
+                    onClick={() => setReportReason(r.id)}
+                    className="row gap8"
+                    style={{
+                      padding: '11px 13px', borderRadius: 12, cursor: 'pointer', textAlign: 'left',
+                      border: '1.5px solid ' + (reportReason === r.id ? 'var(--berry)' : 'var(--line)'),
+                      background: reportReason === r.id ? 'var(--berry-50)' : '#fff',
+                      fontFamily: 'var(--font)', fontSize: 14.5, color: 'var(--ink)',
+                    }}
+                  >
+                    <Icon name={reportReason === r.id ? 'checkCircle' : 'info'} size={17} color={reportReason === r.id ? 'var(--berry)' : 'var(--ink-3)'} />
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+              <textarea
+                value={reportText}
+                onChange={e => setReportText(e.target.value)}
+                maxLength={600}
+                rows={3}
+                placeholder="Что именно не так — необязательно"
+                style={{ width: '100%', border: '1px solid var(--line)', borderRadius: 12, padding: '11px 13px', fontSize: 15, fontFamily: 'var(--font)', outline: 'none', background: 'var(--bg)', resize: 'vertical', lineHeight: 1.4 }}
+              />
+              <button
+                className="btn btn-primary btn-block btn-lg"
+                onClick={async () => {
+                  const res = await reportLotAction(lotId, reportReason, reportText);
+                  setReportText('');
+                  setReportDone(res?.ok
+                    ? (res.duplicate ? 'Вы уже жаловались на это объявление — мы помним.' : 'Спасибо, жалоба у нас. Посмотрим в ближайшее время.')
+                    : (res?.error || 'Не получилось отправить'));
+                }}
+              >Отправить жалобу</button>
+              <button className="btn btn-soft btn-block" onClick={() => setReportOpen(false)}>Отмена</button>
+            </>
+          )}
+        </div>
+      </Sheet>
 
       {shared && <div className="snack" role="status">{shared}</div>}
 

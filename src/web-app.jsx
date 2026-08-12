@@ -4,7 +4,7 @@ import { CITIES, REMOTE, VLADIMIR_REGION } from './cities.js';
 import { CAT, CAT_IDS, catOf, normalizeCat } from './data.js';
 import { Icon } from './icons.jsx';
 import { fmt, Logo, Credit, Photo, Avatar, Stars, CatTag, AIBadge } from './ui.jsx';
-import { EditProfileSheet, resizeImage, SettingsScreen, BroadcastScreen, DisputesScreen, ResetsScreen } from './screen-profile.jsx';
+import { EditProfileSheet, resizeImage, SettingsScreen, BroadcastScreen, DisputesScreen, ResetsScreen, ReportsScreen, RulesScreen } from './screen-profile.jsx';
 import { updateAvatarAction, broadcastInfoAction } from './server/actions.js';
 import { DealStatus } from './screen-deal.jsx';
 import { ChatThread } from './screen-chat.jsx';
@@ -737,6 +737,8 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
   const [broadcastOpen, setBroadcastOpen] = React.useState(false);
   const [disputesOpen, setDisputesOpen] = React.useState(false);
   const [resetsOpen, setResetsOpen] = React.useState(false);
+  const [reportsOpen, setReportsOpen] = React.useState(false);
+  const [rulesOpen, setRulesOpen] = React.useState(false);
   const [isAdmin, setIsAdmin] = React.useState(false);
   React.useEffect(() => {
     if (!authed) { setIsAdmin(false); return; }
@@ -755,6 +757,8 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
     setBroadcastOpen(false);
     setDisputesOpen(false);
     setResetsOpen(false);
+    setReportsOpen(false);
+    setRulesOpen(false);
   }, [view]);
   const dealOpen = selDeal ? deals.find(x => x.id === selDeal) || null : null;
 
@@ -787,7 +791,27 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
               onBroadcast={() => { setSettingsOpen(false); setBroadcastOpen(true); }}
               onDisputes={() => { setSettingsOpen(false); setDisputesOpen(true); }}
               onResets={() => { setSettingsOpen(false); setResetsOpen(true); }}
+              onReports={() => { setSettingsOpen(false); setReportsOpen(true); }}
+              onRules={() => { setSettingsOpen(false); setRulesOpen(true); }}
             />
+          </div>
+        </div>
+      )}
+
+      {rulesOpen && (
+        <div className="web-modal">
+          <div className="app">
+            <div className="safe-top" />
+            <RulesScreen onBack={() => setRulesOpen(false)} />
+          </div>
+        </div>
+      )}
+
+      {reportsOpen && (
+        <div className="web-modal">
+          <div className="app">
+            <div className="safe-top" />
+            <ReportsScreen onBack={() => setReportsOpen(false)} />
           </div>
         </div>
       )}

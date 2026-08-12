@@ -11,7 +11,7 @@ import { DealsList, ChatThread } from './screen-chat.jsx';
 import { Wallet, CreditsInfo } from './screen-wallet.jsx';
 import { Onboarding, CreateListing } from './screen-onboarding.jsx';
 import { AuthScreen } from './screen-auth.jsx';
-import { ProfileScreen, SettingsScreen, MyLotsScreen, BroadcastScreen, DisputesScreen, ResetsScreen } from './screen-profile.jsx';
+import { ProfileScreen, SettingsScreen, MyLotsScreen, BroadcastScreen, DisputesScreen, ResetsScreen, ReportsScreen, RulesScreen } from './screen-profile.jsx';
 import WebApp from './web-app.jsx';
 import { parseRoute, tabPath, screenPath, readPath } from './router.js';
 
@@ -357,7 +357,14 @@ export default function App() {
     // Цели Метрики: без них в отчётах видно только «ходили по страницам»,
     // а нам нужна воронка до реального обмена.
     trackGoal('auth');
-    try { await loadAuthedData(); } catch (e) { console.error('load after auth failed', e); }
+    // Ленту тоже перечитываем: до входа её отдавали как гостю — там лежат
+    // собственные объявления человека, которых в ленте быть не должно.
+    try {
+      await Promise.all([
+        loadAuthedData(),
+        bootstrapAction().then(b => { if (b) setLots(b.lots || []); }),
+      ]);
+    } catch (e) { console.error('load after auth failed', e); }
     loadMatches();
     const next = pendingActionRef.current;
     pendingActionRef.current = null;
@@ -746,6 +753,16 @@ export default function App() {
     if (top.name === 'chat') return (
       <ChatThread chatId={top.params.id} onRead={markChatRead} onBack={() => { back(); reloadChats(); }} onOpenDeal={() => { const c = chats.find(x => x.id === top.params.id); openDeal(c && c.deal ? c.deal.id : undefined); }} />
     );
+    if (top.name === 'rules') return (
+      <div className="app"><div className="safe-top" />
+        <RulesScreen onBack={back} />
+      </div>
+    );
+    if (top.name === 'reports') return (
+      <div className="app"><div className="safe-top" />
+        <ReportsScreen onBack={back} />
+      </div>
+    );
     if (top.name === 'resets') return (
       <div className="app"><div className="safe-top" />
         <ResetsScreen onBack={back} />
@@ -770,6 +787,8 @@ export default function App() {
           onBroadcast={() => go('broadcast')}
           onDisputes={() => go('disputes')}
           onResets={() => go('resets')}
+          onReports={() => go('reports')}
+          onRules={() => go('rules')}
           onLogout={handleLogout}
           onGoWallet={() => navigate(tabPath('wallet'))}
           onProfileSaved={(updated) => {

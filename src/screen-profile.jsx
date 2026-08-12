@@ -3,7 +3,7 @@ import React from 'react';
 import { Icon } from './icons.jsx';
 import { WISH_GROUPS, ALL_WISHES } from './wishes.js';
 import { Logo, Credit, AppBar, IconBtn, TabBar, Photo, Sheet, LotCard, PullToRefresh, timeAgo } from './ui.jsx';
-import { updateProfileAction, updateAvatarAction, changePasswordAction, updateSettingsAction, broadcastInfoAction, broadcastAction, listDisputesAction, resolveDisputeAction, listResetRequestsAction, issueTempPasswordAction, dismissResetRequestAction } from './server/actions.js';
+import { updateProfileAction, updateAvatarAction, changePasswordAction, updateSettingsAction, broadcastInfoAction, broadcastAction, listDisputesAction, resolveDisputeAction, listResetRequestsAction, issueTempPasswordAction, dismissResetRequestAction, listReportsAction, hideLotAction, unhideLotAction, dismissReportsAction, blockUserAction, unblockUserAction } from './server/actions.js';
 import { enablePush, disablePush, pushState } from './pwa.jsx';
 import { PhoneField, CityField } from './fields.jsx';
 
@@ -692,6 +692,204 @@ export function MyLotsScreen({ myLots = [], archivedLots = [], go, onEdit, onCre
   );
 }
 
+// Правила сервиса. Нужны не для галочки: на них ссылается модерация, когда
+// скрывает объявление, и жалоба, когда человек выбирает причину. Без этого
+// текста «нарушает правила» не значит ничего.
+const FORBIDDEN = [
+  'Алкоголь и табак, в том числе вейпы и жидкости',
+  'Наркотики, их прекурсоры и всё для употребления',
+  'Оружие, боеприпасы, взрывчатые и пиротехнические изделия',
+  'Лекарства и рецептурные препараты',
+  'Документы, паспорта, дипломы, банковские карты и SIM-карты',
+  'Интимные услуги и товары 18+',
+  'Экстремистские материалы и запрещённая литература',
+  'Краденое, а также вещи с чужими фотографиями из интернета',
+  'Живые люди и всё, что запрещено законом',
+];
+
+const RULES = [
+  ['swap', 'Обмен, а не продажа', 'Дайбери — про бартер. Баллы существуют, чтобы уравнять разницу, а не чтобы что-то «продать за баллы».'],
+  ['lock', 'Доплата — только через эскроу', 'Не переводите деньги на карту и не уходите в другие мессенджеры: за пределами сервиса вернуть баллы невозможно.'],
+  ['tag', 'Честное описание', 'Фотографируйте свою вещь, пишите реальное состояние. Чужие снимки из интернета — повод скрыть объявление.'],
+  ['chat', 'Уважение в переписке', 'Оскорбления, угрозы, спам и реклама других площадок запрещены.'],
+];
+
+export function RulesScreen({ onBack }) {
+  return (
+    <div className="app-scroll">
+      <AppBar title="Правила сервиса" sub="Коротко и по делу" left={<IconBtn name="back" onClick={onBack} />} />
+      <div className="px col gap16" style={{ paddingBottom: 34 }}>
+        <div className="col gap10">
+          {RULES.map(([icon, title, text]) => (
+            <div key={title} className="card row gap12" style={{ padding: 14, alignItems: 'flex-start' }}>
+              <div className="avatar" style={{ width: 38, height: 38, background: 'var(--berry-50)', flex: 'none' }}>
+                <Icon name={icon} size={18} color="var(--berry)" />
+              </div>
+              <div className="col gap3" style={{ minWidth: 0 }}>
+                <span className="title" style={{ fontSize: 14.5 }}>{title}</span>
+                <span className="sub" style={{ lineHeight: 1.5 }}>{text}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="col gap8">
+          <span className="over">Чем меняться нельзя</span>
+          <div className="card col gap8" style={{ padding: 14 }}>
+            {FORBIDDEN.map(item => (
+              <div key={item} className="row gap8" style={{ alignItems: 'flex-start' }}>
+                <Icon name="close" size={15} color="var(--warn)" style={{ flex: 'none', marginTop: 2 }} />
+                <span className="sub" style={{ lineHeight: 1.45 }}>{item}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="card col gap6" style={{ padding: 14, background: 'var(--berry-50)' }}>
+          <span className="title" style={{ fontSize: 14 }}>Что бывает за нарушение</span>
+          <span className="sub" style={{ lineHeight: 1.5, color: 'var(--berry-700)' }}>
+            Объявление скрывается из ленты — автору приходит уведомление с причиной, вещь остаётся в его архиве.
+            За повторные или грубые нарушения аккаунт блокируется: объявления уходят из ленты, новые размещать нельзя.
+            Вход и переписка сохраняются, чтобы можно было закрыть начатые сделки, а замороженные баллы уходят в спор.
+          </span>
+        </div>
+
+        <span className="cap" style={{ lineHeight: 1.5 }}>
+          Заметили нарушение — нажмите «Пожаловаться» в объявлении. Мы смотрим каждую жалобу.
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// Очередь жалоб. Несколько жалоб на одно объявление сведены в одну карточку:
+// решение принимается по объявлению, а не по каждой жалобе отдельно.
+export function ReportsScreen({ onBack }) {
+  const [state, setState] = React.useState(null);
+  const [busy, setBusy] = React.useState('');
+  const [note, setNote] = React.useState('');
+  const [confirmBlock, setConfirmBlock] = React.useState(null);
+  const [reason, setReason] = React.useState('');
+
+  const load = React.useCallback(() => {
+    listReportsAction().then(setState).catch(() => setState({ admin: false, items: [] }));
+  }, []);
+  React.useEffect(() => { load(); }, [load]);
+
+  const run = async (id, fn, okText) => {
+    setBusy(id);
+    setNote('');
+    try {
+      const res = await fn();
+      setNote(res?.ok ? okText : (res?.error || 'Не удалось'));
+      load();
+    } catch (e) {
+      console.error('moderation failed', e);
+      setNote('Не удалось — обновите страницу');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  if (state && !state.admin) {
+    return (
+      <div className="app-scroll">
+        <AppBar title="Жалобы" left={<IconBtn name="back" onClick={onBack} />} />
+        <div className="px"><span className="sub">Раздел доступен только администратору.</span></div>
+      </div>
+    );
+  }
+
+  const items = state ? state.items : [];
+  return (
+    <div className="app-scroll">
+      <AppBar title="Жалобы" sub={items.length ? `${items.length} ждут решения` : 'Модерация объявлений'} left={<IconBtn name="back" onClick={onBack} />} />
+      <div className="px col gap12" style={{ paddingBottom: 30 }}>
+        {note && <div className="card" style={{ padding: 12, background: 'var(--ok-soft)' }}><span className="sub" style={{ color: '#15663f' }}>{note}</span></div>}
+
+        {state && !items.length && (
+          <div className="card col gap8" style={{ padding: 24, alignItems: 'center', textAlign: 'center' }}>
+            <Icon name="checkCircle" size={28} color="var(--ok)" />
+            <span className="title" style={{ fontSize: 15 }}>Жалоб нет</span>
+            <span className="sub">Здесь появятся объявления, на которые пожаловались.</span>
+          </div>
+        )}
+
+        {items.map(it => (
+          <div key={it.lotId} className="card col gap10" style={{ padding: 14, border: '1px solid var(--warn-soft)' }}>
+            <div className="row gap12" style={{ alignItems: 'flex-start' }}>
+              <Photo label={it.title} url={it.photoUrl} cat={it.cat} style={{ width: 64, height: 64, borderRadius: 12, flex: 'none' }} />
+              <div className="col gap2 grow" style={{ minWidth: 0 }}>
+                <span className="title ellipsis">{it.title}</span>
+                <span className="cap ellipsis">{it.desc || 'без описания'}</span>
+                <span className="row gap6" style={{ alignItems: 'center' }}>
+                  <Credit n={it.value} size={13} coin={12} />
+                  <span className="cap">· {it.ownerName}{it.ownerBlocked ? ' · заблокирован' : ''}</span>
+                </span>
+              </div>
+            </div>
+
+            <div className="col gap6">
+              {it.reports.map(r => (
+                <div key={r.id} className="card" style={{ padding: 10, background: 'var(--warn-soft)' }}>
+                  <span className="sub" style={{ color: '#7a5410' }}>
+                    <b>{r.reason}</b>{r.text ? ` — ${r.text}` : ''} <span className="cap">· {r.author}, {timeAgo(r.at)}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="row gap8">
+              <button className="btn btn-soft grow" disabled={busy === it.lotId}
+                onClick={() => run(it.lotId, () => dismissReportsAction(it.lotId), 'Жалобы отклонены')}>Всё в порядке</button>
+              {it.lotStatus === 'hidden' ? (
+                <button className="btn btn-soft grow" disabled={busy === it.lotId}
+                  onClick={() => run(it.lotId, () => unhideLotAction(it.lotId), 'Объявление вернулось в ленту')}>Вернуть</button>
+              ) : (
+                <button className="btn btn-primary grow" disabled={busy === it.lotId}
+                  onClick={() => run(it.lotId, () => hideLotAction(it.lotId, it.reports[0]?.reason || ''), 'Объявление скрыто')}>Скрыть</button>
+              )}
+            </div>
+
+            {!it.ownerBlocked && (
+              <button className="btn btn-soft btn-block" style={{ color: 'var(--warn)' }} disabled={busy === it.lotId}
+                onClick={() => { setReason(''); setConfirmBlock(it); }}>
+                <Icon name="lock" size={17} color="var(--warn)" />Заблокировать автора
+              </button>
+            )}
+            {it.ownerBlocked && (
+              <button className="btn btn-soft btn-block" disabled={busy === it.lotId}
+                onClick={() => run(it.lotId, () => unblockUserAction(it.ownerId), 'Блокировка снята')}>Разблокировать автора</button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <Sheet open={!!confirmBlock} onClose={() => setConfirmBlock(null)} title="Заблокировать автора?">
+        <div className="px col gap12" style={{ paddingBottom: 8 }}>
+          <span className="body">
+            Объявления {confirmBlock ? confirmBlock.ownerName : ''} уйдут из ленты, новые размещать и открывать сделки он не сможет.
+            Вход и переписка останутся — чтобы закрыть начатое. Активные сделки уйдут в спор.
+          </span>
+          <textarea
+            value={reason}
+            onChange={e => setReason(e.target.value)}
+            maxLength={300}
+            rows={2}
+            placeholder="Причина — её увидит человек"
+            style={{ width: '100%', border: '1px solid var(--line)', borderRadius: 12, padding: '11px 13px', fontSize: 15, fontFamily: 'var(--font)', outline: 'none', background: 'var(--bg)', resize: 'vertical' }}
+          />
+          <button className="btn btn-block btn-lg" style={{ background: 'var(--warn)', color: '#fff' }}
+            onClick={() => { const it = confirmBlock; setConfirmBlock(null); run(it.lotId, () => blockUserAction(it.ownerId, reason), 'Автор заблокирован'); }}>
+            <Icon name="lock" size={19} color="#fff" />Заблокировать
+          </button>
+          <button className="btn btn-soft btn-block" onClick={() => setConfirmBlock(null)}>Отмена</button>
+        </div>
+      </Sheet>
+    </div>
+  );
+}
+
 // Заявки на сброс пароля. Пароль показывается один раз — в базе только хеш,
 // подсмотреть его потом нельзя, поэтому передать человеку нужно сразу.
 export function ResetsScreen({ onBack }) {
@@ -1011,7 +1209,7 @@ const bcFieldStyle = {
   color: 'var(--ink)',
 };
 
-export function SettingsScreen({ user, profile, onBack, onLogout, onProfileSaved, onGoWallet, onBroadcast, onDisputes, onResets }) {
+export function SettingsScreen({ user, profile, onBack, onLogout, onProfileSaved, onGoWallet, onBroadcast, onDisputes, onResets, onReports, onRules }) {
   const [isAdmin, setIsAdmin] = React.useState(false);
   React.useEffect(() => { broadcastInfoAction().then(r => setIsAdmin(!!r?.admin)).catch(() => {}); }, []);
   const [editing, setEditing] = React.useState(false);
@@ -1102,6 +1300,8 @@ export function SettingsScreen({ user, profile, onBack, onLogout, onProfileSaved
         <Divider />
         <SettingsRow icon="gift" label="Пригласить друга" sub={shareNote || 'Поделиться ссылкой на сервис'} onClick={shareInvite} />
         <Divider />
+        <SettingsRow icon="shield" label="Правила сервиса" sub="Что можно менять, а что нельзя" onClick={onRules} />
+        <Divider />
         <SettingsRow icon="info" label="О приложении" sub="Версия 1.0.0" onClick={() => setAboutOpen(true)} />
       </GroupCard>
 
@@ -1110,6 +1310,8 @@ export function SettingsScreen({ user, profile, onBack, onLogout, onProfileSaved
           <SectionHeader title="Администратору" />
           <GroupCard>
             <SettingsRow icon="send" label="Рассылка" sub="Уведомление всем пользователям" onClick={onBroadcast} />
+            <Divider />
+            <SettingsRow icon="info" label="Жалобы" sub="Модерация объявлений" onClick={onReports} />
             <Divider />
             <SettingsRow icon="shield" label="Споры" sub="Разбор сделок, где не сошлись" onClick={onDisputes} />
             <Divider />
