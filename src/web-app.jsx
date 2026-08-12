@@ -322,7 +322,7 @@ function Valuation({ L }) {
   );
 }
 
-function ReservationRail({ L, onOffer }) {
+function ReservationRail({ L, onOffer, isMine, onEdit }) {
   const [guests, setGuests] = React.useState(1);
   return (
     <div className="web-reserve">
@@ -337,19 +337,27 @@ function ReservationRail({ L, onOffer }) {
           <button onClick={() => setGuests(g => g + 1)} style={stepBtn}>+</button>
         </div>
       </div>
-      <div className="row gap6" style={{ margin: '12px 0' }}>
-        <Icon name="lock" size={15} color="var(--ok)" /><span style={{ fontSize: 13.5, color: 'var(--ink-2)' }}>Защищено эскроу — баллы заморозятся до подтверждения</span>
-      </div>
-      <button className="btn btn-primary btn-block btn-lg" onClick={() => onOffer(L)}>
-        <Icon name="swap" size={19} color="#fff" />Предложить обмен
-      </button>
+      {!isMine && (
+        <div className="row gap6" style={{ margin: '12px 0' }}>
+          <Icon name="lock" size={15} color="var(--ok)" /><span style={{ fontSize: 13.5, color: 'var(--ink-2)' }}>Защищено эскроу — баллы заморозятся до подтверждения</span>
+        </div>
+      )}
+      {isMine ? (
+        <button className="btn btn-soft btn-block btn-lg" onClick={() => onEdit && onEdit(L)}>
+          <Icon name="edit" size={19} color="var(--ink)" />Редактировать
+        </button>
+      ) : (
+        <button className="btn btn-primary btn-block btn-lg" onClick={() => onOffer(L)}>
+          <Icon name="swap" size={19} color="#fff" />Предложить обмен
+        </button>
+      )}
       <div className="web-reserve-row" style={{ marginTop: 14 }}><span>AI-оценка лота</span><b><Credit n={L.value} size={14} coin={13} /></b></div>
     </div>
   );
 }
 const stepBtn = { width: 30, height: 30, borderRadius: 999, border: '1px solid var(--line)', background: '#fff', color: 'var(--ink)', fontSize: 18, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 };
 
-function LotView({ L, onBack, onOffer, onOwnerChat }) {
+function LotView({ L, isMine = false, onBack, onOffer, onOwnerChat, onEdit }) {
   const owner = {
     name: L.ownerName || '',
     city: L.ownerCity || '',
@@ -416,12 +424,14 @@ function LotView({ L, onBack, onOffer, onOwnerChat }) {
               <span style={{ fontSize: 15, fontWeight: 600 }}>{owner.name}</span>
               <span className="row gap6"><Stars value={owner.rating} /><span className="cap">{owner.rating} · {owner.deals} сделок</span></span>
             </div>
-            <button className="btn btn-soft" style={{ padding: '11px 16px', fontSize: 14 }} onClick={() => onOwnerChat && onOwnerChat(L)}><Icon name="chat" size={17} color="var(--ink)" />Связаться</button>
+            {isMine
+              ? <span className="tag" style={{ background: 'var(--berry-50)', color: 'var(--berry)' }}>Ваше объявление</span>
+              : <button className="btn btn-soft" style={{ padding: '11px 16px', fontSize: 14 }} onClick={() => onOwnerChat && onOwnerChat(L)}><Icon name="chat" size={17} color="var(--ink)" />Связаться</button>}
           </div>
         </div>
 
         <div className="web-detail-rail">
-          <ReservationRail L={L} onOffer={onOffer} />
+          <ReservationRail L={L} onOffer={onOffer} isMine={isMine} onEdit={onEdit} />
         </div>
       </div>
     </>
@@ -489,7 +499,7 @@ function DealsView({ onBack, chats = [], deals = [], onOpenDeal, onOpenChat }) {
         <div className="card" style={{ overflow: 'hidden', maxWidth: 720, marginBottom: 16 }}>
           {toRate.map((d, i) => (
             <div key={d.id} className="row gap14" style={{ padding: '16px 20px', borderTop: i ? '1px solid var(--line-2)' : 'none', cursor: 'pointer', alignItems: 'center' }} onClick={() => onOpenDeal(d.id)}>
-              <div className="avatar" style={{ width: 44, height: 44, background: '#fff7e6', flex: 'none' }}><Icon name="star" size={20} color="#f5a623" /></div>
+              <Avatar user={d.partnerName} url={d.partnerAvatar} size={44} />
               <div className="grow col" style={{ gap: 3 }}>
                 <span style={{ fontSize: 15, fontWeight: 600 }}>Оцените {d.partnerName || 'партнёра'}</span>
                 <span className="sub ellipsis">Обмен «{(d.lot?.title || '').split(',')[0]}» завершён</span>
@@ -508,10 +518,10 @@ function DealsView({ onBack, chats = [], deals = [], onOpenDeal, onOpenChat }) {
             const pct = myConf || parConf ? 75 : d.stage === 'meet' ? 50 : 25;
             return (
               <div key={d.id} className="row gap14" style={{ padding: '16px 20px', borderTop: i ? '1px solid var(--line-2)' : 'none', cursor: 'pointer', alignItems: 'center' }} onClick={() => onOpenDeal(d.id)}>
-                <div className="avatar" style={{ width: 44, height: 44, background: 'var(--berry-50)', flex: 'none' }}><Icon name="lock" size={20} color="var(--berry)" /></div>
+                <Avatar user={d.partnerName} url={d.partnerAvatar} size={44} />
                 <div className="grow col" style={{ gap: 3 }}>
                   <div className="row" style={{ justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: 15, fontWeight: 600 }}>Активная сделка · эскроу</span>
+                    <span style={{ fontSize: 15, fontWeight: 600 }}>{d.partnerName || 'Партнёр'} · эскроу</span>
                     <span className="cap">{fmt(d.credits)} Б в эскроу</span>
                   </div>
                   <span className="sub ellipsis">{d.role === 'partner' ? `Вы отдаёте «${(L.title || '').split(',')[0]}»` : `${(L.title || '').split(',')[0]} ↔ ваши вещи`}</span>
@@ -533,7 +543,7 @@ function DealsView({ onBack, chats = [], deals = [], onOpenDeal, onOpenChat }) {
             const credits = c.deal && c.deal.credits > 0 ? ` · ${c.deal.credits} Б` : '';
             return (
               <div key={c.id} className="row gap14" style={{ padding: '16px 20px', borderTop: i ? '1px solid var(--line-2)' : 'none', cursor: 'pointer' }} onClick={() => onOpenChat(c.id)}>
-                <Avatar user="them" url={c.partner.avatar} size={48} />
+                <Avatar user={c.partner?.name} url={c.partner?.avatar} size={48} />
                 <div className="grow col" style={{ gap: 2 }}>
                   <div className="row" style={{ justifyContent: 'space-between' }}>
                     <span style={{ fontSize: 15, fontWeight: 600 }}>{c.partner.name}</span>
@@ -665,7 +675,12 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
   const [selChat, setSelChat] = React.useState(null);
   const [selChain, setSelChain] = React.useState(null);
   const avatar = (profile && profile.avatar) || (user && user.avatar) || '';
-  const selected = selLot ? lots.find(l => l.id === selLot) || null : null;
+  // Лента чужая — своих лотов в ней нет. Открытие карточки из профиля
+  // искало только в ленте и отдавало пустой экран.
+  const selected = selLot
+    ? (lots.find(l => l.id === selLot) || (myLots || []).find(l => l.id === selLot) || null)
+    : null;
+  const selectedIsMine = !!selected && (myLots || []).some(l => l.id === selected.id);
 
   const favIds = React.useMemo(() => new Set((favorites || []).map(f => f.id)), [favorites]);
 
@@ -678,7 +693,9 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
       <div className="web-body">
         {view === 'home' && <HomeView lots={lots} lotsLoading={lotsLoading} myLots={myLots} matches={matches} query={query} setQuery={setQuery} cat={cat} setCat={setCat} city={city} setCity={setCity} onOpen={(id) => { setSelLot(id); setView('lot'); }} onChains={() => setView('chains')} favIds={favIds} onToggleFav={onToggleFav} />}
         {view === 'favorites' && <FavoritesView lots={favorites} onBack={goHome} onOpen={(id) => { setSelLot(id); setView('lot'); }} onToggleFav={onToggleFav} />}
-        {view === 'lot' && selected && <LotView L={selected} onBack={goHome} onOffer={onOffer} onOwnerChat={onOwnerChat} />}
+        {view === 'lot' && (selected
+          ? <LotView L={selected} isMine={selectedIsMine} onBack={goHome} onOffer={onOffer} onOwnerChat={onOwnerChat} onEdit={onEditLot} />
+          : <div className="web-container web-section"><div className="web-empty"><Icon name="tag" size={36} color="var(--ink-3)" /><span>Объявление не найдено — возможно, оно снято с публикации</span><button className="btn btn-soft" onClick={goHome}>На главную</button></div></div>)}
         {view === 'chains' && <ChainsView onBack={goHome} chains={chains} chainProps={chainProps} onOpenChain={(id) => setSelChain(id)} />}
         {view === 'deals' && <DealsView onBack={goHome} chats={chats} deals={deals} onOpenDeal={(id) => setSelDeal(id)} onOpenChat={(id) => setSelChat(id)} />}
         {view === 'profile' && <ProfileView user={user} profile={profile} myLots={myLots} onOpenLot={(id) => { setSelLot(id); setView('lot'); }} onLogout={onLogout} onProfileSaved={onProfileSaved} onWallet={goHome} onEditLot={onEditLot} />}

@@ -39,7 +39,7 @@ export function DealStatus({ deal, onBack, onConfirm, onCancel, onChat, onDone, 
   if (!deal) return null;
   const L = deal.lot || {};
   const { credits, stage, role } = deal;
-  const owner = { name: deal.ownerName || '' };
+  const owner = { name: deal.partnerName || deal.ownerName || '', avatar: deal.partnerAvatar || '' };
   const [confirming, setConfirming] = React.useState(false);
   const [cancelling, setCancelling] = React.useState(false);
 
@@ -104,7 +104,7 @@ export function DealStatus({ deal, onBack, onConfirm, onCancel, onChat, onDone, 
         </div>
 
         <div className="row gap12 card" style={{ padding: 12, alignItems: 'center' }} onClick={onChat}>
-          <Avatar user={owner.name} size={42} />
+          <Avatar user={owner.name} url={owner.avatar} size={42} />
           <div className="col grow" style={{ gap: 2 }}><span className="title">{owner.name}</span><span className="cap">обычно отвечает за 5 минут</span></div>
           <button className="btn btn-ghost" style={{ padding: '10px 14px' }}><Icon name="chat" size={18} color="var(--berry)" />Чат</button>
         </div>

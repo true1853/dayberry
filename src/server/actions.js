@@ -583,11 +583,11 @@ class DealClosed extends Error {}
 
 function dealWith() {
   return {
-    lot: { include: { owner: { select: { id: true, name: true, city: true } }, lotPhotos: { orderBy: { order: 'asc' } } } },
+    lot: { include: { owner: { select: { id: true, name: true, city: true, avatar: true } }, lotPhotos: { orderBy: { order: 'asc' } } } },
     myLot: { include: { lotPhotos: { orderBy: { order: 'asc' } } } },
     // достаточно авторов, чтобы понять, оценил ли текущий пользователь обмен
     reviews: { select: { authorId: true } },
-    user: { select: { name: true } },
+    user: { select: { name: true, avatar: true } },
   };
 }
 
@@ -607,6 +607,7 @@ async function serializeDeal(d, currentUserId) {
     partnerConfirmed: d.partnerConfirmed,
     // кого оцениваем и оценивали ли уже — экран завершения решает по этим полям
     partnerName: (d.userId === currentUserId ? d.lot?.owner?.name : d.user?.name) || 'партнёр',
+    partnerAvatar: (d.userId === currentUserId ? d.lot?.owner?.avatar : d.user?.avatar) || '',
     reviewed: (d.reviews || []).some(r => r.authorId === currentUserId),
   };
 }

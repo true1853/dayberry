@@ -22,6 +22,25 @@ function fmtDate(iso) {
   return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
 }
 
+// Аватар участника с маленьким значком статуса в углу: на экране сделок
+// раньше стояли только абстрактные иконки, и было не видно, с кем обмен.
+function PartyAvatar({ name, url, size = 46, badge, badgeColor = 'var(--berry)', badgeBg = '#fff' }) {
+  return (
+    <div style={{ position: 'relative', flex: 'none', width: size, height: size }}>
+      <Avatar user={name} url={url} size={size} />
+      {badge && (
+        <span style={{
+          position: 'absolute', right: -2, bottom: -2, width: 20, height: 20, borderRadius: 999,
+          background: badgeBg, border: '2px solid var(--card, #fff)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <Icon name={badge} size={11} color={badgeColor} />
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function DealsList({ chats = [], deals = [], onOpen, onOpenDeal }) {
   const activeDeals = deals.filter(d => d.status === 'active' && d.stage !== 'done');
   // Тот, кто подтвердил получение первым, экран завершения не увидит:
@@ -41,9 +60,9 @@ export function DealsList({ chats = [], deals = [], onOpen, onOpenDeal }) {
           return (
             <div key={d.id} className="card" style={{ padding: 14, cursor: 'pointer', border: '1px solid var(--berry-100)' }} onClick={() => onOpenDeal(d.id)}>
               <div className="row gap10">
-                <div className="avatar" style={{ width: 42, height: 42, background: 'var(--berry-50)' }}><Icon name="lock" size={20} color="var(--berry)" /></div>
+                <PartyAvatar name={d.partnerName} url={d.partnerAvatar} size={46} badge="lock" badgeBg="var(--berry-50)" />
                 <div className="col grow" style={{ gap: 2 }}>
-                  <span className="title">Активная сделка · эскроу</span>
+                  <span className="title ellipsis">{d.partnerName || 'Партнёр'}</span>
                   <span className="sub ellipsis">{d.role === 'partner' ? `Вы отдаёте «${L.title.split(',')[0]}»` : `${L.title.split(',')[0]} ↔ ваши вещи`} — {fmt(d.credits)} Б в эскроу</span>
                 </div>
                 {myConf ? <span className="tag" style={{ background: 'var(--ok-soft)', color: 'var(--ok)', flex: 'none', alignSelf: 'center' }}>ждём партнёра</span> : parConf ? <span className="tag" style={{ background: 'var(--berry-50)', color: 'var(--berry)', flex: 'none', alignSelf: 'center' }}>подтвердите</span> : null}
@@ -60,7 +79,7 @@ export function DealsList({ chats = [], deals = [], onOpen, onOpenDeal }) {
             {toRate.map(d => (
               <div key={d.id} className="card" style={{ padding: 14, cursor: 'pointer', border: '1px solid var(--line)' }} onClick={() => onOpenDeal(d.id)}>
                 <div className="row gap10" style={{ alignItems: 'center' }}>
-                  <div className="avatar" style={{ width: 42, height: 42, background: '#fff7e6' }}><Icon name="star" size={20} color="#f5a623" /></div>
+                  <PartyAvatar name={d.partnerName} url={d.partnerAvatar} size={46} badge="star" badgeColor="#f5a623" badgeBg="#fff7e6" />
                   <div className="col grow" style={{ gap: 2 }}>
                     <span className="title">Оцените {d.partnerName || 'партнёра'}</span>
                     <span className="sub ellipsis">Обмен «{(d.lot?.title || '').split(',')[0]}» завершён</span>
@@ -73,13 +92,22 @@ export function DealsList({ chats = [], deals = [], onOpen, onOpenDeal }) {
         )}
 
         <span className="over" style={{ padding: '6px 2px 0' }}>Переписки</span>
+        {!chats.length && (
+          <div className="card col gap8" style={{ padding: 22, alignItems: 'center', textAlign: 'center' }}>
+            <Icon name="chat" size={28} color="var(--ink-3)" />
+            <span className="sub">Переписок пока нет — предложите обмен на любом объявлении</span>
+          </div>
+        )}
+        {chats.length > 0 && (
         <div className="card" style={{ overflow: 'hidden' }}>
           {chats.map((c, i) => {
             const last = c.messages && c.messages[c.messages.length - 1];
             const st = c.deal ? (STAGE_LABEL[c.deal.stage] || { t: 'Сделка', c: 'var(--ink-2)' }) : null;
             return (
               <div key={c.id} className="row gap12" style={{ padding: '13px 14px', cursor: 'pointer', borderTop: i ? '1px solid var(--line)' : 'none', alignItems: 'center' }} onClick={() => onOpen(c.id)}>
-                <Avatar user={c.partner?.name} size={48} />
+                {c.kind === 'chain'
+                  ? <div className="avatar" style={{ width: 48, height: 48, flex: 'none', background: 'var(--berry-50)' }}><Icon name="chain" size={22} color="var(--berry)" /></div>
+                  : <Avatar user={c.partner?.name} url={c.partner?.avatar} size={48} />}
                 <div className="col grow" style={{ gap: 3, minWidth: 0 }}>
                   <div className="row" style={{ justifyContent: 'space-between' }}>
                     <span className="title ellipsis">{c.partner?.name}</span>
@@ -92,6 +120,7 @@ export function DealsList({ chats = [], deals = [], onOpen, onOpenDeal }) {
             );
           })}
         </div>
+        )}
       </div>
     </div>
   );
