@@ -111,7 +111,10 @@ function WebFooter() {
         ))}
       </div>
       <div className="web-legal">
-        <span>© 2026 Дайбери, Inc. · Условия · Конфиденциальность</span>
+        <span className="row gap6" style={{ flexWrap: 'wrap' }}>
+          © 2026 ООО «ПРИЗМАТИКА» · Условия · Конфиденциальность · разработано в студии{' '}
+          <a href="https://prismatica.agency/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--berry)', fontWeight: 600 }}>ПРИЗМАТИКА</a>
+        </span>
         <div className="web-legal-right">
           <span>🌐 Русский (RU)</span>
           <span>₽ RUB</span>

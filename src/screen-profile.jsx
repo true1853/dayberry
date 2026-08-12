@@ -389,11 +389,17 @@ export function AboutSheet({ open, onClose }) {
           Меняйтесь вещами и услугами без денег. Внутренние баллы (1 Б = 1 ₽) защищают сделку: доплата
           уходит в эскроу и размораживается после подтверждения получения.
         </p>
-        <div className="row gap8">
-          <div className="chip chip-berry" onClick={() => {}}><Icon name="shield" size={14} color="var(--berry)" />Правила сервиса</div>
-          <div className="chip chip-berry" onClick={() => {}}><Icon name="chat" size={14} color="var(--berry)" />Поддержка</div>
+        <div className="divider" />
+        <div className="col gap4" style={{ alignItems: 'center', textAlign: 'center' }}>
+          <span className="cap">Разработано в студии</span>
+          <a
+            href="https://prismatica.agency/"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: 'var(--berry)', fontWeight: 700, fontSize: 15, textDecoration: 'none' }}
+          >ПРИЗМАТИКА</a>
+          <span className="cap" style={{ color: 'var(--ink-3)' }}>ООО «ПРИЗМАТИКА» · dayberry.ru</span>
         </div>
-        <span className="cap" style={{ textAlign: 'center', color: 'var(--ink-3)' }}>dayberry.ru</span>
       </div>
     </Sheet>
   );
