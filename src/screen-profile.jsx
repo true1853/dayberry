@@ -3,7 +3,7 @@ import React from 'react';
 import { Icon } from './icons.jsx';
 import { WISH_GROUPS, ALL_WISHES } from './wishes.js';
 import { Logo, Credit, AppBar, IconBtn, TabBar, Photo, Sheet, LotCard } from './ui.jsx';
-import { updateProfileAction, updateAvatarAction, changePasswordAction, updateSettingsAction } from './server/actions.js';
+import { updateProfileAction, updateAvatarAction, changePasswordAction, updateSettingsAction, broadcastInfoAction, broadcastAction } from './server/actions.js';
 import { PhoneField, CityField } from './fields.jsx';
 
 function StatBox({ value, label }) {
@@ -121,7 +121,7 @@ export function WishPicker({ open, onClose, value, onChange }) {
           value={q}
           onChange={e => setQ(e.target.value)}
           placeholder="Поиск или свой вариант"
-          style={fieldStyle}
+          style={bcFieldStyle}
         />
 
         {canAddCustom && (
@@ -287,7 +287,7 @@ export function EditProfileSheet({ user, open, onClose, onSaved }) {
         </div>
         <div className="col gap6">
           <label className="cap">Имя</label>
-          <input value={name} onChange={e => setName(e.target.value)} placeholder="Как вас зовут?" style={fieldStyle} />
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="Как вас зовут?" style={bcFieldStyle} />
         </div>
         <CityField value={city} onChange={setCity} />
         <PhoneField value={phone} onChange={setPhone} />
@@ -685,7 +685,149 @@ export function MyLotsScreen({ myLots = [], archivedLots = [], go, onEdit, onCre
   );
 }
 
-export function SettingsScreen({ user, profile, onBack, onLogout, onProfileSaved, onGoWallet }) {
+// Экран рассылки: доступен только аккаунтам из ADMIN_EMAILS, и проверяет
+// это сервер — интерфейс лишь не показывает лишнего. Отправка необратима,
+// поэтому между кнопкой и рассылкой стоит подтверждение с числом людей.
+export function BroadcastScreen({ onBack }) {
+  const [info, setInfo] = React.useState(null);
+  const [title, setTitle] = React.useState('');
+  const [body, setBody] = React.useState('');
+  const [audience, setAudience] = React.useState('all');
+  const [confirm, setConfirm] = React.useState(false);
+  const [sending, setSending] = React.useState(false);
+  const [result, setResult] = React.useState('');
+
+  React.useEffect(() => {
+    broadcastInfoAction().then(setInfo).catch(() => setInfo({ admin: false }));
+  }, []);
+
+  const count = info ? (audience === 'with_lots' ? info.withLots : info.all) : 0;
+
+  const send = async () => {
+    setConfirm(false);
+    setSending(true);
+    setResult('');
+    try {
+      const res = await broadcastAction({ title, body, audience });
+      if (!res.ok) { setResult(res.error || 'Не удалось отправить'); return; }
+      setResult('Отправлено: ' + res.sent);
+      setTitle('');
+      setBody('');
+    } catch (e) {
+      console.error('broadcast failed', e);
+      setResult('Не удалось отправить — попробуйте ещё раз');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  if (info && !info.admin) {
+    return (
+      <div className="app-scroll">
+        <AppBar title="Рассылка" left={<IconBtn name="back" onClick={onBack} />} />
+        <div className="px"><span className="sub">Раздел доступен только администратору.</span></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="app-scroll">
+      <AppBar title="Рассылка" sub="Уведомление всем пользователям" left={<IconBtn name="back" onClick={onBack} />} />
+      <div className="px col gap14" style={{ paddingBottom: 30 }}>
+        <div className="card col gap12" style={{ padding: 14 }}>
+          <div className="col gap6">
+            <span className="cap">Заголовок</span>
+            <input
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              maxLength={120}
+              placeholder="Что нового в Дайбери"
+              style={bcFieldStyle}
+            />
+          </div>
+          <div className="col gap6">
+            <span className="cap">Текст</span>
+            <textarea
+              value={body}
+              onChange={e => setBody(e.target.value)}
+              maxLength={400}
+              rows={4}
+              placeholder="Коротко: что изменилось и зачем это людям"
+              style={{ ...bcFieldStyle, resize: 'vertical', lineHeight: 1.45 }}
+            />
+            <span className="cap" style={{ textAlign: 'right' }}>{body.length} / 400</span>
+          </div>
+          <div className="col gap6">
+            <span className="cap">Кому</span>
+            <div className="row gap8">
+              {[['all', 'Всем'], ['with_lots', 'С объявлениями']].map(([id, label]) => (
+                <button
+                  key={id}
+                  onClick={() => setAudience(id)}
+                  className={'chip chip-berry' + (audience === id ? ' is-on' : '')}
+                  style={{ border: 'none', cursor: 'pointer', fontFamily: 'var(--font)' }}
+                >{label}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="card col gap8" style={{ padding: 14, background: 'var(--berry-50)' }}>
+          <span className="cap">Так это увидят в колокольчике</span>
+          <div className="row gap12" style={{ alignItems: 'flex-start' }}>
+            <div className="avatar" style={{ width: 36, height: 36, background: '#fff', flex: 'none' }}><Icon name="bell" size={18} color="var(--berry)" /></div>
+            <div className="col gap3" style={{ minWidth: 0 }}>
+              <span className="title" style={{ fontSize: 14 }}>{title || 'Заголовок'}</span>
+              {body && <span className="sub" style={{ lineHeight: 1.45 }}>{body}</span>}
+              <span className="cap">только что</span>
+            </div>
+          </div>
+        </div>
+
+        <button
+          className="btn btn-primary btn-block btn-lg"
+          disabled={!title.trim() || sending || !info}
+          onClick={() => setConfirm(true)}
+          style={{ opacity: !title.trim() || sending || !info ? 0.5 : 1 }}
+        >
+          <Icon name="send" size={19} color="#fff" />{sending ? 'Отправляем…' : 'Отправить · ' + count}
+        </button>
+        {result && <span className="sub" style={{ textAlign: 'center' }}>{result}</span>}
+        <span className="cap" style={{ lineHeight: 1.5 }}>
+          Уведомление придёт в колокольчик внутри приложения. Отозвать его нельзя, поэтому перечитайте текст перед отправкой.
+        </span>
+      </div>
+
+      <Sheet open={confirm} onClose={() => setConfirm(false)} title="Отправить всем?">
+        <div className="px col gap12" style={{ paddingBottom: 10 }}>
+          <span className="body">Уведомление получат <b>{count}</b> человек. Отменить отправку будет нельзя.</span>
+          <div className="card" style={{ padding: 12 }}>
+            <span className="title" style={{ fontSize: 14 }}>{title}</span>
+            {body && <span className="sub" style={{ display: 'block', marginTop: 4, lineHeight: 1.45 }}>{body}</span>}
+          </div>
+          <button className="btn btn-primary btn-block btn-lg" onClick={send}><Icon name="send" size={19} color="#fff" />Отправить</button>
+          <button className="btn btn-soft btn-block" onClick={() => setConfirm(false)}>Ещё подумаю</button>
+        </div>
+      </Sheet>
+    </div>
+  );
+}
+
+const bcFieldStyle = {
+  width: '100%',
+  border: '1px solid var(--line)',
+  borderRadius: 12,
+  padding: '11px 13px',
+  fontSize: 15,
+  fontFamily: 'var(--font)',
+  outline: 'none',
+  background: 'var(--bg)',
+  color: 'var(--ink)',
+};
+
+export function SettingsScreen({ user, profile, onBack, onLogout, onProfileSaved, onGoWallet, onBroadcast }) {
+  const [isAdmin, setIsAdmin] = React.useState(false);
+  React.useEffect(() => { broadcastInfoAction().then(r => setIsAdmin(!!r?.admin)).catch(() => {}); }, []);
   const [editing, setEditing] = React.useState(false);
   const [passwordOpen, setPasswordOpen] = React.useState(false);
   const [aboutOpen, setAboutOpen] = React.useState(false);
@@ -749,6 +891,15 @@ export function SettingsScreen({ user, profile, onBack, onLogout, onProfileSaved
         <Divider />
         <SettingsRow icon="info" label="О приложении" sub="Версия 1.0.0" onClick={() => setAboutOpen(true)} />
       </GroupCard>
+
+      {isAdmin && (
+        <>
+          <SectionHeader title="Администратору" />
+          <GroupCard>
+            <SettingsRow icon="send" label="Рассылка" sub="Уведомление всем пользователям" onClick={onBroadcast} />
+          </GroupCard>
+        </>
+      )}
 
       <SectionHeader title="" />
       <GroupCard>

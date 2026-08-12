@@ -14,6 +14,8 @@ services:
       # обязателен: приложение не стартует с пустым или дефолтным секретом.
       # сгенерировать: openssl rand -hex 32
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET is required}
+      # кому доступен экран рассылки: список email через запятую
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
       AI_API_KEY: ${AI_API_KEY:-}
       AI_BASE_URL: ${AI_BASE_URL:-https://routerai.ru/api/v1}
       AI_MODEL: ${AI_MODEL:-qwen/qwen3-vl-30b-a3b-instruct}

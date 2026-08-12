@@ -11,7 +11,7 @@ import { DealsList, ChatThread } from './screen-chat.jsx';
 import { Wallet, CreditsInfo } from './screen-wallet.jsx';
 import { Onboarding, CreateListing } from './screen-onboarding.jsx';
 import { AuthScreen } from './screen-auth.jsx';
-import { ProfileScreen, SettingsScreen, MyLotsScreen } from './screen-profile.jsx';
+import { ProfileScreen, SettingsScreen, MyLotsScreen, BroadcastScreen } from './screen-profile.jsx';
 import WebApp from './web-app.jsx';
 import { parseRoute, tabPath, screenPath, readPath } from './router.js';
 
@@ -706,12 +706,18 @@ export default function App() {
     if (top.name === 'chat') return (
       <ChatThread chatId={top.params.id} onRead={markChatRead} onBack={() => { back(); reloadChats(); }} onOpenDeal={() => { const c = chats.find(x => x.id === top.params.id); openDeal(c && c.deal ? c.deal.id : undefined); }} />
     );
+    if (top.name === 'broadcast') return (
+      <div className="app"><div className="safe-top" />
+        <BroadcastScreen onBack={back} />
+      </div>
+    );
     if (top.name === 'settings') return (
       <div className="app"><div className="safe-top" />
         <SettingsScreen
           user={currentUser}
           profile={profile}
           onBack={back}
+          onBroadcast={() => go('broadcast')}
           onLogout={handleLogout}
           onGoWallet={() => navigate(tabPath('wallet'))}
           onProfileSaved={(updated) => {

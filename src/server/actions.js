@@ -1741,6 +1741,68 @@ async function completeChain(chain) {
 
 const NOTIFICATIONS_LIMIT = 50;
 
+// ---------- рассылка ----------
+//
+// Список админов — в переменной окружения, а не в базе и не в коде: чтобы
+// выдать или отобрать доступ, не нужен ни деплой, ни правка данных.
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '')
+  .split(',')
+  .map(s => s.trim().toLowerCase())
+  .filter(Boolean);
+
+const isAdmin = (user) => !!user && ADMIN_EMAILS.includes((user.email || '').toLowerCase());
+
+const BROADCAST_MAX_TITLE = 120;
+const BROADCAST_MAX_BODY = 400;
+// Рассылка уходит всем живым людям: пять штук в час — это уже много.
+const BROADCAST_RATE = { max: 5, windowMs: 60 * 60 * 1000 };
+
+async function audienceIds(audience) {
+  const where = audience === 'with_lots'
+    ? { lots: { some: { status: { in: ['active', 'in_chain'] } } } }
+    : {};
+  const rows = await prisma.user.findMany({ where, select: { id: true } });
+  return rows.map(r => r.id);
+}
+
+// Экран рассылки спрашивает это при открытии: и права, и размер аудитории.
+export async function broadcastInfoAction() {
+  const user = await getCurrentUser();
+  if (!isAdmin(user)) return { admin: false };
+  const [all, withLots] = await Promise.all([
+    prisma.user.count(),
+    prisma.user.count({ where: { lots: { some: { status: { in: ['active', 'in_chain'] } } } } }),
+  ]);
+  return { admin: true, all, withLots };
+}
+
+export async function broadcastAction(input) {
+  const user = await getCurrentUser();
+  // Проверка на сервере, а не в интерфейсе: спрятанная кнопка защитой не является.
+  if (!isAdmin(user)) return { ok: false, error: 'Недостаточно прав' };
+
+  const title = String(input?.title || '').trim().slice(0, BROADCAST_MAX_TITLE);
+  const body = String(input?.body || '').trim().slice(0, BROADCAST_MAX_BODY);
+  if (!title) return { ok: false, error: 'Нужен заголовок' };
+
+  const gate = rateLimit.hit(`broadcast:${user.id}`, BROADCAST_RATE);
+  if (!gate.ok) return { ok: false, error: 'Слишком часто — попробуйте позже' };
+
+  const ids = await audienceIds(input?.audience);
+  if (!ids.length) return { ok: false, error: 'Некому отправлять' };
+
+  const sent = await notify(ids.map(userId => ({
+    userId,
+    type: 'system',
+    title,
+    body,
+    entityType: '',
+    entityId: '',
+  })));
+  console.log(`[broadcast] ${user.email} → ${sent} получателей: ${title}`);
+  return { ok: true, sent };
+}
+
 export async function listNotificationsAction() {
   const user = await getCurrentUser();
   return notificationsOf(user);
