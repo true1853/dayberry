@@ -575,10 +575,19 @@ export default function App() {
   if (!onboarded) {
     return (
       <div className="app-root">
-        <Onboarding onDone={() => {
-          setOnboarded(true);
-          try { window.localStorage.setItem(ONBOARDED_KEY, '1'); } catch {}
-        }} />
+        <Onboarding
+          initialWants={(currentUser && currentUser.wants) || ''}
+          onDone={(wants) => {
+            setOnboarded(true);
+            if (typeof wants === 'string') {
+              setCurrentUser(u => (u ? { ...u, wants } : u));
+              setProfile(p => (p ? { ...p, wants } : p));
+              // вишлист — основной вход мэтчинга, пересчитываем сразу
+              loadMatches();
+            }
+            try { window.localStorage.setItem(ONBOARDED_KEY, '1'); } catch {}
+          }}
+        />
       </div>
     );
   }

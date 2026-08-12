@@ -31,8 +31,14 @@ function AIValuation({ L }) {
   );
 }
 
-export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, lots, fav = false, onToggleFav }) {
-  const L = (lots || []).find(l => l.id === lotId) || null;
+export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, lots, myLots = [], fav = false, onToggleFav }) {
+  // Лента не содержит собственных объявлений (listLots исключает свои), поэтому
+  // при открытии своего лота из «Моих объявлений» карточка не находилась и
+  // экран оставался пустым. Ищем в обоих списках.
+  const L = (lots || []).find(l => l.id === lotId)
+    || (myLots || []).find(l => l.id === lotId)
+    || null;
+  const isMine = !!L && (myLots || []).some(l => l.id === L.id);
   const [g, setG] = React.useState(0);
   const [views, setViews] = React.useState(null);
 
@@ -116,8 +122,14 @@ export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, lots, fav = fal
       </div>
 
       <div style={{ position: 'sticky', bottom: 0, padding: '12px 18px calc(12px + env(safe-area-inset-bottom, 0px) + 28px)', background: 'linear-gradient(to top, var(--bg) 72%, transparent)', display: 'flex', gap: 10 }}>
-        <button className="btn btn-soft" style={{ flex: 'none', padding: '14px 16px' }} onClick={onOwnerChat}><Icon name="chat" size={20} color="var(--ink)" /></button>
-        <button className="btn btn-primary grow btn-lg" onClick={() => onOffer(L)}><Icon name="swap" size={20} color="#fff" />Предложить обмен</button>
+        {isMine ? (
+          <button className="btn btn-soft btn-block btn-lg" onClick={onBack}>Это ваше объявление</button>
+        ) : (
+          <>
+            <button className="btn btn-soft" style={{ flex: 'none', padding: '14px 16px' }} onClick={onOwnerChat}><Icon name="chat" size={20} color="var(--ink)" /></button>
+            <button className="btn btn-primary grow btn-lg" onClick={() => onOffer(L)}><Icon name="swap" size={20} color="#fff" />Предложить обмен</button>
+          </>
+        )}
       </div>
     </div>
   );

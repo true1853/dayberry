@@ -240,6 +240,18 @@ export async function updateProfileAction(input) {
   return { ok: true, user: serializeUser(updated) };
 }
 
+// Отдельный экшен под вишлист: updateProfileAction требует имя и переписывает
+// город, био и телефон — в онбординге этих полей нет, и затирать их нельзя.
+export async function updateProfileWantsAction(wants) {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: 'Требуется вход' };
+  const updated = await prisma.user.update({
+    where: { id: user.id },
+    data: { wants: String(wants || '').trim().slice(0, 300) },
+  });
+  return { ok: true, user: serializeUser(updated) };
+}
+
 export async function changePasswordAction(input) {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: 'Требуется вход' };

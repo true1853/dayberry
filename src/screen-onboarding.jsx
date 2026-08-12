@@ -2,8 +2,9 @@
 import React from 'react';
 import { Icon } from './icons.jsx';
 import { Logo, fmt, Photo, IconBtn, Coin } from './ui.jsx';
-import { analyzeListingAction } from './server/actions.js';
+import { analyzeListingAction, updateProfileWantsAction } from './server/actions.js';
 import { CAT, CAT_IDS, normalizeCat } from './data.js';
+import { WishList, parseWishes, joinWishes } from './screen-profile.jsx';
 
 const SLIDES = [
   {
@@ -57,37 +58,125 @@ function OnboardArt({ kind }) {
   );
 }
 
-export function Onboarding({ onDone }) {
+// Подсказки под каждую категорию: вишлист заполняли двое из семи, потому что
+// пустое поле в профиле никто не ищет. Здесь достаточно потыкать в чипы.
+const WISH_SUGGESTIONS = [
+  'Ноутбук', 'Смартфон', 'Наушники', 'Пылесос',
+  'Велосипед', 'Лыжи', 'Детские товары', 'Коляска',
+  'Мебель', 'Матрас', 'Одежда', 'Книги',
+  'Шины', 'Запчасти', 'Клининг', 'Ремонт', 'Перевозка', 'Услуги дизайна',
+];
+
+// Шаг вишлиста в конце онбординга. Без него мэтчинг падает на перекрёстный
+// спрос, который заметно слабее: алгоритму просто нечего сопоставлять.
+function WishStep({ value, onChange, onSubmit, onSkip, saving }) {
+  const chosen = parseWishes(value);
+  const has = (w) => chosen.some(x => x.toLowerCase() === w.toLowerCase());
+  const toggle = (w) => onChange(joinWishes(has(w) ? chosen.filter(x => x.toLowerCase() !== w.toLowerCase()) : [...chosen, w]));
+
+  return (
+    <>
+      <div className="grow col app-scroll" style={{ padding: '0 26px', gap: 18 }}>
+        <div className="col gap10 fade-in" style={{ paddingTop: 10 }}>
+          <span className="tag" style={{ alignSelf: 'flex-start', background: 'var(--berry-50)', color: 'var(--berry)' }}>Последний шаг</span>
+          <span className="h1" style={{ fontSize: 28, lineHeight: 1.15 }}>Что вы хотите получить?</span>
+          <span className="body" style={{ color: 'var(--ink-2)', fontSize: 15.5, lineHeight: 1.5 }}>
+            По этому списку подбираются обмены. Отметьте хотя бы пару пунктов — или впишите своё.
+          </span>
+        </div>
+
+        <div className="row gap6" style={{ flexWrap: 'wrap' }}>
+          {WISH_SUGGESTIONS.map(w => (
+            <button
+              key={w}
+              onClick={() => toggle(w)}
+              aria-pressed={has(w)}
+              className="chip"
+              style={{
+                padding: '8px 14px', fontSize: 13.5,
+                background: has(w) ? 'var(--berry)' : 'var(--card)',
+                color: has(w) ? '#fff' : 'var(--ink-2)',
+                borderColor: has(w) ? 'var(--berry)' : 'var(--line)',
+              }}
+            >
+              {has(w) && <Icon name="check" size={13} color="#fff" />}{w}
+            </button>
+          ))}
+        </div>
+
+        <div className="col gap6">
+          <span className="cap">Своё</span>
+          <WishList value={value} onChange={onChange} editable />
+        </div>
+      </div>
+
+      <div className="col gap10" style={{ padding: '12px 26px calc(24px + env(safe-area-inset-bottom))' }}>
+        <button className="btn btn-primary btn-block btn-lg" onClick={onSubmit} disabled={saving}>
+          {saving ? 'Сохраняем…' : chosen.length ? `Готово · ${chosen.length}` : 'Начать обмен'}
+          <Icon name="arrowR" size={20} color="#fff" />
+        </button>
+        <button className="cap" style={{ border: 'none', background: 'none', color: 'var(--ink-3)', cursor: 'pointer', padding: 6 }} onClick={onSkip}>
+          Заполню позже
+        </button>
+      </div>
+    </>
+  );
+}
+
+export function Onboarding({ onDone, initialWants = '' }) {
   const [i, setI] = React.useState(0);
+  const [wants, setWants] = React.useState(initialWants || '');
+  const [saving, setSaving] = React.useState(false);
+  const wishStep = i === SLIDES.length;   // шаг вишлиста идёт после слайдов
   const last = i === SLIDES.length - 1;
-  const s = SLIDES[i];
+  const s = SLIDES[Math.min(i, SLIDES.length - 1)];
+
+  const finish = async () => {
+    const list = parseWishes(wants);
+    if (!list.length) return onDone();
+    setSaving(true);
+    try {
+      await updateProfileWantsAction(joinWishes(list));
+    } catch (e) {
+      console.error('wants save failed', e);
+    }
+    setSaving(false);
+    onDone(joinWishes(list));
+  };
+
   return (
     <div className="app" style={{ position: 'absolute', background: 'var(--bg)' }}>
       <div className="safe-top" />
       <div className="row" style={{ justifyContent: 'space-between', padding: '4px 18px 0' }}>
         <span className="row gap8"><Logo size={26} /><span className="h3">Дайбери</span></span>
-        <button className="cap" style={{ border: 'none', background: 'none', color: 'var(--ink-3)', cursor: 'pointer' }} onClick={onDone}>Пропустить</button>
+        <button className="cap" style={{ border: 'none', background: 'none', color: 'var(--ink-3)', cursor: 'pointer' }} onClick={() => onDone()}>Пропустить</button>
       </div>
 
-      <div className="grow col" style={{ justifyContent: 'center', padding: '0 26px', gap: 30 }}>
-        <div className="card" style={{ padding: '36px 18px', minHeight: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }} key={i}>
-          <div className="fade-in"><OnboardArt kind={s.art} /></div>
-        </div>
-        <div className="col gap12 fade-in" key={'t' + i}>
-          <span className="tag" style={{ alignSelf: 'flex-start', background: 'var(--berry-50)', color: 'var(--berry)' }}>{s.badge}</span>
-          <span className="h1" style={{ fontSize: 30, whiteSpace: 'pre-line', lineHeight: 1.12 }}>{s.title}</span>
-          <span className="body" style={{ color: 'var(--ink-2)', fontSize: 16, lineHeight: 1.5 }}>{s.body}</span>
-        </div>
-      </div>
+      {wishStep ? (
+        <WishStep value={wants} onChange={setWants} onSubmit={finish} onSkip={() => onDone()} saving={saving} />
+      ) : (
+        <>
+          <div className="grow col" style={{ justifyContent: 'center', padding: '0 26px', gap: 30 }}>
+            <div className="card" style={{ padding: '36px 18px', minHeight: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }} key={i}>
+              <div className="fade-in"><OnboardArt kind={s.art} /></div>
+            </div>
+            <div className="col gap12 fade-in" key={'t' + i}>
+              <span className="tag" style={{ alignSelf: 'flex-start', background: 'var(--berry-50)', color: 'var(--berry)' }}>{s.badge}</span>
+              <span className="h1" style={{ fontSize: 30, whiteSpace: 'pre-line', lineHeight: 1.12 }}>{s.title}</span>
+              <span className="body" style={{ color: 'var(--ink-2)', fontSize: 16, lineHeight: 1.5 }}>{s.body}</span>
+            </div>
+          </div>
 
-      <div className="col gap16" style={{ padding: '0 26px calc(28px + env(safe-area-inset-bottom))' }}>
-        <div className="row gap6" style={{ justifyContent: 'center' }}>
-          {SLIDES.map((_, k) => <span key={k} style={{ width: k === i ? 22 : 7, height: 7, borderRadius: 999, background: k === i ? 'var(--berry)' : 'var(--line)', transition: 'all .25s' }} />)}
-        </div>
-        <button className="btn btn-primary btn-block btn-lg" onClick={() => last ? onDone() : setI(i + 1)}>
-          {last ? 'Начать обмен' : 'Дальше'}<Icon name="arrowR" size={20} color="#fff" />
-        </button>
-      </div>
+          <div className="col gap16" style={{ padding: '0 26px calc(28px + env(safe-area-inset-bottom))' }}>
+            <div className="row gap6" style={{ justifyContent: 'center' }}>
+              {[...SLIDES, null].map((_, k) => <span key={k} style={{ width: k === i ? 22 : 7, height: 7, borderRadius: 999, background: k === i ? 'var(--berry)' : 'var(--line)', transition: 'all .25s' }} />)}
+            </div>
+            <button className="btn btn-primary btn-block btn-lg" onClick={() => setI(i + 1)}>
+              {last ? 'Почти всё' : 'Дальше'}<Icon name="arrowR" size={20} color="#fff" />
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
