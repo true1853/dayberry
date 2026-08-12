@@ -64,25 +64,19 @@ function MatchStrip({ onOpen, onChains, matches = [], lots = [], myLots = [] }) 
 // ===========================================================
 // VARIANT A — LIST / FEED
 // ===========================================================
-export function FeedList({ cat, onOpen, onChains, hints = true, limit, lots = [], matches = [], myLots = [], myLot = null, loading = false, favIds, onToggleFav, city = '' }) {
+export function FeedList({ cat, onOpen, onChains, hints = true, limit, lots = [], matches = [], myLots = [], myLot = null, loading = false, favIds, onToggleFav }) {
+  // Порядок — дата размещения, его задаёт сервер. Клиент только фильтрует:
+  // любая пересортировка здесь означала бы, что свежее объявление уезжает
+  // вниз по причине, которую человеку неоткуда узнать.
   let items = lots.filter(l => cat === 'all' || normalizeCat(l.cat) === cat);
-  // «Рядом с вами» должно быть правдой: свой город наверх, порядок внутри
-  // групп сохраняем — сортировку ленты задаёт сервер.
-  if (city) {
-    const near = items.filter(l => l.ownerCity === city);
-    if (near.length && near.length < items.length) {
-      items = [...near, ...items.filter(l => l.ownerCity !== city)];
-    }
-  }
   if (limit) items = items.slice(0, limit);
-  const nearCount = city ? items.filter(l => l.ownerCity === city).length : 0;
   return (
     <div className="col gap16" style={{ paddingBottom: 20 }}>
       {hints && matches.length > 0 && <MatchStrip matches={matches} lots={lots} myLots={myLots} onOpen={onOpen} onChains={onChains} />}
       <div className="px col gap10">
         <div className="row" style={{ justifyContent: 'space-between' }}>
-          <span className="h3">{city && nearCount ? 'Рядом с вами' : 'Свежие объявления'}</span>
-          {city ? <span className="cap row gap4"><Icon name="map" size={14} color="var(--ink-3)" />{city}</span> : null}
+          <span className="h3">Свежие объявления</span>
+          <span className="cap">сначала новые</span>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           {loading && !items.length

@@ -192,21 +192,17 @@ function WebLotSkeleton() {
   );
 }
 
-function HomeView({ lots, lotsLoading = false, myLots = [], matches = [], query, setQuery, cat, setCat, city, setCity, myCity = '', onOpen, onChains, favIds, onToggleFav }) {
+function HomeView({ lots, lotsLoading = false, myLots = [], matches = [], query, setQuery, cat, setCat, city, setCity, onOpen, onChains, favIds, onToggleFav }) {
   const [cityOpen, setCityOpen] = React.useState(false);
   const q = (query || '').toLowerCase();
-  const found = lots.filter(l => {
+  const items = lots.filter(l => {
     const matchesCat = cat === 'all' || normalizeCat(l.cat) === cat;
     const matchesQ = !q || l.title.toLowerCase().includes(q);
     const lc = (l.city || '').toLowerCase();
     const matchesCity = city === 'all' || (city === REMOTE ? lc === REMOTE : (lc === city.toLowerCase() || lc === REMOTE || !lc));
     return matchesCat && matchesQ && matchesCity;
   });
-  // Свой город наверх — «обмены рядом» должны быть рядом на самом деле.
-  const near = myCity ? found.filter(l => l.ownerCity === myCity) : [];
-  const items = near.length && near.length < found.length
-    ? [...near, ...found.filter(l => l.ownerCity !== myCity)]
-    : found;
+
   const cityLabel = city === 'all' ? 'Везде' : (city === REMOTE ? 'Удалённо' : city);
   return (
     <>
@@ -260,7 +256,7 @@ function HomeView({ lots, lotsLoading = false, myLots = [], matches = [], query,
 
       <div className="web-container web-section">
         <div className="web-head">
-          <h2>{q ? `Результаты по «${query}»` : cat === 'all' ? (myCity && items.some(l => l.ownerCity === myCity) ? `Обмены в городе ${myCity}` : 'Свежие объявления') : CATS.find(c => c[0] === cat)?.[1]}</h2>
+          <h2>{q ? `Результаты по «${query}»` : cat === 'all' ? (city === 'all' ? 'Свежие объявления' : `Обмены · ${cityLabel}`) : CATS.find(c => c[0] === cat)?.[1]}</h2>
           <a href="#" onClick={e => e.preventDefault()}>Все объявления →</a>
         </div>
         {lotsLoading && !items.length ? (
@@ -759,7 +755,7 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
     <div className="web">
       <WebNav view={view} setView={setView} user={user} avatar={avatar} query={query} setQuery={setQuery} onLogout={onLogout} onCreate={onCreate} authed={authed} onAuthRequired={onAuthRequired} chatUnread={chatUnread} isAdmin={isAdmin} onSettings={() => setSettingsOpen(true)} onBroadcast={() => setBroadcastOpen(true)} />
       <div className="web-body">
-        {view === 'home' && <HomeView lots={lots} lotsLoading={lotsLoading} myLots={myLots} myCity={(profile && profile.city) || (user && user.city) || ''} matches={matches} query={query} setQuery={setQuery} cat={cat} setCat={setCat} city={city} setCity={setCity} onOpen={(id) => { setSelLot(id); setView('lot'); }} onChains={() => setView('chains')} favIds={favIds} onToggleFav={onToggleFav} />}
+        {view === 'home' && <HomeView lots={lots} lotsLoading={lotsLoading} myLots={myLots} matches={matches} query={query} setQuery={setQuery} cat={cat} setCat={setCat} city={city} setCity={setCity} onOpen={(id) => { setSelLot(id); setView('lot'); }} onChains={() => setView('chains')} favIds={favIds} onToggleFav={onToggleFav} />}
         {view === 'favorites' && <FavoritesView lots={favorites} onBack={goHome} onOpen={(id) => { setSelLot(id); setView('lot'); }} onToggleFav={onToggleFav} />}
         {view === 'lot' && (selected
           ? <LotView L={selected} isMine={selectedIsMine} lots={lots} onBack={goHome} onOffer={onOffer} onOwnerChat={onOwnerChat} onEdit={onEditLot} onOpenLot={(id) => { setSelLot(id); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />

@@ -332,7 +332,10 @@ async function lotsFeed(user) {
   const lots = await prisma.lot.findMany({
     where,
     include: { owner: { select: { city: true, name: true, avatar: true, rating: true, reviewsCount: true, dealsCount: true } }, lotPhotos: { orderBy: { order: 'asc' } } },
-    orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
+    // Порядок ленты — дата размещения, свежие сверху. Раньше первым ключом
+    // шёл sortOrder «ручного закрепления», но его никто никогда не выставлял:
+    // у всех лотов там ноль, и ключ только запутывал.
+    orderBy: { createdAt: 'desc' },
   });
   return lots.map(l => mapLot(l, l.owner?.city || ''));
 }
@@ -1931,7 +1934,7 @@ export async function getMatchesAction() {
       wants: true, value: true, views: true, hot: true,
       owner: { select: { name: true } },
     },
-    orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
+    orderBy: { createdAt: 'desc' },
   });
   const myLots = user ? lots.filter(l => l.ownerId === user.id) : [];
   const others = lots.filter(l => !user || l.ownerId !== user.id);

@@ -104,6 +104,8 @@ model Lot {
   hot             Boolean    @default(false)
   posted          String     @default("только что")
   status          String     @default("active")
+  // не используется: задумывался как ручное закрепление, но выставлять его
+  // некому. Колонку оставляем, чтобы db push не сносил данные на старте.
   sortOrder       Int        @default(0)
   createdAt       DateTime   @default(now())
   lotPhotos       LotPhoto[]
@@ -115,10 +117,9 @@ model Lot {
   @@index([status])
   @@index([ownerId])
   @@index([createdAt])
-  @@index([sortOrder])
   @@index([cat])
-  // основной запрос ленты: where status + order by sortOrder, createdAt
-  @@index([status, sortOrder, createdAt])
+  // основной запрос ленты: where status + order by createdAt
+  @@index([status, createdAt])
   @@index([ownerId, status])
 }
 
