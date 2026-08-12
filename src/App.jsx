@@ -606,7 +606,7 @@ export default function App() {
     if (!top) return null;
     if (top.name === 'lot') return (
       <div className="app"><div className="safe-top" />
-        <LotDetail lots={lots} myLots={myLots} lotId={top.params.lotId} fav={favIds.has(top.params.lotId)} onToggleFav={() => toggleFav(lots.find(x => x.id === top.params.lotId))} onBack={back} onOffer={(L) => requireAuth('Предложить обмен можно после регистрации', () => setOfferLot(L))} onOwnerChat={() => handleOwnerChat(lots.find(x => x.id === top.params.lotId))} />
+        <LotDetail lots={lots} myLots={myLots} lotId={top.params.lotId} onOpenLot={(id) => go('lot', { lotId: id })} onEdit={(L) => setEditingLot(L)} fav={favIds.has(top.params.lotId)} onToggleFav={() => toggleFav(lots.find(x => x.id === top.params.lotId))} onBack={back} onOffer={(L) => requireAuth('Предложить обмен можно после регистрации', () => setOfferLot(L))} onOwnerChat={() => handleOwnerChat(lots.find(x => x.id === top.params.lotId))} />
       </div>
     );
     if (top.name === 'chainfeed') return (

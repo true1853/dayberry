@@ -261,6 +261,10 @@
 .web-detail-photos .ph img { width: 100%; height: 100%; display: block; }
 .web-detail-photos .ph:first-child { grid-row: 1 / span 2; height: 100%; }
 .web-detail-photos .ph:nth-child(2), .web-detail-photos .ph:nth-child(3) { height: 205px; }
+/* Фотографий может быть одна или две — сетка под три оставляла пустые рамки. */
+.web-detail-photos.is-1 { grid-template-columns: 1fr; }
+.web-detail-photos.is-2 { grid-template-columns: 1fr 1fr; }
+.web-detail-photos.is-2 .ph:nth-child(2) { grid-row: 1 / span 2; height: 100%; }
 .web-detail-main {
   max-width: 1120px; margin: 0 auto; padding: 32px 32px 64px;
   display: grid; grid-template-columns: 1fr 380px; gap: 48px; align-items: start;

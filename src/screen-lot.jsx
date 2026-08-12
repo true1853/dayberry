@@ -4,6 +4,14 @@ import { Icon } from './icons.jsx';
 import { fmt, Credit, Photo, Avatar, Stars, CatTag, AIBadge, IconBtn, Sheet, timeAgo, fmtDateTime } from './ui.jsx';
 import { trackLotViewAction } from './server/actions.js';
 
+const plural = (n, one, few, many) => {
+  const m10 = n % 10;
+  const m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few;
+  return many;
+};
+
 function AIValuation({ L }) {
   const pct = Math.max(6, Math.min(94, ((L.value - L.aiLow) / (L.aiHigh - L.aiLow)) * 100));
   const isAi = L.valuationSource === 'ai';
@@ -31,7 +39,13 @@ function AIValuation({ L }) {
   );
 }
 
-export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, lots, myLots = [], fav = false, onToggleFav }) {
+// Ссылка на объявление — тот же адрес, по которому его открывает роутер.
+function lotLink(lotId) {
+  if (typeof window === 'undefined') return '';
+  return `${window.location.origin}${window.location.pathname}#/lot/${encodeURIComponent(lotId)}`;
+}
+
+export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, onOpenLot, onEdit, lots, myLots = [], fav = false, onToggleFav }) {
   // Лента не содержит собственных объявлений (listLots исключает свои), поэтому
   // при открытии своего лота из «Моих объявлений» карточка не находилась и
   // экран оставался пустым. Ищем в обоих списках.
@@ -41,6 +55,20 @@ export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, lots, myLots = 
   const isMine = !!L && (myLots || []).some(l => l.id === L.id);
   const [g, setG] = React.useState(0);
   const [views, setViews] = React.useState(null);
+  const [shared, setShared] = React.useState('');
+
+  const share = async () => {
+    const url = lotLink(lotId);
+    const title = L ? L.title : 'Объявление';
+    try {
+      if (navigator.share) { await navigator.share({ title, url }); return; }
+      await navigator.clipboard.writeText(url);
+      setShared('Ссылка скопирована');
+      setTimeout(() => setShared(''), 2000);
+    } catch (e) {
+      // отмена шаринга — не ошибка, показывать нечего
+    }
+  };
 
   // Просмотр засчитывается один раз на открытие карточки; свои лоты сервер
   // не считает, чтобы автор не накручивал себе счётчик.
@@ -55,6 +83,12 @@ export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, lots, myLots = 
   if (!L) return null;
   const urls = (L.photoUrls || []).filter(Boolean);
   const shownUrl = urls[Math.min(g, Math.max(0, urls.length - 1))] || L.photoUrl;
+  // «Хочу взамен» автор пишет одной строкой через запятую — показываем чипами,
+  // так видно сразу, подходит ли то, что есть у вас.
+  const wants = (L.wants || '').split(/[,;]/).map(w => w.trim()).filter(Boolean).slice(0, 12);
+  const ownerLots = (lots || [])
+    .filter(x => x.ownerId && x.ownerId === L.ownerId && x.id !== L.id)
+    .slice(0, 8);
   const owner = {
     name: L.ownerName || '',
     city: L.ownerCity || '',
@@ -75,7 +109,7 @@ export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, lots, myLots = 
           <div className="grow" />
           <div className="row gap8">
             <IconBtn name="heart" fill={fav ? 'currentColor' : 'none'} onClick={onToggleFav} />
-            <IconBtn name="send" />
+            <IconBtn name="send" onClick={share} />
           </div>
         </div>
         {urls.length > 1 && (
@@ -90,7 +124,7 @@ export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, lots, myLots = 
         )}
       </div>
 
-      <div className="px col gap16" style={{ paddingTop: 16, paddingBottom: 30 }}>
+      <div className="px col gap16" style={{ paddingTop: 16, paddingBottom: 20 }}>
         <div className="col gap8">
           <div className="row gap6"><CatTag cat={L.cat} /><span className="tag" style={{ background: 'var(--line-2)', color: 'var(--ink-2)' }}>{L.condition}</span>{L.hot && <span className="tag" style={{ background: 'var(--berry-50)', color: 'var(--berry)' }}><Icon name="flame" size={12} color="var(--berry)" />Хит</span>}</div>
           <span className="h2">{L.title}</span>
@@ -101,12 +135,18 @@ export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, lots, myLots = 
 
         <div className="card" style={{ padding: 14 }}>
           <div className="row gap8" style={{ marginBottom: 8 }}><Icon name="swap" size={18} color="var(--berry)" /><span className="title">Готов(а) обменять на</span></div>
-          <span className="body">{L.wants}</span>
+          {wants.length ? (
+            <div className="row gap6" style={{ flexWrap: 'wrap' }}>
+              {wants.map(w => <span key={w} className="tag" style={{ background: 'var(--berry-50)', color: 'var(--berry-700)' }}>{w}</span>)}
+            </div>
+          ) : (
+            <span className="sub">Автор не указал — предложите свой вариант в чате.</span>
+          )}
         </div>
 
         <div className="col gap6">
           <span className="over">Описание</span>
-          <span className="body" style={{ color: 'var(--ink-2)' }}>{L.desc}</span>
+          <span className="body" style={{ color: 'var(--ink-2)', whiteSpace: 'pre-wrap' }}>{L.desc || 'Описания нет — спросите детали у автора.'}</span>
         </div>
 
         <div className="card" style={{ padding: 14 }} onClick={onOwnerChat}>
@@ -115,15 +155,42 @@ export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, lots, myLots = 
             <div className="grow col" style={{ gap: 3 }}>
               <span className="title">{owner.name}</span>
               <span className="row gap6"><Stars value={owner.rating} count={owner.reviews} />{owner.reviews > 0 && <span className="cap">{owner.rating.toFixed(1)} · {owner.deals} сделок</span>}</span>
+              <span className="cap">{owner.city}{ownerLots.length ? ` · ещё ${ownerLots.length} ${plural(ownerLots.length, 'объявление', 'объявления', 'объявлений')}` : ''}</span>
             </div>
             <Icon name="chevR" size={20} color="var(--ink-3)" />
           </div>
         </div>
+
+        {ownerLots.length > 0 && (
+          <div className="col gap8">
+            <span className="over">Другие объявления автора</span>
+            <div className="row gap10" style={{ overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
+              {ownerLots.map(x => (
+                <div key={x.id} className="card" style={{ flex: 'none', width: 132, overflow: 'hidden', cursor: 'pointer' }} onClick={() => onOpenLot && onOpenLot(x.id)}>
+                  <Photo label={x.photo} url={x.photoUrl} cat={x.cat} style={{ width: '100%', aspectRatio: '1/1' }} />
+                  <div className="col gap4" style={{ padding: '8px 9px 10px' }}>
+                    <span className="cap ellipsis">{x.title}</span>
+                    <Credit n={x.value} size={13} coin={12} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="row gap10" style={{ padding: '0 2px' }}>
+          <Icon name="shield" size={18} color="var(--ink-3)" style={{ flex: 'none' }} />
+          <span className="cap" style={{ lineHeight: 1.5 }}>Договаривайтесь и платите только внутри Дайбери: доплата замораживается в эскроу и уходит партнёру после подтверждения обеими сторонами.</span>
+        </div>
       </div>
+
+      {shared && <div className="snack" role="status">{shared}</div>}
 
       <div style={{ position: 'sticky', bottom: 0, padding: '12px 18px calc(12px + env(safe-area-inset-bottom, 0px) + 28px)', background: 'linear-gradient(to top, var(--bg) 72%, transparent)', display: 'flex', gap: 10 }}>
         {isMine ? (
-          <button className="btn btn-soft btn-block btn-lg" onClick={onBack}>Это ваше объявление</button>
+          <button className="btn btn-soft btn-block btn-lg" onClick={() => (onEdit ? onEdit(L) : onBack())}>
+            <Icon name="edit" size={20} color="var(--ink)" />Редактировать объявление
+          </button>
         ) : (
           <>
             <button className="btn btn-soft" style={{ flex: 'none', padding: '14px 16px' }} onClick={onOwnerChat}><Icon name="chat" size={20} color="var(--ink)" /></button>

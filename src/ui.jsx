@@ -193,7 +193,11 @@ export function Stars({ value, size = 12, count, showValue = false }) {
   }
   return (
     <span className="row gap4">
-      <span className="stars">{[0,1,2,3,4].map(i => <Icon key={i} name="star" size={size} color={i < Math.round(value) ? '#F5A623' : 'var(--line)'} />)}</span>
+      {/* закрашенные звёзды, а не контуры: четвёрка контуров читалась как ноль */}
+      <span className="stars">{[0,1,2,3,4].map(i => {
+        const on = i < Math.round(value);
+        return <Icon key={i} name="star" size={size} color={on ? '#F5A623' : 'var(--line)'} fill={on ? 'currentColor' : 'none'} />;
+      })}</span>
       {showValue && value > 0 && (
         <span className="cap" style={{ fontSize: size }}>
           {value.toFixed(1)}{count ? ` · ${count}` : ''}

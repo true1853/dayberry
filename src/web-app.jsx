@@ -333,21 +333,15 @@ function Valuation({ L }) {
   );
 }
 
-function ReservationRail({ L, onOffer, isMine, onEdit }) {
-  const [guests, setGuests] = React.useState(1);
+function ReservationRail({ L, onOffer, isMine, onEdit, onShare }) {
   return (
     <div className="web-reserve">
       <div className="web-reserve-price"><b>Обмен</b><span>· {L.condition}</span></div>
       <div className="web-reserve-dates">
         <div className="web-reserve-date" style={{ flex: 1 }}><b>Срок</b><span>по договорённости</span></div>
       </div>
-      <div className="web-reserve-row"><span>Участники</span>
-        <div className="row gap8">
-          <button onClick={() => setGuests(g => Math.max(1, g - 1))} style={stepBtn}>−</button>
-          <b>{guests}</b>
-          <button onClick={() => setGuests(g => g + 1)} style={stepBtn}>+</button>
-        </div>
-      </div>
+      <div className="web-reserve-row"><span>Категория</span><b>{catOf(L.cat).label}</b></div>
+      <div className="web-reserve-row"><span>Город</span><b>{L.ownerCity || '—'}</b></div>
       {!isMine && (
         <div className="row gap6" style={{ margin: '12px 0' }}>
           <Icon name="lock" size={15} color="var(--ok)" /><span style={{ fontSize: 13.5, color: 'var(--ink-2)' }}>Защищено эскроу — баллы заморозятся до подтверждения</span>
@@ -362,13 +356,28 @@ function ReservationRail({ L, onOffer, isMine, onEdit }) {
           <Icon name="swap" size={19} color="#fff" />Предложить обмен
         </button>
       )}
-      <div className="web-reserve-row" style={{ marginTop: 14 }}><span>AI-оценка лота</span><b><Credit n={L.value} size={14} coin={13} /></b></div>
+      <button className="btn btn-ghost btn-block" style={{ marginTop: 10 }} onClick={onShare}>
+        <Icon name="send" size={17} color="var(--ink-2)" />Поделиться
+      </button>
+      <div className="web-reserve-row" style={{ marginTop: 14 }}><span>{L.valuationSource === 'ai' ? 'AI-оценка лота' : 'Оценка автора'}</span><b><Credit n={L.value} size={14} coin={13} /></b></div>
     </div>
   );
 }
-const stepBtn = { width: 30, height: 30, borderRadius: 999, border: '1px solid var(--line)', background: '#fff', color: 'var(--ink)', fontSize: 18, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 };
 
-function LotView({ L, isMine = false, onBack, onOffer, onOwnerChat, onEdit }) {
+function LotView({ L, isMine = false, lots = [], onBack, onOffer, onOwnerChat, onEdit, onOpenLot }) {
+  const [shared, setShared] = React.useState('');
+  const share = async () => {
+    const url = `${window.location.origin}${window.location.pathname}#/lot/${encodeURIComponent(L.id)}`;
+    try {
+      if (navigator.share) { await navigator.share({ title: L.title, url }); return; }
+      await navigator.clipboard.writeText(url);
+      setShared('Ссылка скопирована');
+      setTimeout(() => setShared(''), 2000);
+    } catch (e) {
+      // отмена шаринга — не ошибка
+    }
+  };
+  const ownerLots = (lots || []).filter(x => x.ownerId && x.ownerId === L.ownerId && x.id !== L.id).slice(0, 4);
   const owner = {
     name: L.ownerName || '',
     city: L.ownerCity || '',
@@ -377,14 +386,11 @@ function LotView({ L, isMine = false, onBack, onOffer, onOwnerChat, onEdit }) {
     reviews: L.ownerReviews ?? 0,
     deals: L.ownerDeals ?? 0,
   };
-  const amenities = [
-    ['Смартфон', 'Apple Watch, iPhone, Samsung'],
-    ['Ноутбуки', 'MacBook, Lenovo, Dell'],
-    ['Услуги', 'Лендинги, фото, таргет, ремонт'],
-    ['Хобби', 'Велосипед, настолки, книги'],
-  ];
+  const wants = (L.wants || '').split(/[,;]/).map(w => w.trim()).filter(Boolean).slice(0, 12);
   const urls = (L.photoUrls || []).filter(Boolean);
-  const webPhotos = Array.from({ length: 3 }, (_, i) => (urls[i] !== undefined ? urls[i] : (urls[0] || L.photoUrl)));
+  // Раньше рамок всегда было три, и одна фотография размножалась в три копии —
+  // выглядело как галерея, которой нет. Показываем ровно то, что загрузили.
+  const webPhotos = urls.length ? urls.slice(0, 3) : (L.photoUrl ? [L.photoUrl] : []);
   return (
     <>
       <div className="web-detail-hero">
@@ -399,7 +405,7 @@ function LotView({ L, isMine = false, onBack, onOffer, onOwnerChat, onEdit }) {
         </div>
       </div>
 
-      <div className="web-detail-photos">
+      <div className={`web-detail-photos${webPhotos.length < 3 ? ` is-${webPhotos.length}` : ''}`}>
         {webPhotos.map((u, i) => (
           <div key={i} className="ph"><Photo label={L.photo} url={u} cat={L.cat} full fit="contain" style={{ position: 'absolute', inset: 0 }} /></div>
         ))}
@@ -411,20 +417,30 @@ function LotView({ L, isMine = false, onBack, onOffer, onOwnerChat, onEdit }) {
 
           <div className="card">
             <div className="row gap8" style={{ marginBottom: 12 }}><Icon name="swap" size={19} color="var(--berry)" /><span style={{ fontSize: 16, fontWeight: 600 }}>Готов(а) обменять на</span></div>
-            <span className="body">{L.wants}</span>
+            {wants.length ? (
+              <div className="row gap6" style={{ flexWrap: 'wrap' }}>
+                {wants.map(w => <span key={w} className="tag" style={{ background: 'var(--berry-50)', color: 'var(--berry-700)' }}>{w}</span>)}
+              </div>
+            ) : (
+              <span className="sub">Автор не указал — предложите свой вариант в чате.</span>
+            )}
           </div>
 
           <div className="card">
             <span className="web-sec-label" style={{ display: 'block', marginBottom: 12 }}>Описание</span>
-            <span className="body" style={{ color: 'var(--ink-2)', lineHeight: 1.6 }}>{L.desc}</span>
+            <span className="body" style={{ color: 'var(--ink-2)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{L.desc || 'Описания нет — спросите детали у автора.'}</span>
           </div>
 
           <div className="card">
-            <span className="web-sec-label" style={{ display: 'block', marginBottom: 6 }}>Что подойдёт для обмена</span>
-            {amenities.map(([t, s], i) => (
+            <span className="web-sec-label" style={{ display: 'block', marginBottom: 12 }}>Как проходит обмен</span>
+            {[
+              ['swap', 'Вы предлагаете свою вещь', 'Выбираете, что отдаёте, и при разнице в оценке добавляете баллы.'],
+              ['lock', 'Доплата замораживается в эскроу', 'Баллы списываются с баланса, но партнёр получает их не сразу.'],
+              ['checkCircle', 'Обе стороны подтверждают', 'После подтверждения получения эскроу разморозится, а сделка попадёт в рейтинг.'],
+            ].map(([icon, t, sub]) => (
               <div key={t} className="web-amenity">
-                <div className="avatar" style={{ width: 40, height: 40, background: 'var(--berry-50)' }}><Icon name={i === 0 ? 'tag' : i === 1 ? 'tag' : 'spark'} size={18} color="var(--berry)" /></div>
-                <div className="col" style={{ gap: 2 }}><span style={{ fontSize: 15, fontWeight: 500 }}>{t}</span><span style={{ fontSize: 13.5, color: 'var(--ink-2)' }}>{s}</span></div>
+                <div className="avatar" style={{ width: 40, height: 40, background: 'var(--berry-50)' }}><Icon name={icon} size={18} color="var(--berry)" /></div>
+                <div className="col" style={{ gap: 2 }}><span style={{ fontSize: 15, fontWeight: 500 }}>{t}</span><span style={{ fontSize: 13.5, color: 'var(--ink-2)' }}>{sub}</span></div>
               </div>
             ))}
           </div>
@@ -433,7 +449,8 @@ function LotView({ L, isMine = false, onBack, onOffer, onOwnerChat, onEdit }) {
             <Avatar user={owner.name} url={owner.avatar} size={52} />
             <div className="grow col" style={{ gap: 3 }}>
               <span style={{ fontSize: 15, fontWeight: 600 }}>{owner.name}</span>
-              <span className="row gap6"><Stars value={owner.rating} /><span className="cap">{owner.rating} · {owner.deals} сделок</span></span>
+              <span className="row gap6"><Stars value={owner.rating} count={owner.reviews} />{owner.reviews > 0 && <span className="cap">{owner.rating.toFixed(1)} · {owner.deals} сделок</span>}</span>
+              <span className="cap">{owner.city}{ownerLots.length ? ` · ещё ${ownerLots.length} в профиле` : ''}</span>
             </div>
             {isMine
               ? <span className="tag" style={{ background: 'var(--berry-50)', color: 'var(--berry)' }}>Ваше объявление</span>
@@ -442,9 +459,19 @@ function LotView({ L, isMine = false, onBack, onOffer, onOwnerChat, onEdit }) {
         </div>
 
         <div className="web-detail-rail">
-          <ReservationRail L={L} onOffer={onOffer} isMine={isMine} onEdit={onEdit} />
+          <ReservationRail L={L} onOffer={onOffer} isMine={isMine} onEdit={onEdit} onShare={share} />
         </div>
       </div>
+
+      {ownerLots.length > 0 && (
+        <div className="web-container web-section" style={{ paddingTop: 0 }}>
+          <div className="web-head"><h2>Другие объявления автора</h2></div>
+          <div className="web-grid">
+            {ownerLots.map(x => <WebLotCard key={x.id} L={x} onOpen={onOpenLot} />)}
+          </div>
+        </div>
+      )}
+      {shared && <div className="snack" role="status">{shared}</div>}
     </>
   );
 }
@@ -711,7 +738,7 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
         {view === 'home' && <HomeView lots={lots} lotsLoading={lotsLoading} myLots={myLots} myCity={(profile && profile.city) || (user && user.city) || ''} matches={matches} query={query} setQuery={setQuery} cat={cat} setCat={setCat} city={city} setCity={setCity} onOpen={(id) => { setSelLot(id); setView('lot'); }} onChains={() => setView('chains')} favIds={favIds} onToggleFav={onToggleFav} />}
         {view === 'favorites' && <FavoritesView lots={favorites} onBack={goHome} onOpen={(id) => { setSelLot(id); setView('lot'); }} onToggleFav={onToggleFav} />}
         {view === 'lot' && (selected
-          ? <LotView L={selected} isMine={selectedIsMine} onBack={goHome} onOffer={onOffer} onOwnerChat={onOwnerChat} onEdit={onEditLot} />
+          ? <LotView L={selected} isMine={selectedIsMine} lots={lots} onBack={goHome} onOffer={onOffer} onOwnerChat={onOwnerChat} onEdit={onEditLot} onOpenLot={(id) => { setSelLot(id); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />
           : <div className="web-container web-section"><div className="web-empty"><Icon name="tag" size={36} color="var(--ink-3)" /><span>Объявление не найдено — возможно, оно снято с публикации</span><button className="btn btn-soft" onClick={goHome}>На главную</button></div></div>)}
         {view === 'chains' && <ChainsView onBack={goHome} chains={chains} chainProps={chainProps} onOpenChain={(id) => setSelChain(id)} />}
         {view === 'deals' && <DealsView onBack={goHome} chats={chats} deals={deals} onOpenDeal={(id) => setSelDeal(id)} onOpenChat={(id) => setSelChat(id)} />}
