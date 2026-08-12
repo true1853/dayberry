@@ -200,6 +200,18 @@ export async function createReviewAction(input) {
     where: { id: targetId },
     select: { rating: true, reviewsCount: true },
   });
+
+  // Отзыв меняет рейтинг — человек должен узнать об этом от нас, а не
+  // случайно заметить в профиле.
+  await notify({
+    userId: targetId,
+    type: 'review',
+    title: `${user.name} оценил(а) обмен на ${stars} из 5`,
+    body: (text || '').trim().slice(0, 160),
+    entityType: 'profile',
+    entityId: '',
+  });
+
   return { ok: true, rating: target.rating, reviewsCount: target.reviewsCount };
 }
 
@@ -715,6 +727,20 @@ export async function createDealAction(input) {
   }
 
   const created = await prisma.deal.findUnique({ where: { id: result.dealId }, include: dealWith() });
+
+  // Владелец лота узнаёт о предложении, даже если не открывал приложение:
+  // сделка без ответа второй стороны просто висит и портит впечатление у обоих.
+  await notify({
+    userId: lot.ownerId,
+    type: 'deal_offer',
+    title: `${user.name} предлагает обмен`,
+    body: num > 0
+      ? `За «${lot.title}» — вещь и ${num} Б в эскроу.`
+      : `За «${lot.title}» — обмен вещь на вещь.`,
+    entityType: 'deal',
+    entityId: created.id,
+  });
+
   return { ok: true, deal: await serializeDeal(created, user.id), chatId: result.chatId };
 }
 
@@ -757,6 +783,30 @@ async function confirmSide(dealId, user, side) {
 
   const updated = await prisma.deal.findUnique({ where: { id: deal.id }, include: dealWith() });
   if (both) await completeDeal(updated);
+
+  // Второй стороне: либо «дождались, обмен закрыт», либо «ваш ход».
+  const otherId = side === 'initiator' ? updated.lot?.ownerId : updated.userId;
+  const title = (updated.lot?.title || '').split(',')[0];
+  if (otherId) {
+    await notify(both
+      ? {
+        userId: otherId,
+        type: 'deal_done',
+        title: 'Обмен завершён',
+        body: `«${title}» — эскроу разморожен, обмен закрыт. Оставьте оценку партнёру.`,
+        entityType: 'deal',
+        entityId: updated.id,
+      }
+      : {
+        userId: otherId,
+        type: 'deal_confirm',
+        title: `${user.name} подтвердил(а) получение`,
+        body: `Подтвердите и вы — тогда эскроу по «${title}» разморозится.`,
+        entityType: 'deal',
+        entityId: updated.id,
+      });
+  }
+
   return { ok: true, deal: await serializeDeal(updated, user.id) };
 }
 
@@ -806,6 +856,35 @@ export async function cancelDealAction(dealId) {
   }
 
   const updated = await prisma.deal.findUnique({ where: { id: deal.id }, include: dealWith() });
+
+  // Отменить может любая из сторон — сообщаем второй, а инициатору отдельно
+  // про возврат: баллы ушли в эскроу с его баланса, и их возврат он должен
+  // увидеть без похода в кошелёк.
+  const otherId = deal.userId === user.id ? deal.lot?.ownerId : deal.userId;
+  const dealTitle = (deal.lot?.title || '').split(',')[0];
+  const news = [];
+  if (otherId) {
+    news.push({
+      userId: otherId,
+      type: 'deal_cancelled',
+      title: 'Сделка отменена',
+      body: `${user.name} отменил(а) обмен «${dealTitle}».`,
+      entityType: 'deal',
+      entityId: deal.id,
+    });
+  }
+  if (deal.credits > 0 && deal.userId !== user.id) {
+    news.push({
+      userId: deal.userId,
+      type: 'deal_refund',
+      title: `Возврат ${deal.credits} Б из эскроу`,
+      body: `Обмен «${dealTitle}» отменён, баллы вернулись на баланс.`,
+      entityType: 'wallet',
+      entityId: '',
+    });
+  }
+  await notify(news);
+
   return { ok: true, deal: await serializeDeal(updated, user.id) };
 }
 

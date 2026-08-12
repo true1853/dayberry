@@ -240,14 +240,15 @@ function Stamp({ text, color, show, side, rot }) {
 }
 
 // ---------- favorites ----------
-export function FavoritesScreen({ lots = [], go, onToggleFav }) {
+export function FavoritesScreen({ lots = [], go, onToggleFav, bell = null }) {
   return (
     <div className="app-scroll">
       <div className="appbar" style={{ paddingBottom: 10 }}>
-        <div className="col gap2">
+        <div className="col gap2 grow">
           <span className="h2">Избранное</span>
           <span className="cap">Сохранённые объявления</span>
         </div>
+        {bell}
       </div>
       <div className="px" style={{ paddingBottom: 20 }}>
         {lots.length ? (

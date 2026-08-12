@@ -18,7 +18,17 @@ const TONE = {
   chain_failed: { icon: 'info', color: 'var(--ink-2)', bg: 'var(--line-2)' },
   chain_expired: { icon: 'clock', color: 'var(--ink-2)', bg: 'var(--line-2)' },
   message: { icon: 'chat', color: 'var(--berry)', bg: 'var(--berry-50)' },
+  deal_offer: { icon: 'swap', color: 'var(--berry)', bg: 'var(--berry-50)' },
+  deal_confirm: { icon: 'checkCircle', color: 'var(--berry)', bg: 'var(--berry-50)' },
+  deal_done: { icon: 'checkCircle', color: 'var(--ok)', bg: 'var(--ok-soft)' },
+  deal_cancelled: { icon: 'info', color: 'var(--ink-2)', bg: 'var(--line-2)' },
+  deal_refund: { icon: 'wallet', color: 'var(--ok)', bg: 'var(--ok-soft)' },
+  review: { icon: 'star', color: '#f5a623', bg: '#fff7e6' },
 };
+
+// Куда ведёт уведомление. Пустая строка — открывать нечего, строка кликом
+// не притворяется.
+const OPENABLE = new Set(['chain', 'chat', 'deal', 'wallet', 'profile']);
 
 const toneOf = (type) => TONE[type] || { icon: 'bell', color: 'var(--ink-2)', bg: 'var(--line-2)' };
 
@@ -35,7 +45,7 @@ export function NotificationsSheet({ open, onClose, items = [], onOpenEntity }) 
         )}
         {items.map(n => {
           const tone = toneOf(n.type);
-          const clickable = (n.entityType === 'chain' || n.entityType === 'chat') && !!n.entityId;
+          const clickable = OPENABLE.has(n.entityType) && (!!n.entityId || n.entityType === 'wallet' || n.entityType === 'profile');
           return (
             <div
               key={n.id}

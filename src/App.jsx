@@ -185,6 +185,17 @@ export default function App() {
     try { setChats(await listChatsAction() || []); } catch (e) { console.error('chats reload failed', e); }
   }, []);
 
+  // Колокольчик обновляем сам: раньше счётчик приезжал только с загрузкой
+  // приложения, и уведомление, пришедшее при открытом Дайбери, человек видел
+  // в лучшем случае назавтра. В скрытой вкладке не опрашиваем.
+  React.useEffect(() => {
+    if (!authed) return undefined;
+    const tick = () => { if (!document.hidden && !notifOpen) reloadNotifications(); };
+    const id = setInterval(tick, 45000);
+    document.addEventListener('visibilitychange', tick);
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', tick); };
+  }, [authed, notifOpen]);
+
   // Пока человек на вкладке сообщений — подтягиваем список: иначе новая
   // переписка и счётчик появятся только после перезагрузки приложения.
   React.useEffect(() => {
@@ -537,6 +548,10 @@ export default function App() {
     }
   };
 
+  // Один и тот же колокольчик на всех вкладках: раньше он жил только на
+  // экране поиска, и о непрочитанном узнавали случайно.
+  const bell = <IconBtn name="bell" badge={notifications.unread || 0} onClick={openNotifications} />;
+
   const tabRoot = () => {
     if (tab === 'search') {
       return (
@@ -563,13 +578,14 @@ export default function App() {
     }
     if (tab === 'favorites') return (
       <div className="app"><div className="safe-top" />
-        <FavoritesScreen lots={favorites} go={go} onToggleFav={toggleFav} />
+        <FavoritesScreen lots={favorites} go={go} onToggleFav={toggleFav} bell={bell} />
         <TabBar tab={tab} setTab={guardedTab} onCreate={onCreate} unread={unreadChats} />
       </div>
     );
     if (tab === 'mylots') return (
       <div className="app"><div className="safe-top" />
         <MyLotsScreen
+          bell={bell}
           myLots={myLots}
           archivedLots={archivedLots}
           go={go}
@@ -584,13 +600,13 @@ export default function App() {
     );
     if (tab === 'deals') return (
       <div className="app"><div className="safe-top" />
-        <DealsList chats={chats} deals={deals} onOpen={(id) => go('chat', { id })} onOpenDeal={(id) => openDeal(id)} />
+        <DealsList chats={chats} deals={deals} onOpen={(id) => go('chat', { id })} onOpenDeal={(id) => openDeal(id)} bell={bell} />
         <TabBar tab={tab} setTab={guardedTab} onCreate={onCreate} unread={unreadChats} />
       </div>
     );
     if (tab === 'wallet') return (
       <div className="app"><div className="safe-top" />
-        <Wallet wallet={wallet} onInfo={() => setInfoOpen(true)} onTopUp={async (amt) => {
+        <Wallet bell={bell} wallet={wallet} onInfo={() => setInfoOpen(true)} onTopUp={async (amt) => {
           try {
             const res = await topUpAction(amt);
             if (res.ok) await refreshWallet();
@@ -605,6 +621,7 @@ export default function App() {
     );
     if (tab === 'profile') return (
       <ProfileScreen
+        bell={bell}
         tab={tab}
         setTab={guardedTab}
         onCreate={onCreate}
@@ -797,7 +814,14 @@ export default function App() {
         open={notifOpen}
         items={notifications.items}
         onClose={() => setNotifOpen(false)}
-        onOpenEntity={(n) => { setNotifOpen(false); go(n.entityType === 'chat' ? 'chat' : 'chain', { id: n.entityId }); }}
+        onOpenEntity={(n) => {
+          setNotifOpen(false);
+          if (n.entityType === 'chat') return go('chat', { id: n.entityId });
+          if (n.entityType === 'deal') return openDeal(n.entityId);
+          if (n.entityType === 'wallet') return navigate(tabPath('wallet'));
+          if (n.entityType === 'profile') return navigate(tabPath('profile'));
+          return go('chain', { id: n.entityId });
+        }}
       />
       {snack && <div className="snack" role="alert" onClick={() => setSnack('')}><Icon name="info" size={16} color="#fff" />{snack}</div>}
     </>

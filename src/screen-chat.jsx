@@ -41,7 +41,7 @@ function PartyAvatar({ name, url, size = 46, badge, badgeColor = 'var(--berry)',
   );
 }
 
-export function DealsList({ chats = [], deals = [], onOpen, onOpenDeal }) {
+export function DealsList({ chats = [], deals = [], onOpen, onOpenDeal, bell = null }) {
   const activeDeals = deals.filter(d => d.status === 'active' && d.stage !== 'done');
   // Тот, кто подтвердил получение первым, экран завершения не увидит:
   // к моменту закрытия сделки он уже ушёл со страницы. Без этого блока
@@ -49,7 +49,9 @@ export function DealsList({ chats = [], deals = [], onOpen, onOpenDeal }) {
   const toRate = deals.filter(d => d.stage === 'done' && !d.reviewed);
   return (
     <div className="app-scroll">
-      <AppBar title="Сделки" big sub="Чаты и активные обмены" right={<IconBtn name="filter" />} />
+      {/* фильтра у списка нет — кнопка была декоративной; на её месте
+          колокольчик, которого раньше не было ни на одном экране, кроме поиска */}
+      <AppBar title="Сделки" big sub="Чаты и активные обмены" right={bell} />
       <div className="px col gap10" style={{ paddingBottom: 20 }}>
         {activeDeals.map(d => {
           const L = d.lot;

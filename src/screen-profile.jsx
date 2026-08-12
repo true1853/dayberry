@@ -398,7 +398,7 @@ export function AboutSheet({ open, onClose }) {
   );
 }
 
-export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, myLots = [], onProfileSaved, onEditLot, onOpenLot, onOpenSettings }) {
+export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, myLots = [], onProfileSaved, onEditLot, onOpenLot, onOpenSettings, bell = null }) {
   const [activeTab, setActiveTab] = React.useState('lots'); // 'lots' | 'reviews'
   const [editing, setEditing] = React.useState(false);
   const avatarRef = React.useRef(null);
@@ -438,10 +438,7 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, 
   return (
     <div className="app">
       <div className="safe-top" />
-      <AppBar
-        title="Профиль"
-        right={<IconBtn name="info" onClick={() => {}} />}
-      />
+      <AppBar title="Профиль" right={bell} />
 
       <div className="app-scroll">
 
@@ -606,7 +603,7 @@ export function ProfileScreen({ tab, setTab, onCreate, onLogout, user, profile, 
   );
 }
 
-export function MyLotsScreen({ myLots = [], archivedLots = [], go, onEdit, onCreate, onArchive, onRestore, onDelete }) {
+export function MyLotsScreen({ myLots = [], archivedLots = [], go, onEdit, onCreate, onArchive, onRestore, onDelete, bell = null }) {
   const [tab, setTab] = React.useState('active'); // 'active' | 'archived'
   const [menuLot, setMenuLot] = React.useState(null);
   const [confirmLot, setConfirmLot] = React.useState(null);
@@ -620,7 +617,7 @@ export function MyLotsScreen({ myLots = [], archivedLots = [], go, onEdit, onCre
             <span className="h2">Мои объявления</span>
             <span className="cap">{list.length} {tab === 'active' ? 'активных' : 'в архиве'}</span>
           </div>
-          <IconBtn name="plusCircle" onClick={onCreate} />
+          <span className="row gap8">{bell}<IconBtn name="plusCircle" onClick={onCreate} /></span>
         </div>
       </div>
       <div className="row gap8" style={{ padding: '0 18px 10px', flexShrink: 0 }}>
