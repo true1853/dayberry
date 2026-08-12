@@ -17,7 +17,7 @@ export function CatRow({ active, setActive }) {
 }
 
 // ---------- "ready matches" carousel ----------
-function MatchStrip({ onOpen, onChains, matches = [], lots = [], myLot = null }) {
+function MatchStrip({ onOpen, onChains, matches = [], lots = [], myLots = [] }) {
   return (
     <div className="col gap8" style={{ padding: '0 0 2px' }}>
       <div className="px row" style={{ justifyContent: 'space-between' }}>
@@ -28,7 +28,7 @@ function MatchStrip({ onOpen, onChains, matches = [], lots = [], myLot = null })
         {matches.map(m => {
           const L = lots.find(x => x.id === m.lot);
           if (!L) return null;
-          const mine = myLot;
+          const mine = (m.myLot && myLots.find(x => x.id === m.myLot)) || myLots[0] || null;
           return (
             <div key={m.id} className="card" style={{ width: 196, flex: 'none', overflow: 'hidden', cursor: 'pointer' }} onClick={() => onOpen(L.id)}>
               <div className="row" style={{ alignItems: 'stretch', height: 74 }}>
@@ -64,12 +64,12 @@ function MatchStrip({ onOpen, onChains, matches = [], lots = [], myLot = null })
 // ===========================================================
 // VARIANT A — LIST / FEED
 // ===========================================================
-export function FeedList({ cat, onOpen, onChains, hints = true, limit, lots = [], matches = [], myLot = null, loading = false, favIds, onToggleFav }) {
+export function FeedList({ cat, onOpen, onChains, hints = true, limit, lots = [], matches = [], myLots = [], myLot = null, loading = false, favIds, onToggleFav }) {
   let items = lots.filter(l => cat === 'all' || normalizeCat(l.cat) === cat);
   if (limit) items = items.slice(0, limit);
   return (
     <div className="col gap16" style={{ paddingBottom: 20 }}>
-      {hints && matches.length > 0 && <MatchStrip matches={matches} lots={lots} myLot={myLot} onOpen={onOpen} onChains={onChains} />}
+      {hints && matches.length > 0 && <MatchStrip matches={matches} lots={lots} myLots={myLots} onOpen={onOpen} onChains={onChains} />}
       <div className="px col gap10">
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <span className="h3">Рядом с вами</span>

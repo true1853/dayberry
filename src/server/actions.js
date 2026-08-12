@@ -1061,6 +1061,8 @@ export async function getMatchesAction() {
   return matches.map((m, i) => ({
     id: `m-${i}-${m.lot.id}`,
     lot: m.lot.id,
+    // какой из моих лотов предлагается в обмен — лента показывала первый
+    myLot: m.myLotId || null,
     score: m.score,
     why: m.why,
     topup: m.topup,

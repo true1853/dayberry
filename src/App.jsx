@@ -631,7 +631,7 @@ function HomeTab({ t, go, tab, setTab, onCreate, lots, lotsLoading, matches, cha
             }}>{m.label}</button>
           ))}
         </div>
-        {view === 'list' && <FeedList cat={cat} lots={shown} loading={lotsLoading} matches={matches} hints={t.matchHints} myLot={myLots && myLots[0]} onOpen={(id) => go('lot', { lotId: id })} onChains={() => setView('chain')} favIds={favIds} onToggleFav={onToggleFav} />}
+        {view === 'list' && <FeedList cat={cat} lots={shown} loading={lotsLoading} matches={matches} hints={t.matchHints} myLots={myLots} myLot={myLots && myLots[0]} onOpen={(id) => go('lot', { lotId: id })} onChains={() => setView('chain')} favIds={favIds} onToggleFav={onToggleFav} />}
         {view === 'swipe' && <FeedSwipe cat={cat} lots={shown} myLot={myLots && myLots[0]} onOpen={(id) => go('lot', { lotId: id })} />}
         {view === 'chain' && <FeedChain chains={chains} onOpenChain={(id) => go('chain', { id })} />}
       </div>
