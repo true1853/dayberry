@@ -1,7 +1,7 @@
 'use client';
 // App.jsx — root: navigation, phone frame scaling, tweaks
 import React from 'react';
-import { bootstrapAction, loadAuthedDataAction, logoutAction, createLotAction, updateLotAction, getWalletAction, listDealsAction, listChatsAction, getMatchesAction, createDealAction, confirmReceiptAction, confirmPartnerAction, cancelDealAction, createReviewAction, topUpAction, startChatAction, getDealChatAction, toggleFavoriteAction, listChainsAction, refreshChainsAction, startChainAction, respondChainAction, confirmChainSentAction, confirmChainReceivedAction, listNotificationsAction, markNotificationsReadAction, getArchivedLots, archiveLotAction, restoreLotAction, deleteLotAction } from './server/actions.js';
+import { bootstrapAction, loadAuthedDataAction, logoutAction, createLotAction, updateLotAction, getWalletAction, listDealsAction, listChatsAction, getMatchesAction, createDealAction, confirmReceiptAction, confirmPartnerAction, cancelDealAction, createReviewAction, openDisputeAction, topUpAction, startChatAction, getDealChatAction, toggleFavoriteAction, listChainsAction, refreshChainsAction, startChainAction, respondChainAction, confirmChainSentAction, confirmChainReceivedAction, listNotificationsAction, markNotificationsReadAction, getArchivedLots, archiveLotAction, restoreLotAction, deleteLotAction } from './server/actions.js';
 import { FeedList, FeedSwipe, CatRow, FavoritesScreen } from './screen-feed.jsx';
 import { FeedChain, ChainDetail } from './screen-chain.jsx';
 import { NotificationsSheet } from './screen-notifications.jsx';
@@ -11,7 +11,7 @@ import { DealsList, ChatThread } from './screen-chat.jsx';
 import { Wallet, CreditsInfo } from './screen-wallet.jsx';
 import { Onboarding, CreateListing } from './screen-onboarding.jsx';
 import { AuthScreen } from './screen-auth.jsx';
-import { ProfileScreen, SettingsScreen, MyLotsScreen, BroadcastScreen } from './screen-profile.jsx';
+import { ProfileScreen, SettingsScreen, MyLotsScreen, BroadcastScreen, DisputesScreen } from './screen-profile.jsx';
 import WebApp from './web-app.jsx';
 import { parseRoute, tabPath, screenPath, readPath } from './router.js';
 
@@ -274,6 +274,18 @@ export default function App() {
     setChainScope(scope);
     try { window.localStorage.setItem(CHAIN_SCOPE_KEY, scope); } catch {}
     requireAuth('Искать цепочки можно после регистрации', () => searchChains(scope));
+  };
+
+  const openDispute = async (d, text) => {
+    try {
+      const res = await openDisputeAction(d.id, text);
+      if (!res.ok) { showSnack(res.error || 'Не удалось открыть спор'); return; }
+      setDeals(ds => ds.map(x => (x.id === res.deal.id ? res.deal : x)));
+      showSnack('Спор открыт — мы разберёмся и вернёмся с решением');
+    } catch (e) {
+      console.error('dispute failed', e);
+      showSnack('Не удалось открыть спор — обновите страницу');
+    }
   };
 
   const openNotifications = async () => {
@@ -721,12 +733,17 @@ export default function App() {
       if (!d) return null;
       return (
         <div className="app"><div className="safe-top" />
-          <DealStatus deal={d} onBack={back} onConfirm={() => confirmDeal(d)} onCancel={async () => { const ok = await cancelDeal(d); if (ok) resetTo('deals'); }} onChat={() => openDealChat(d)} onDone={(where) => { setDeal(null); resetTo(where === 'home' ? 'home' : 'deals'); }} onRate={submitReview} />
+          <DealStatus deal={d} onBack={back} onConfirm={() => confirmDeal(d)} onCancel={async () => { const ok = await cancelDeal(d); if (ok) resetTo('deals'); }} onChat={() => openDealChat(d)} onDone={(where) => { setDeal(null); resetTo(where === 'home' ? 'home' : 'deals'); }} onRate={submitReview} onDispute={(text) => openDispute(d, text)} />
         </div>
       );
     }
     if (top.name === 'chat') return (
       <ChatThread chatId={top.params.id} onRead={markChatRead} onBack={() => { back(); reloadChats(); }} onOpenDeal={() => { const c = chats.find(x => x.id === top.params.id); openDeal(c && c.deal ? c.deal.id : undefined); }} />
+    );
+    if (top.name === 'disputes') return (
+      <div className="app"><div className="safe-top" />
+        <DisputesScreen onBack={back} />
+      </div>
     );
     if (top.name === 'broadcast') return (
       <div className="app"><div className="safe-top" />
@@ -740,6 +757,7 @@ export default function App() {
           profile={profile}
           onBack={back}
           onBroadcast={() => go('broadcast')}
+          onDisputes={() => go('disputes')}
           onLogout={handleLogout}
           onGoWallet={() => navigate(tabPath('wallet'))}
           onProfileSaved={(updated) => {
@@ -811,6 +829,7 @@ export default function App() {
           onConfirmDeal={confirmDeal}
           onCancelDeal={cancelDeal}
           onRateDeal={submitReview}
+          onDisputeDeal={openDispute}
         />
       ) : (
         <>

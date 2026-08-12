@@ -35,13 +35,15 @@ function Stepper({ active }) {
   );
 }
 
-export function DealStatus({ deal, onBack, onConfirm, onCancel, onChat, onDone, onRate }) {
+export function DealStatus({ deal, onBack, onConfirm, onCancel, onChat, onDone, onRate, onDispute }) {
   if (!deal) return null;
   const L = deal.lot || {};
   const { credits, stage, role } = deal;
   const owner = { name: deal.partnerName || deal.ownerName || '', avatar: deal.partnerAvatar || '' };
   const [confirming, setConfirming] = React.useState(false);
   const [cancelling, setCancelling] = React.useState(false);
+  const [disputing, setDisputing] = React.useState(false);
+  const [disputeText, setDisputeText] = React.useState('');
 
   if (stage === 'done') return <DealDone deal={deal} onDone={onDone} onRate={onRate} />;
 
@@ -80,7 +82,7 @@ export function DealStatus({ deal, onBack, onConfirm, onCancel, onChat, onDone, 
           <span style={{ display: 'block', marginTop: 8, fontSize: 13, color: 'rgba(255,255,255,0.78)', lineHeight: 1.5 }}>
             {isPartner
               ? <>Партнёр отдаёт <b style={{ color: '#fff' }}>{fmt(credits)} Б</b> — они придут вам, когда обе стороны подтвердят получение.</>
-              : <>Партнёр получит <b style={{ color: '#fff' }}>{fmt(credits)} Б</b> после подтверждения обеих сторон. Если вещь не та — откройте спор, и баллы вернутся вам.</>}
+              : <>Партнёр получит <b style={{ color: '#fff' }}>{fmt(credits)} Б</b> после подтверждения обеих сторон. Если вещь не та — не подтверждайте и откройте спор: баллы останутся замороженными, пока поддержка не разберётся.</>}
           </span>
         </div>
 
@@ -105,13 +107,22 @@ export function DealStatus({ deal, onBack, onConfirm, onCancel, onChat, onDone, 
 
         <div className="row gap12 card" style={{ padding: 12, alignItems: 'center' }} onClick={onChat}>
           <Avatar user={owner.name} url={owner.avatar} size={42} />
-          <div className="col grow" style={{ gap: 2 }}><span className="title">{owner.name}</span><span className="cap">обычно отвечает за 5 минут</span></div>
+          <div className="col grow" style={{ gap: 2 }}><span className="title">{owner.name}</span><span className="cap">написать по сделке</span></div>
           <button className="btn btn-ghost" style={{ padding: '10px 14px' }}><Icon name="chat" size={18} color="var(--berry)" />Чат</button>
         </div>
       </div>
 
       <div style={{ position: 'sticky', bottom: 0, padding: '12px 18px calc(12px + env(safe-area-inset-bottom, 0px) + 28px)', background: 'linear-gradient(to top, var(--bg) 72%, transparent)' }}>
-        {myConfirmed ? (
+        {deal.disputed ? (
+          <div className="card col gap6" style={{ padding: 14, background: 'var(--warn-soft)' }}>
+            <span className="row gap8" style={{ color: '#7a5410', fontWeight: 700 }}><Icon name="shield" size={18} color="var(--warn)" />Спор открыт</span>
+            <span className="sub" style={{ color: '#7a5410' }}>
+              {deal.disputeMine ? 'Мы разбираемся. ' : 'Партнёр не согласен с обменом. '}
+              Баллы заморожены до решения — подтвердить или отменить сделку сейчас нельзя.
+            </span>
+            {deal.disputeNote && <span className="cap" style={{ color: '#7a5410' }}>«{deal.disputeNote}»</span>}
+          </div>
+        ) : myConfirmed ? (
           <button className="btn btn-block btn-lg" disabled style={{ background: 'var(--line-2)', color: 'var(--ink-3)', cursor: 'default' }}>
             <Icon name="clock" size={20} color="var(--ink-3)" />{partnerConfirmed ? 'Сделка завершена' : 'Ждём подтверждение партнёра'}
           </button>
@@ -134,11 +145,29 @@ export function DealStatus({ deal, onBack, onConfirm, onCancel, onChat, onDone, 
       <Sheet open={confirming} onClose={() => setConfirming(false)} title="Подтвердить получение?">
         <div className="px col gap14" style={{ paddingBottom: 8 }}>
           <span className="body">Подтверждайте, только когда получили и проверили вещь. После подтверждения обеими сторонами {isPartner ? <b>{fmt(credits)} Б</b> : <>эскроу разморозится и <b>{fmt(credits)} Б</b> уйдут партнёру</>}.</span>
-          <div className="card" style={{ padding: 12, background: 'var(--warn-soft)' }}>
-            <span className="row gap8 sub" style={{ color: '#7a5410' }}><Icon name="shield" size={18} color="var(--warn)" />Что-то не так? Откройте спор — баллы останутся замороженными до решения.</span>
-          </div>
           <button className="btn btn-primary btn-block btn-lg" onClick={() => { setConfirming(false); onConfirm(); }}><Icon name="check" size={20} color="#fff" />Да, всё получил(а)</button>
           <button className="btn btn-soft btn-block" onClick={() => { setConfirming(false); setCancelling(true); }}>Отменить сделку</button>
+          <button className="btn btn-soft btn-block" style={{ color: 'var(--warn)' }} onClick={() => { setConfirming(false); setDisputing(true); }}>
+            <Icon name="shield" size={18} color="var(--warn)" />Что-то не так — открыть спор
+          </button>
+        </div>
+      </Sheet>
+
+      <Sheet open={disputing} onClose={() => setDisputing(false)} title="Открыть спор?">
+        <div className="px col gap14" style={{ paddingBottom: 8 }}>
+          <span className="body">Сделка замрёт: ни подтвердить, ни отменить её будет нельзя, а {credits > 0 ? <><b className="amount">{fmt(credits)} Б</b> останутся</> : 'баллы останутся'} в эскроу, пока поддержка не разберётся. Опишите, что пошло не так.</span>
+          <textarea
+            value={disputeText}
+            onChange={e => setDisputeText(e.target.value)}
+            maxLength={600}
+            rows={4}
+            placeholder="Например: вместо описанной вещи прислали другую"
+            style={{ width: '100%', border: '1px solid var(--line)', borderRadius: 12, padding: '11px 13px', fontSize: 15, fontFamily: 'var(--font)', outline: 'none', background: 'var(--bg)', resize: 'vertical', lineHeight: 1.4 }}
+          />
+          <button className="btn btn-block btn-lg" style={{ background: 'var(--warn)', color: '#fff' }} onClick={() => { setDisputing(false); onDispute && onDispute(disputeText); setDisputeText(''); }}>
+            <Icon name="shield" size={20} color="#fff" />Открыть спор
+          </button>
+          <button className="btn btn-soft btn-block" onClick={() => setDisputing(false)}>Ещё подумаю</button>
         </div>
       </Sheet>
 

@@ -147,6 +147,12 @@ model Deal {
   status             String   @default("active")
   initiatorConfirmed Boolean  @default(false)
   partnerConfirmed   Boolean  @default(false)
+  // Спор. Пока он открыт, сделка заморожена: подтвердить и отменить нельзя,
+  // эскроу держится до решения. Без этого сделка, где один подтвердил, а
+  // второй не согласен, зависала навсегда вместе с баллами.
+  disputedAt         DateTime?
+  disputeById        String?
+  disputeNote        String   @default("")
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
   chat               Chat?
@@ -156,6 +162,7 @@ model Deal {
   @@index([userId])
   @@index([lotId])
   @@index([createdAt])
+  @@index([disputedAt])
 }
 
 model Transaction {

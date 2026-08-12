@@ -624,6 +624,9 @@ async function serializeDeal(d, currentUserId) {
     // кого оцениваем и оценивали ли уже — экран завершения решает по этим полям
     partnerName: (d.userId === currentUserId ? d.lot?.owner?.name : d.user?.name) || 'партнёр',
     partnerAvatar: (d.userId === currentUserId ? d.lot?.owner?.avatar : d.user?.avatar) || '',
+    disputed: !!d.disputedAt,
+    disputeNote: d.disputeNote || '',
+    disputeMine: !!d.disputeById && d.disputeById === currentUserId,
     reviewed: (d.reviews || []).some(r => r.authorId === currentUserId),
   };
 }
@@ -773,6 +776,7 @@ async function confirmSide(dealId, user, side) {
   const owns = side === 'initiator' ? deal?.userId === user.id : deal?.lot?.ownerId === user.id;
   if (!deal || !owns) return { ok: false, error: 'Сделка не найдена' };
   if (deal.stage === 'done') return { ok: false, error: 'Сделка уже завершена' };
+  if (deal.disputedAt) return { ok: false, error: 'По сделке открыт спор — дождитесь решения' };
   if (deal[mine]) return { ok: false, error: 'Вы уже подтвердили получение' };
   if (deal.status !== 'active') return { ok: false, error: 'Сделка уже закрыта' };
 
@@ -832,6 +836,7 @@ export async function cancelDealAction(dealId) {
   const deal = await prisma.deal.findUnique({ where: { id: dealId }, include: dealWith() });
   if (!deal || (deal.userId !== user.id && deal.lot?.ownerId !== user.id)) return { ok: false, error: 'Сделка не найдена' };
   if (deal.status !== 'active') return { ok: false, error: 'Сделка уже закрыта' };
+  if (deal.disputedAt) return { ok: false, error: 'По сделке открыт спор — решение за поддержкой' };
   if (deal.initiatorConfirmed || deal.partnerConfirmed) return { ok: false, error: 'Сделка подтверждена — отменить нельзя' };
 
   // Отмена и возврат из эскроу — атомарно. Сначала закрываем сделку условным
@@ -1951,3 +1956,153 @@ export async function getMatchesAction() {
     dir: m.dir,
   }));
 }
+
+// ---------- спор по сделке ----------
+//
+// Механика без спора зависала: эскроу размораживается только когда получение
+// подтвердили обе стороны, а отменить сделку после первого подтверждения уже
+// нельзя. Если вещь пришла не та, второй участник просто не подтверждал — и
+// баллы висели замороженными вечно, без выхода. Спор даёт выход: сделка
+// замирает, а решение принимает администратор.
+
+const MAX_DISPUTE_NOTE = 600;
+
+export async function openDisputeAction(dealId, text) {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: 'Требуется вход' };
+
+  const deal = await prisma.deal.findUnique({ where: { id: dealId }, include: dealWith() });
+  if (!deal || (deal.userId !== user.id && deal.lot?.ownerId !== user.id)) {
+    return { ok: false, error: 'Сделка не найдена' };
+  }
+  if (deal.status !== 'active') return { ok: false, error: 'Сделка уже закрыта' };
+  if (deal.disputedAt) return { ok: false, error: 'Спор уже открыт' };
+
+  const note = String(text || '').trim().slice(0, MAX_DISPUTE_NOTE);
+  const claimed = await prisma.deal.updateMany({
+    where: { id: deal.id, status: 'active', disputedAt: null },
+    data: { disputedAt: new Date(), disputeById: user.id, disputeNote: note },
+  });
+  if (claimed.count !== 1) return { ok: false, error: 'Статус сделки изменился — обновите страницу' };
+
+  const otherId = deal.userId === user.id ? deal.lot?.ownerId : deal.userId;
+  const title = (deal.lot?.title || '').split(',')[0];
+  const news = [];
+  if (otherId) {
+    news.push({
+      userId: otherId,
+      type: 'dispute',
+      title: `${user.name} открыл(а) спор по обмену`,
+      body: note ? `«${title}»: ${note}` : `«${title}» — сделка заморожена до решения.`,
+      entityType: 'deal',
+      entityId: deal.id,
+    });
+  }
+  // Администраторам — чтобы спор не ждал, пока кто-то случайно заглянет.
+  const admins = ADMIN_EMAILS.length
+    ? await prisma.user.findMany({ where: { email: { in: ADMIN_EMAILS } }, select: { id: true } })
+    : [];
+  for (const a of admins) {
+    if (a.id === user.id || a.id === otherId) continue;
+    news.push({
+      userId: a.id,
+      type: 'dispute',
+      title: 'Новый спор по сделке',
+      body: `${user.name} · «${title}» · ${deal.credits} Б в эскроу`,
+      entityType: 'deal',
+      entityId: deal.id,
+    });
+  }
+  await notify(news);
+
+  const updated = await prisma.deal.findUnique({ where: { id: deal.id }, include: dealWith() });
+  return { ok: true, deal: await serializeDeal(updated, user.id) };
+}
+
+export async function listDisputesAction() {
+  const user = await getCurrentUser();
+  if (!isAdmin(user)) return { admin: false, items: [] };
+  const deals = await prisma.deal.findMany({
+    where: { disputedAt: { not: null }, status: 'active' },
+    include: dealWith(),
+    orderBy: { disputedAt: 'asc' },
+  });
+  const items = await Promise.all(deals.map(async (d) => {
+    const by = d.disputeById
+      ? await prisma.user.findUnique({ where: { id: d.disputeById }, select: { name: true } })
+      : null;
+    return {
+      id: d.id,
+      title: d.lot?.title || '',
+      credits: d.credits,
+      note: d.disputeNote,
+      openedBy: by?.name || '',
+      openedAt: d.disputedAt?.toISOString() || null,
+      initiator: d.user?.name || '',
+      owner: d.lot?.owner?.name || '',
+      myLot: d.myLot?.title || '',
+    };
+  }));
+  return { admin: true, items };
+}
+
+/**
+ * Решение по спору. 'refund' — вернуть доплату инициатору и закрыть сделку,
+ * 'release' — считать обмен состоявшимся и отдать баллы владельцу лота.
+ */
+export async function resolveDisputeAction(dealId, outcome) {
+  const user = await getCurrentUser();
+  if (!isAdmin(user)) return { ok: false, error: 'Недостаточно прав' };
+  if (outcome !== 'refund' && outcome !== 'release') return { ok: false, error: 'Неизвестное решение' };
+
+  const deal = await prisma.deal.findUnique({ where: { id: dealId }, include: dealWith() });
+  if (!deal || !deal.disputedAt) return { ok: false, error: 'Спор не найден' };
+  if (deal.status !== 'active') return { ok: false, error: 'Сделка уже закрыта' };
+
+  const title = (deal.lot?.title || '').split(',')[0];
+
+  if (outcome === 'refund') {
+    try {
+      await prisma.$transaction(async (tx) => {
+        const closed = await tx.deal.updateMany({
+          where: { id: deal.id, status: 'active' },
+          data: { status: 'cancelled', disputedAt: null },
+        });
+        if (closed.count !== 1) throw new DealClosed();
+        if (deal.credits > 0) {
+          await tx.user.update({ where: { id: deal.userId }, data: { balance: { increment: deal.credits } } });
+          const held = await tx.transaction.findFirst({
+            where: { userId: deal.userId, kind: 'escrow-in', status: 'held' },
+            orderBy: { createdAt: 'desc' },
+          });
+          if (held) await tx.transaction.update({ where: { id: held.id }, data: { status: 'refunded' } });
+        }
+      });
+    } catch (e) {
+      if (e instanceof DealClosed) return { ok: false, error: 'Сделка уже закрыта' };
+      throw e;
+    }
+  } else {
+    await prisma.deal.updateMany({
+      where: { id: deal.id, status: 'active' },
+      data: { stage: 'done', status: 'done', initiatorConfirmed: true, partnerConfirmed: true, disputedAt: null },
+    });
+    const fresh = await prisma.deal.findUnique({ where: { id: deal.id }, include: dealWith() });
+    await completeDeal(fresh);
+  }
+
+  const both = [deal.userId, deal.lot?.ownerId].filter(Boolean);
+  await notify(both.map(userId => ({
+    userId,
+    type: 'dispute_resolved',
+    title: outcome === 'refund' ? 'Спор решён: баллы возвращены' : 'Спор решён: обмен засчитан',
+    body: outcome === 'refund'
+      ? `«${title}» — сделка отменена, ${deal.credits} Б вернулись отправителю.`
+      : `«${title}» — эскроу разморожен в пользу владельца объявления.`,
+    entityType: 'deal',
+    entityId: deal.id,
+  })));
+
+  return { ok: true };
+}
+

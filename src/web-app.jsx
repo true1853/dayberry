@@ -4,7 +4,7 @@ import { CITIES, REMOTE, VLADIMIR_REGION } from './cities.js';
 import { CAT, CAT_IDS, catOf, normalizeCat } from './data.js';
 import { Icon } from './icons.jsx';
 import { fmt, Logo, Credit, Photo, Avatar, Stars, CatTag, AIBadge } from './ui.jsx';
-import { EditProfileSheet, resizeImage, SettingsScreen, BroadcastScreen } from './screen-profile.jsx';
+import { EditProfileSheet, resizeImage, SettingsScreen, BroadcastScreen, DisputesScreen } from './screen-profile.jsx';
 import { updateAvatarAction, broadcastInfoAction } from './server/actions.js';
 import { DealStatus } from './screen-deal.jsx';
 import { ChatThread } from './screen-chat.jsx';
@@ -712,7 +712,7 @@ function ProfileView({ user, profile, myLots, onOpenLot, onLogout, onProfileSave
 }
 
 // ---------------- root ----------------
-export default function WebApp({ lots, lotsLoading = false, myLots, user, profile, onLogout, onProfileSaved, onOffer, onCreate, onEditLot, matches = [], chats = [], chains = [], deals = [], favorites = [], onToggleFav, onConfirmDeal, onCancelDeal, onRateDeal, authed = true, onAuthRequired, onOwnerChat, onChatRead, onChatsChanged, chainProps = {}, chainActions = {}, chainBusy = false }) {
+export default function WebApp({ lots, lotsLoading = false, myLots, user, profile, onLogout, onProfileSaved, onOffer, onCreate, onEditLot, matches = [], chats = [], chains = [], deals = [], favorites = [], onToggleFav, onConfirmDeal, onCancelDeal, onRateDeal, onDisputeDeal, authed = true, onAuthRequired, onOwnerChat, onChatRead, onChatsChanged, chainProps = {}, chainActions = {}, chainBusy = false }) {
   const [view, setView] = React.useState('home');
   const [cat, setCat] = React.useState('all');
   const [city, setCity] = React.useState('all');
@@ -735,6 +735,7 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
   // ни рассылки. Переиспользуем мобильные экраны в модалке, как чат и сделку.
   const [settingsOpen, setSettingsOpen] = React.useState(false);
   const [broadcastOpen, setBroadcastOpen] = React.useState(false);
+  const [disputesOpen, setDisputesOpen] = React.useState(false);
   const [isAdmin, setIsAdmin] = React.useState(false);
   React.useEffect(() => {
     if (!authed) { setIsAdmin(false); return; }
@@ -751,6 +752,7 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
     setSelChain(null);
     setSettingsOpen(false);
     setBroadcastOpen(false);
+    setDisputesOpen(false);
   }, [view]);
   const dealOpen = selDeal ? deals.find(x => x.id === selDeal) || null : null;
 
@@ -781,7 +783,17 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
               onProfileSaved={onProfileSaved}
               onGoWallet={() => setSettingsOpen(false)}
               onBroadcast={() => { setSettingsOpen(false); setBroadcastOpen(true); }}
+              onDisputes={() => { setSettingsOpen(false); setDisputesOpen(true); }}
             />
+          </div>
+        </div>
+      )}
+
+      {disputesOpen && (
+        <div className="web-modal">
+          <div className="app">
+            <div className="safe-top" />
+            <DisputesScreen onBack={() => setDisputesOpen(false)} />
           </div>
         </div>
       )}
@@ -807,6 +819,7 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
               onChat={() => { const c = chats.find(x => x.deal && x.deal.id === selDeal); if (c) { setSelChat(c.id); setSelDeal(null); } }}
               onDone={() => setSelDeal(null)}
               onRate={onRateDeal}
+              onDispute={(text) => onDisputeDeal && onDisputeDeal(dealOpen, text)}
             />
           </div>
         </div>

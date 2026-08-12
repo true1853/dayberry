@@ -3,7 +3,7 @@ import React from 'react';
 import { Icon } from './icons.jsx';
 import { WISH_GROUPS, ALL_WISHES } from './wishes.js';
 import { Logo, Credit, AppBar, IconBtn, TabBar, Photo, Sheet, LotCard, PullToRefresh } from './ui.jsx';
-import { updateProfileAction, updateAvatarAction, changePasswordAction, updateSettingsAction, broadcastInfoAction, broadcastAction } from './server/actions.js';
+import { updateProfileAction, updateAvatarAction, changePasswordAction, updateSettingsAction, broadcastInfoAction, broadcastAction, listDisputesAction, resolveDisputeAction } from './server/actions.js';
 import { enablePush, disablePush, pushState } from './pwa.jsx';
 import { PhoneField, CityField } from './fields.jsx';
 
@@ -692,6 +692,94 @@ export function MyLotsScreen({ myLots = [], archivedLots = [], go, onEdit, onCre
   );
 }
 
+// Разбор споров. Спор замораживает чужие баллы, поэтому решение всегда
+// принимает человек, а не таймер: два исхода — вернуть отправителю или
+// засчитать обмен. Доступ проверяет сервер, как и у рассылки.
+export function DisputesScreen({ onBack }) {
+  const [state, setState] = React.useState(null);
+  const [busy, setBusy] = React.useState('');
+  const [note, setNote] = React.useState('');
+
+  const load = React.useCallback(() => {
+    listDisputesAction().then(setState).catch(() => setState({ admin: false, items: [] }));
+  }, []);
+  React.useEffect(() => { load(); }, [load]);
+
+  const resolve = async (id, outcome) => {
+    setBusy(id);
+    setNote('');
+    try {
+      const res = await resolveDisputeAction(id, outcome);
+      setNote(res?.ok
+        ? (outcome === 'refund' ? 'Баллы возвращены отправителю' : 'Обмен засчитан, эскроу разморожен')
+        : (res?.error || 'Не удалось'));
+      load();
+    } catch (e) {
+      console.error('resolve failed', e);
+      setNote('Не удалось — обновите страницу');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  if (state && !state.admin) {
+    return (
+      <div className="app-scroll">
+        <AppBar title="Споры" left={<IconBtn name="back" onClick={onBack} />} />
+        <div className="px"><span className="sub">Раздел доступен только администратору.</span></div>
+      </div>
+    );
+  }
+
+  const items = state ? state.items : [];
+  return (
+    <div className="app-scroll">
+      <AppBar title="Споры" sub={items.length ? `${items.length} ждут решения` : 'Разбор сделок'} left={<IconBtn name="back" onClick={onBack} />} />
+      <div className="px col gap12" style={{ paddingBottom: 30 }}>
+        {note && <div className="card" style={{ padding: 12, background: 'var(--ok-soft)' }}><span className="sub" style={{ color: '#15663f' }}>{note}</span></div>}
+
+        {state && !items.length && (
+          <div className="card col gap8" style={{ padding: 24, alignItems: 'center', textAlign: 'center' }}>
+            <Icon name="shield" size={28} color="var(--ink-3)" />
+            <span className="title" style={{ fontSize: 15 }}>Споров нет</span>
+            <span className="sub">Здесь появятся сделки, по которым участники не сошлись.</span>
+          </div>
+        )}
+
+        {items.map(d => (
+          <div key={d.id} className="card col gap10" style={{ padding: 14, border: '1px solid var(--warn-soft)' }}>
+            <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div className="col gap2 grow" style={{ minWidth: 0 }}>
+                <span className="title ellipsis">{d.title}</span>
+                <span className="cap">{d.initiator} → {d.owner}{d.myLot ? ` · взамен «${d.myLot}»` : ''}</span>
+              </div>
+              <Credit n={d.credits} size={15} coin={14} />
+            </div>
+            <div className="card" style={{ padding: 10, background: 'var(--warn-soft)' }}>
+              <span className="sub" style={{ color: '#7a5410' }}>
+                <b>{d.openedBy}</b>{d.note ? `: ${d.note}` : ' открыл(а) спор без пояснения'}
+              </span>
+            </div>
+            <div className="row gap8">
+              <button
+                className="btn btn-soft grow"
+                disabled={busy === d.id}
+                onClick={() => resolve(d.id, 'refund')}
+              >Вернуть баллы</button>
+              <button
+                className="btn btn-primary grow"
+                disabled={busy === d.id}
+                onClick={() => resolve(d.id, 'release')}
+              >Засчитать обмен</button>
+            </div>
+            <span className="cap">Возврат отменит сделку и вернёт {d.credits} Б отправителю. Засчёт разморозит эскроу в пользу владельца объявления.</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // Экран рассылки: доступен только аккаунтам из ADMIN_EMAILS, и проверяет
 // это сервер — интерфейс лишь не показывает лишнего. Отправка необратима,
 // поэтому между кнопкой и рассылкой стоит подтверждение с числом людей.
@@ -832,7 +920,7 @@ const bcFieldStyle = {
   color: 'var(--ink)',
 };
 
-export function SettingsScreen({ user, profile, onBack, onLogout, onProfileSaved, onGoWallet, onBroadcast }) {
+export function SettingsScreen({ user, profile, onBack, onLogout, onProfileSaved, onGoWallet, onBroadcast, onDisputes }) {
   const [isAdmin, setIsAdmin] = React.useState(false);
   React.useEffect(() => { broadcastInfoAction().then(r => setIsAdmin(!!r?.admin)).catch(() => {}); }, []);
   const [editing, setEditing] = React.useState(false);
@@ -931,6 +1019,8 @@ export function SettingsScreen({ user, profile, onBack, onLogout, onProfileSaved
           <SectionHeader title="Администратору" />
           <GroupCard>
             <SettingsRow icon="send" label="Рассылка" sub="Уведомление всем пользователям" onClick={onBroadcast} />
+            <Divider />
+            <SettingsRow icon="shield" label="Споры" sub="Разбор сделок, где не сошлись" onClick={onDisputes} />
           </GroupCard>
         </>
       )}
