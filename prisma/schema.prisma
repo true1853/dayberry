@@ -297,6 +297,21 @@ model ChainStep {
   @@index([userId, state])
 }
 
+// Заявка на сброс пароля. Почтового сервера у сервиса нет, поэтому письма
+// со ссылкой не будет: человек оставляет заявку, администратор выдаёт
+// временный пароль и передаёт его любым каналом, о котором они договорятся.
+model PasswordReset {
+  id        String    @id @default(cuid())
+  email     String
+  userId    String?
+  note      String    @default("")
+  status    String    @default("open")
+  createdAt DateTime  @default(now())
+  handledAt DateTime?
+
+  @@index([status, createdAt])
+}
+
 // Подписка браузера на web-push. У одного человека их столько, сколько
 // устройств: телефон, рабочий ноутбук, планшет — каждое со своим endpoint.
 model PushSubscription {

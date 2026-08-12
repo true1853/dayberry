@@ -8,7 +8,7 @@ import { pushEnabled, pushPublicKey } from '../../lib/push';
 import { vkAuthStart, yandexAuthStart } from '../../lib/oauth';
 import { saveDataUrl, saveDataUrls, isStorableImage } from '../../lib/storage';
 import { cookies } from 'next/headers';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomBytes } from 'node:crypto';
 import * as rateLimit from '../../lib/rate-limit';
 import {
   createSession,
@@ -2103,6 +2103,121 @@ export async function resolveDisputeAction(dealId, outcome) {
     entityId: deal.id,
   })));
 
+  return { ok: true };
+}
+
+// ---------- сброс пароля ----------
+//
+// Почтового сервера у сервиса нет, поэтому классического «письма со ссылкой»
+// не будет. Человек оставляет заявку, администратор видит её в админке и
+// выдаёт временный пароль — передать его можно тем каналом, по которому
+// они и так общаются. Взамен письма это даёт то же самое: доступ к аккаунту
+// не теряется навсегда из-за забытого пароля.
+
+const RESET_RATE = { max: 3, windowMs: 60 * 60 * 1000 };
+const TEMP_PASSWORD_ALPHABET = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+function tempPassword(len = 10) {
+  const bytes = randomBytes(len);
+  let out = '';
+  for (let i = 0; i < len; i++) out += TEMP_PASSWORD_ALPHABET[bytes[i] % TEMP_PASSWORD_ALPHABET.length];
+  return out;
+}
+
+export async function requestPasswordResetAction(email) {
+  const mail = String(email || '').trim().toLowerCase();
+  if (!mail || !mail.includes('@')) return { ok: false, error: 'Укажите почту, на которую регистрировались' };
+
+  const gate = rateLimit.hit(`reset:${mail}`, RESET_RATE);
+  if (!gate.ok) return { ok: false, error: 'Слишком много попыток — попробуйте позже' };
+
+  const user = await prisma.user.findUnique({ where: { email: mail }, select: { id: true, name: true } });
+  // Заявку создаём только на существующий аккаунт, но наружу об этом не
+  // сообщаем: ответ одинаковый в обоих случаях, иначе форма превращается
+  // в способ проверять, кто здесь зарегистрирован.
+  if (user) {
+    const open = await prisma.passwordReset.findFirst({ where: { email: mail, status: 'open' } });
+    if (!open) {
+      await prisma.passwordReset.create({ data: { email: mail, userId: user.id } });
+      const admins = ADMIN_EMAILS.length
+        ? await prisma.user.findMany({ where: { email: { in: ADMIN_EMAILS } }, select: { id: true } })
+        : [];
+      await notify(admins.map(a => ({
+        userId: a.id,
+        type: 'reset_request',
+        title: 'Заявка на сброс пароля',
+        body: `${user.name} · ${mail}`,
+        entityType: '',
+        entityId: '',
+      })));
+    }
+  }
+  return { ok: true };
+}
+
+export async function listResetRequestsAction() {
+  const admin = await getCurrentUser();
+  if (!isAdmin(admin)) return { admin: false, items: [] };
+  const rows = await prisma.passwordReset.findMany({
+    where: { status: 'open' },
+    orderBy: { createdAt: 'asc' },
+    take: 50,
+  });
+  const items = await Promise.all(rows.map(async (r) => {
+    const u = r.userId
+      ? await prisma.user.findUnique({ where: { id: r.userId }, select: { name: true, phone: true, city: true } })
+      : null;
+    return {
+      id: r.id,
+      email: r.email,
+      name: u?.name || '',
+      phone: u?.phone || '',
+      city: u?.city || '',
+      createdAt: r.createdAt.toISOString(),
+    };
+  }));
+  return { admin: true, items };
+}
+
+/**
+ * Выдаёт временный пароль по заявке. Пароль показывается администратору
+ * один раз — в базе лежит только хеш, посмотреть его потом нельзя.
+ */
+export async function issueTempPasswordAction(requestId) {
+  const admin = await getCurrentUser();
+  if (!isAdmin(admin)) return { ok: false, error: 'Недостаточно прав' };
+
+  const req = await prisma.passwordReset.findUnique({ where: { id: String(requestId || '') } });
+  if (!req || req.status !== 'open') return { ok: false, error: 'Заявка не найдена' };
+  if (!req.userId) return { ok: false, error: 'Аккаунт не найден' };
+
+  const password = tempPassword();
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: req.userId }, data: { passwordHash: await hashPassword(password) } }),
+    prisma.passwordReset.update({ where: { id: req.id }, data: { status: 'done', handledAt: new Date() } }),
+  ]);
+  console.log(`[reset] ${admin.email} выдал временный пароль для ${req.email}`);
+
+  // Человек узнает об этом, когда войдёт: уведомление ждёт его внутри.
+  await notify({
+    userId: req.userId,
+    type: 'system',
+    title: 'Пароль сброшен',
+    body: 'Вам выдали временный пароль. Смените его в настройках: Профиль → Настройки → Сменить пароль.',
+    entityType: 'profile',
+    entityId: '',
+  });
+
+  return { ok: true, password, email: req.email };
+}
+
+export async function dismissResetRequestAction(requestId) {
+  const admin = await getCurrentUser();
+  if (!isAdmin(admin)) return { ok: false, error: 'Недостаточно прав' };
+  await prisma.passwordReset.updateMany({
+    where: { id: String(requestId || ''), status: 'open' },
+    data: { status: 'rejected', handledAt: new Date() },
+  });
   return { ok: true };
 }
 

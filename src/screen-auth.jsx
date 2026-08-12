@@ -2,7 +2,7 @@
 import React from 'react';
 import { Icon } from './icons.jsx';
 import { Logo } from './ui.jsx';
-import { loginAction, registerAction, getOAuthUrlAction } from './server/actions.js';
+import { loginAction, registerAction, getOAuthUrlAction, requestPasswordResetAction } from './server/actions.js';
 import { PhoneField, CityField } from './fields.jsx';
 
 function Field({ label, type = 'text', value, onChange, placeholder, autoComplete }) {
@@ -78,6 +78,12 @@ export function AuthScreen({ onDone, onClose, message = '' }) {
   const [password, setPassword] = React.useState('');
   const [city, setCity] = React.useState('');
   const [error, setError] = React.useState('');
+  // Забытый пароль: письма со ссылкой нет, поэтому оставляем заявку —
+  // администратор выдаст временный пароль. Молча оставлять кнопку-обманку
+  // хуже: человек теряет аккаунт вместе с балансом и сделками.
+  const [resetOpen, setResetOpen] = React.useState(false);
+  const [resetMail, setResetMail] = React.useState('');
+  const [resetDone, setResetDone] = React.useState('');
   const [loading, setLoading] = React.useState(false);
 
   React.useEffect(() => {
@@ -198,7 +204,11 @@ export function AuthScreen({ onDone, onClose, message = '' }) {
           </button>
 
           {isLogin && (
-            <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--berry)', fontSize: 14, fontFamily: 'var(--font)', fontWeight: 600, textAlign: 'center' }}>
+            <button
+              type="button"
+              onClick={() => { setResetMail(email); setResetDone(''); setResetOpen(true); }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--berry)', fontSize: 14, fontFamily: 'var(--font)', fontWeight: 600, textAlign: 'center' }}
+            >
               Забыли пароль?
             </button>
           )}
@@ -224,6 +234,48 @@ export function AuthScreen({ onDone, onClose, message = '' }) {
           )}
         </div>
       </div>
+
+      {resetOpen && (
+        <div className="scrim" onClick={() => setResetOpen(false)}>
+          <div className="sheet" onClick={e => e.stopPropagation()}>
+            <div className="sheet-grab" />
+            <div className="px col gap12" style={{ padding: '6px 18px 10px' }}>
+              <span className="h3">Забыли пароль?</span>
+              {resetDone ? (
+                <>
+                  <span className="body">{resetDone}</span>
+                  <button className="btn btn-primary btn-block btn-lg" onClick={() => setResetOpen(false)}>Понятно</button>
+                </>
+              ) : (
+                <>
+                  <span className="sub" style={{ lineHeight: 1.5 }}>
+                    Оставьте почту, на которую регистрировались. Мы сбросим пароль вручную и передадим новый —
+                    ответим на эту же почту или в переписку, если вы уже общались с нами.
+                  </span>
+                  <span className="cap" style={{ lineHeight: 1.45 }}>Если вы входили через VK — пароль не нужен, просто нажмите «VK ID».</span>
+                  <input
+                    type="email"
+                    value={resetMail}
+                    onChange={e => setResetMail(e.target.value)}
+                    placeholder="you@example.com"
+                    style={{ width: '100%', border: '1px solid var(--line)', borderRadius: 12, padding: '12px 14px', fontSize: 15, fontFamily: 'var(--font)', outline: 'none', background: 'var(--bg)', color: 'var(--ink)' }}
+                  />
+                  <button
+                    className="btn btn-primary btn-block btn-lg"
+                    onClick={async () => {
+                      const res = await requestPasswordResetAction(resetMail);
+                      setResetDone(res?.ok
+                        ? 'Заявка принята. Если аккаунт с такой почтой есть, мы свяжемся и передадим новый пароль.'
+                        : (res?.error || 'Не получилось — попробуйте позже'));
+                    }}
+                  >Отправить заявку</button>
+                  <button className="btn btn-soft btn-block" onClick={() => setResetOpen(false)}>Отмена</button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

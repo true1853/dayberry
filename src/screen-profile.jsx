@@ -2,8 +2,8 @@
 import React from 'react';
 import { Icon } from './icons.jsx';
 import { WISH_GROUPS, ALL_WISHES } from './wishes.js';
-import { Logo, Credit, AppBar, IconBtn, TabBar, Photo, Sheet, LotCard, PullToRefresh } from './ui.jsx';
-import { updateProfileAction, updateAvatarAction, changePasswordAction, updateSettingsAction, broadcastInfoAction, broadcastAction, listDisputesAction, resolveDisputeAction } from './server/actions.js';
+import { Logo, Credit, AppBar, IconBtn, TabBar, Photo, Sheet, LotCard, PullToRefresh, timeAgo } from './ui.jsx';
+import { updateProfileAction, updateAvatarAction, changePasswordAction, updateSettingsAction, broadcastInfoAction, broadcastAction, listDisputesAction, resolveDisputeAction, listResetRequestsAction, issueTempPasswordAction, dismissResetRequestAction } from './server/actions.js';
 import { enablePush, disablePush, pushState } from './pwa.jsx';
 import { PhoneField, CityField } from './fields.jsx';
 
@@ -692,6 +692,97 @@ export function MyLotsScreen({ myLots = [], archivedLots = [], go, onEdit, onCre
   );
 }
 
+// Заявки на сброс пароля. Пароль показывается один раз — в базе только хеш,
+// подсмотреть его потом нельзя, поэтому передать человеку нужно сразу.
+export function ResetsScreen({ onBack }) {
+  const [state, setState] = React.useState(null);
+  const [issued, setIssued] = React.useState(null);
+  const [busy, setBusy] = React.useState('');
+
+  const load = React.useCallback(() => {
+    listResetRequestsAction().then(setState).catch(() => setState({ admin: false, items: [] }));
+  }, []);
+  React.useEffect(() => { load(); }, [load]);
+
+  const issue = async (id) => {
+    setBusy(id);
+    try {
+      const res = await issueTempPasswordAction(id);
+      if (!res?.ok) { setIssued({ error: res?.error || 'Не удалось' }); return; }
+      setIssued({ email: res.email, password: res.password });
+      load();
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const dismiss = async (id) => {
+    setBusy(id);
+    try { await dismissResetRequestAction(id); load(); } finally { setBusy(''); }
+  };
+
+  if (state && !state.admin) {
+    return (
+      <div className="app-scroll">
+        <AppBar title="Сброс пароля" left={<IconBtn name="back" onClick={onBack} />} />
+        <div className="px"><span className="sub">Раздел доступен только администратору.</span></div>
+      </div>
+    );
+  }
+
+  const items = state ? state.items : [];
+  return (
+    <div className="app-scroll">
+      <AppBar title="Сброс пароля" sub={items.length ? `${items.length} ждут` : 'Заявки от пользователей'} left={<IconBtn name="back" onClick={onBack} />} />
+      <div className="px col gap12" style={{ paddingBottom: 30 }}>
+        {issued && (
+          <div className="card col gap8" style={{ padding: 14, background: issued.error ? 'var(--warn-soft)' : 'var(--ok-soft)' }}>
+            {issued.error ? (
+              <span className="sub" style={{ color: '#7a5410' }}>{issued.error}</span>
+            ) : (
+              <>
+                <span className="title" style={{ fontSize: 14 }}>Временный пароль для {issued.email}</span>
+                <div className="row gap8" style={{ alignItems: 'center' }}>
+                  <span className="amount" style={{ fontSize: 20, letterSpacing: '0.06em' }}>{issued.password}</span>
+                  <button
+                    className="btn btn-soft"
+                    style={{ padding: '8px 12px' }}
+                    onClick={() => navigator.clipboard?.writeText(issued.password)}
+                  >Скопировать</button>
+                </div>
+                <span className="cap">Показывается один раз — передайте человеку сейчас. В базе хранится только хеш.</span>
+              </>
+            )}
+            <button className="btn btn-soft btn-block" onClick={() => setIssued(null)}>Скрыть</button>
+          </div>
+        )}
+
+        {state && !items.length && (
+          <div className="card col gap8" style={{ padding: 24, alignItems: 'center', textAlign: 'center' }}>
+            <Icon name="shield" size={28} color="var(--ink-3)" />
+            <span className="title" style={{ fontSize: 15 }}>Заявок нет</span>
+            <span className="sub">Здесь появятся те, кто нажал «Забыли пароль?» на входе.</span>
+          </div>
+        )}
+
+        {items.map(r => (
+          <div key={r.id} className="card col gap10" style={{ padding: 14 }}>
+            <div className="col gap2">
+              <span className="title">{r.name || 'Без имени'}</span>
+              <span className="sub">{r.email}</span>
+              <span className="cap">{[r.city, r.phone].filter(Boolean).join(' · ') || 'контактов в профиле нет'} · {timeAgo(r.createdAt)}</span>
+            </div>
+            <div className="row gap8">
+              <button className="btn btn-soft grow" disabled={busy === r.id} onClick={() => dismiss(r.id)}>Отклонить</button>
+              <button className="btn btn-primary grow" disabled={busy === r.id} onClick={() => issue(r.id)}>Выдать пароль</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // Разбор споров. Спор замораживает чужие баллы, поэтому решение всегда
 // принимает человек, а не таймер: два исхода — вернуть отправителю или
 // засчитать обмен. Доступ проверяет сервер, как и у рассылки.
@@ -920,7 +1011,7 @@ const bcFieldStyle = {
   color: 'var(--ink)',
 };
 
-export function SettingsScreen({ user, profile, onBack, onLogout, onProfileSaved, onGoWallet, onBroadcast, onDisputes }) {
+export function SettingsScreen({ user, profile, onBack, onLogout, onProfileSaved, onGoWallet, onBroadcast, onDisputes, onResets }) {
   const [isAdmin, setIsAdmin] = React.useState(false);
   React.useEffect(() => { broadcastInfoAction().then(r => setIsAdmin(!!r?.admin)).catch(() => {}); }, []);
   const [editing, setEditing] = React.useState(false);
@@ -1021,6 +1112,8 @@ export function SettingsScreen({ user, profile, onBack, onLogout, onProfileSaved
             <SettingsRow icon="send" label="Рассылка" sub="Уведомление всем пользователям" onClick={onBroadcast} />
             <Divider />
             <SettingsRow icon="shield" label="Споры" sub="Разбор сделок, где не сошлись" onClick={onDisputes} />
+            <Divider />
+            <SettingsRow icon="lock" label="Сброс пароля" sub="Заявки от тех, кто не может войти" onClick={onResets} />
           </GroupCard>
         </>
       )}

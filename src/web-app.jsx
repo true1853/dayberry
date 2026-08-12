@@ -4,7 +4,7 @@ import { CITIES, REMOTE, VLADIMIR_REGION } from './cities.js';
 import { CAT, CAT_IDS, catOf, normalizeCat } from './data.js';
 import { Icon } from './icons.jsx';
 import { fmt, Logo, Credit, Photo, Avatar, Stars, CatTag, AIBadge } from './ui.jsx';
-import { EditProfileSheet, resizeImage, SettingsScreen, BroadcastScreen, DisputesScreen } from './screen-profile.jsx';
+import { EditProfileSheet, resizeImage, SettingsScreen, BroadcastScreen, DisputesScreen, ResetsScreen } from './screen-profile.jsx';
 import { updateAvatarAction, broadcastInfoAction } from './server/actions.js';
 import { DealStatus } from './screen-deal.jsx';
 import { ChatThread } from './screen-chat.jsx';
@@ -736,6 +736,7 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
   const [settingsOpen, setSettingsOpen] = React.useState(false);
   const [broadcastOpen, setBroadcastOpen] = React.useState(false);
   const [disputesOpen, setDisputesOpen] = React.useState(false);
+  const [resetsOpen, setResetsOpen] = React.useState(false);
   const [isAdmin, setIsAdmin] = React.useState(false);
   React.useEffect(() => {
     if (!authed) { setIsAdmin(false); return; }
@@ -753,6 +754,7 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
     setSettingsOpen(false);
     setBroadcastOpen(false);
     setDisputesOpen(false);
+    setResetsOpen(false);
   }, [view]);
   const dealOpen = selDeal ? deals.find(x => x.id === selDeal) || null : null;
 
@@ -784,7 +786,17 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
               onGoWallet={() => setSettingsOpen(false)}
               onBroadcast={() => { setSettingsOpen(false); setBroadcastOpen(true); }}
               onDisputes={() => { setSettingsOpen(false); setDisputesOpen(true); }}
+              onResets={() => { setSettingsOpen(false); setResetsOpen(true); }}
             />
+          </div>
+        </div>
+      )}
+
+      {resetsOpen && (
+        <div className="web-modal">
+          <div className="app">
+            <div className="safe-top" />
+            <ResetsScreen onBack={() => setResetsOpen(false)} />
           </div>
         </div>
       )}
