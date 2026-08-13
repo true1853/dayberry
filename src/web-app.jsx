@@ -470,6 +470,21 @@ function LotView({ L, isMine = false, lots = [], onBack, onOffer, onOwnerChat, o
     }
   };
   const ownerLots = (lots || []).filter(x => x.ownerId && x.ownerId === L.ownerId && x.id !== L.id).slice(0, 4);
+  // Оценка в баллах сама по себе ни о чём не говорит: рядом нужен ряд лотов
+  // того же порядка цены — на них и меняются. Своя категория идёт первой,
+  // потом всё остальное в коридоре ±35%.
+  const priceLow = L.value * 0.65;
+  const priceHigh = L.value * 1.35;
+  const sameCat = normalizeCat(L.cat);
+  const similar = (lots || [])
+    .filter(x => x.id !== L.id && x.ownerId !== L.ownerId && x.value >= priceLow && x.value <= priceHigh)
+    .sort((a, b) => {
+      const ca = normalizeCat(a.cat) === sameCat ? 0 : 1;
+      const cb = normalizeCat(b.cat) === sameCat ? 0 : 1;
+      if (ca !== cb) return ca - cb;
+      return Math.abs(a.value - L.value) - Math.abs(b.value - L.value);
+    })
+    .slice(0, 4);
   const owner = {
     name: L.ownerName || '',
     city: L.ownerCity || '',
@@ -554,6 +569,18 @@ function LotView({ L, isMine = false, lots = [], onBack, onOffer, onOwnerChat, o
           <ReservationRail L={L} onOffer={onOffer} isMine={isMine} onEdit={onEdit} onShare={share} />
         </div>
       </div>
+
+      {similar.length > 0 && (
+        <div className="web-container web-section" style={{ paddingTop: 0 }}>
+          <div className="web-head">
+            <h2>На это можно поменять</h2>
+            <span className="cap">похожая оценка: {fmt(Math.round(priceLow))}–{fmt(Math.round(priceHigh))} Б</span>
+          </div>
+          <div className="web-grid">
+            {similar.map(x => <WebLotCard key={x.id} L={x} onOpen={onOpenLot} />)}
+          </div>
+        </div>
+      )}
 
       {ownerLots.length > 0 && (
         <div className="web-container web-section" style={{ paddingTop: 0 }}>

@@ -4,6 +4,7 @@ import { Icon } from './icons.jsx';
 import { fmt, Credit, Photo, Avatar, Stars, CatTag, AIBadge, IconBtn, Sheet, timeAgo, fmtDateTime } from './ui.jsx';
 import { trackLotViewAction, reportLotAction } from './server/actions.js';
 import { REPORT_REASONS } from './reports.js';
+import { normalizeCat } from './data.js';
 
 const plural = (n, one, few, many) => {
   const m10 = n % 10;
@@ -94,6 +95,20 @@ export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, onOpenLot, onEd
   const ownerLots = (lots || [])
     .filter(x => x.ownerId && x.ownerId === L.ownerId && x.id !== L.id)
     .slice(0, 8);
+  // Оценка в баллах без соседей по цене — просто число. Показываем, на что
+  // этот лот реально меняется: сначала своя категория, потом коридор ±35%.
+  const priceLow = Math.round(L.value * 0.65);
+  const priceHigh = Math.round(L.value * 1.35);
+  const sameCat = normalizeCat(L.cat);
+  const similar = (lots || [])
+    .filter(x => x.id !== L.id && x.ownerId !== L.ownerId && x.value >= priceLow && x.value <= priceHigh)
+    .sort((a, b) => {
+      const ca = normalizeCat(a.cat) === sameCat ? 0 : 1;
+      const cb = normalizeCat(b.cat) === sameCat ? 0 : 1;
+      if (ca !== cb) return ca - cb;
+      return Math.abs(a.value - L.value) - Math.abs(b.value - L.value);
+    })
+    .slice(0, 8);
   const owner = {
     name: L.ownerName || '',
     city: L.ownerCity || '',
@@ -165,6 +180,26 @@ export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, onOpenLot, onEd
             <Icon name="chevR" size={20} color="var(--ink-3)" />
           </div>
         </div>
+
+        {similar.length > 0 && (
+          <div className="col gap8">
+            <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <span className="over">На это можно поменять</span>
+              <span className="cap">{fmt(priceLow)}–{fmt(priceHigh)} Б</span>
+            </div>
+            <div className="row gap10" style={{ overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
+              {similar.map(x => (
+                <div key={x.id} className="card" style={{ flex: 'none', width: 132, overflow: 'hidden', cursor: 'pointer' }} onClick={() => onOpenLot && onOpenLot(x.id)}>
+                  <Photo label={x.photo} url={x.photoUrl} cat={x.cat} style={{ width: '100%', aspectRatio: '1/1' }} />
+                  <div className="col gap4" style={{ padding: '8px 9px 10px' }}>
+                    <span className="cap ellipsis">{x.title}</span>
+                    <Credit n={x.value} size={13} coin={12} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {ownerLots.length > 0 && (
           <div className="col gap8">
