@@ -10,6 +10,7 @@ import { saveDataUrl, saveDataUrls, isStorableImage } from '../../lib/storage';
 import { cookies } from 'next/headers';
 import { randomUUID, randomBytes } from 'node:crypto';
 import * as rateLimit from '../../lib/rate-limit';
+import { checkPassword } from '../password.js';
 import { REPORT_REASONS, reasonLabel } from '../reports.js';
 import {
   createSession,
@@ -28,7 +29,8 @@ export async function registerAction(input) {
   const { name, email, phone, password, city } = input || {};
   const key = (email || '').trim().toLowerCase();
   if (!key || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(key)) return { ok: false, error: 'Некорректный email' };
-  if (!password || password.length < 6) return { ok: false, error: 'Пароль — минимум 6 символов' };
+  const weak = checkPassword(password);
+  if (weak) return { ok: false, error: weak };
   if (!name || !name.trim()) return { ok: false, error: 'Введите имя' };
 
   // Регистрация тоже стоит одного bcrypt-хэша — ограничиваем частоту.
@@ -276,7 +278,8 @@ export async function changePasswordAction(input) {
 
   const { currentPassword = '', newPassword = '' } = input || {};
   if (!currentPassword) return { ok: false, error: 'Введите текущий пароль' };
-  if (!newPassword || newPassword.length < 6) return { ok: false, error: 'Новый пароль — минимум 6 символов' };
+  const weakNew = checkPassword(newPassword);
+  if (weakNew) return { ok: false, error: weakNew };
 
   const u = await prisma.user.findUnique({ where: { id: user.id } });
   const match = await verifyPassword(currentPassword, u.passwordHash);

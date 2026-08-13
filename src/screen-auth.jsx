@@ -4,15 +4,19 @@ import { Icon } from './icons.jsx';
 import { Logo } from './ui.jsx';
 import { loginAction, registerAction, getOAuthUrlAction, requestPasswordResetAction } from './server/actions.js';
 import { PhoneField, CityField } from './fields.jsx';
+import { checkPassword, passwordScore, MIN_LENGTH } from './password.js';
 
-function Field({ label, type = 'text', value, onChange, placeholder, autoComplete }) {
+function Field({ label, name, type = 'text', value, onChange, placeholder, autoComplete, hint }) {
   const [show, setShow] = React.useState(false);
   const isPassword = type === 'password';
+  const id = 'auth-' + (name || autoComplete || type);
   return (
     <div className="col gap6">
-      <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-2)' }}>{label}</label>
+      <label htmlFor={id} style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-2)' }}>{label}</label>
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
         <input
+          id={id}
+          name={name || autoComplete}
           className="ym-hide-content ym-disable-keys"
           type={isPassword && show ? 'text' : type}
           value={value}
@@ -38,6 +42,7 @@ function Field({ label, type = 'text', value, onChange, placeholder, autoComplet
           </button>
         )}
       </div>
+      {hint}
     </div>
   );
 }
@@ -71,6 +76,28 @@ const YandexIcon = () => (
   </svg>
 );
 
+// Полоска под полем пароля: без неё требование «буквы и цифры» человек
+// узнаёт только из отказа после нажатия кнопки.
+function PasswordHint({ password }) {
+  const n = passwordScore(password);
+  const err = checkPassword(password);
+  const label = err || (n >= 3 ? 'Надёжный пароль' : 'Пароль подходит');
+  const color = err ? 'var(--warn)' : (n >= 3 ? 'var(--ok)' : 'var(--ink-2)');
+  return (
+    <div className="col gap4" style={{ marginTop: 2 }}>
+      <div className="row gap4">
+        {[0, 1, 2].map(i => (
+          <span key={i} style={{
+            flex: 1, height: 3, borderRadius: 999,
+            background: i < n ? (err ? 'var(--warn)' : 'var(--ok)') : 'var(--line)',
+          }} />
+        ))}
+      </div>
+      <span style={{ fontSize: 12, color, lineHeight: 1.4 }}>{label}</span>
+    </div>
+  );
+}
+
 export function AuthScreen({ onDone, onClose, message = '' }) {
   const [mode, setMode] = React.useState('login'); // 'login' | 'register'
   const [name, setName] = React.useState('');
@@ -102,12 +129,19 @@ export function AuthScreen({ onDone, onClose, message = '' }) {
   const validate = () => {
     if (!email.trim()) return 'Введите email';
     if (!email.includes('@')) return 'Некорректный email';
-    if (!password || password.length < 6) return 'Пароль — минимум 6 символов';
-    if (!isLogin && !name.trim()) return 'Введите имя';
+    if (!password) return 'Введите пароль';
+    // При входе пароль не проверяем на стойкость: у старых аккаунтов он может
+    // быть слабым, а отказать во входе из-за этого нельзя.
+    if (!isLogin) {
+      const weak = checkPassword(password);
+      if (weak) return weak;
+      if (!name.trim()) return 'Введите имя';
+    }
     return null;
   };
 
-  const submit = async () => {
+  const submit = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
     const err = validate();
     if (err) { setError(err); return; }
     setError('');
@@ -118,7 +152,7 @@ export function AuthScreen({ onDone, onClose, message = '' }) {
         : await registerAction({ name, email, phone, password, city });
       setLoading(false);
       if (!res.ok) { setError(res.error); return; }
-      onDone(res.user);
+      onDone(res.user, { registered: !isLogin });
     } catch (e) {
       setLoading(false);
       setError('Ошибка сети — попробуйте ещё раз');
@@ -140,7 +174,7 @@ export function AuthScreen({ onDone, onClose, message = '' }) {
   };
 
   return (
-    <div className="app" style={{ background: 'var(--bg)' }}>
+    <div className="app auth-card" style={{ background: 'var(--bg)' }}>
       <div className="safe-top" />
 
       {/* header */}
@@ -173,31 +207,40 @@ export function AuthScreen({ onDone, onClose, message = '' }) {
         ))}
       </div>
 
-      {/* form */}
+      {/* form
+          Поля лежат внутри <form> с именами и autoComplete: без формы
+          браузер и менеджер паролей не понимают, что это вход, и автовставка
+          не срабатывала — приходилось набирать пароль руками. Заодно
+          работает Enter. */}
       <div className="app-scroll">
-        <div className="col gap14" style={{ padding: '0 24px 24px' }}>
+        <form className="col gap14" style={{ padding: '0 24px 24px' }} onSubmit={submit} noValidate>
 
           {!isLogin && (
-            <Field label="Имя" value={name} onChange={setName} placeholder="Как вас зовут?" autoComplete="name" />
+            <Field label="Имя" name="name" value={name} onChange={setName} placeholder="Как вас зовут?" autoComplete="name" />
           )}
-          <Field label="Email" type="email" value={email} onChange={setEmail} placeholder="you@example.com" autoComplete="email" />
+          <Field label="Email" name="email" type="email" value={email} onChange={setEmail} placeholder="you@example.com" autoComplete="username" />
           {!isLogin && (
             <PhoneField value={phone} onChange={setPhone} />
           )}
-          <Field label="Пароль" type="password" value={password} onChange={setPassword} placeholder={isLogin ? 'Ваш пароль' : 'Минимум 6 символов'} autoComplete={isLogin ? 'current-password' : 'new-password'} />
+          <Field
+            label="Пароль" name="password" type="password" value={password} onChange={setPassword}
+            placeholder={isLogin ? 'Ваш пароль' : `Минимум ${MIN_LENGTH} символов, буквы и цифры`}
+            autoComplete={isLogin ? 'current-password' : 'new-password'}
+            hint={!isLogin && password ? <PasswordHint password={password} /> : null}
+          />
           {!isLogin && (
             <CityField value={city} onChange={setCity} />
           )}
 
           {error && (
-            <div style={{ padding: '10px 14px', borderRadius: 12, background: 'var(--berry-50)', border: '1px solid var(--berry-200)', color: 'var(--berry-700)', fontSize: 13.5, fontWeight: 500 }}>
+            <div role="alert" style={{ padding: '10px 14px', borderRadius: 12, background: 'var(--berry-50)', border: '1px solid var(--berry-200)', color: 'var(--berry-700)', fontSize: 13.5, fontWeight: 500 }}>
               {error}
             </div>
           )}
 
           <button
+            type="submit"
             className="btn btn-primary btn-block btn-lg"
-            onClick={submit}
             disabled={loading}
             style={{ opacity: loading ? 0.7 : 1, marginTop: 4 }}
           >
@@ -233,7 +276,7 @@ export function AuthScreen({ onDone, onClose, message = '' }) {
               <span style={{ color: 'var(--berry)', cursor: 'pointer' }}>Политику конфиденциальности</span>
             </p>
           )}
-        </div>
+        </form>
       </div>
 
       {resetOpen && (

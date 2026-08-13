@@ -415,3 +415,28 @@
   border-right: 1px solid var(--line-2);
   box-shadow: var(--sh-3);
 }
+
+/* Вход и регистрация: на десктопе экран растягивался во всю ширину монитора —
+   поля по 1400px и километр пустоты между подписью и значением. Собираем в
+   карточку по центру. */
+@media (min-width: 1128px) {
+  .overlay-layer:has(> .auth-card) {
+    background: rgba(28, 12, 18, 0.45);
+    backdrop-filter: blur(3px);
+  }
+  .auth-card {
+    inset: auto;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 100%;
+    max-width: 460px;
+    max-height: min(92vh, 860px);
+    border-radius: 24px;
+    overflow: hidden;
+    box-shadow: var(--sh-3);
+    border: 1px solid var(--line-2);
+  }
+  .auth-card .safe-top { height: 0; }
+}
