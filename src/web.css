@@ -174,7 +174,41 @@
   font-size: 40px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.1;
   margin: 0 0 10px;
 }
-.web-hero p { font-size: 18px; color: var(--ink-2); margin: 0 0 32px; }
+.web-hero p { font-size: 18px; color: var(--ink-2); margin: 0 auto 32px; max-width: 720px; }
+.web-hero-kicker {
+  display: inline-block; margin-bottom: 14px; padding: 6px 14px; border-radius: 999px;
+  background: var(--berry-50); color: var(--berry-700);
+  font-size: 12.5px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+}
+.web-hero-cta {
+  display: flex; align-items: center; justify-content: center; gap: 18px;
+  margin-top: 26px; flex-wrap: wrap;
+}
+.web-hero-link {
+  font-size: 15px; font-weight: 600; color: var(--ink-2); text-decoration: none;
+  border-bottom: 1px solid var(--line); padding-bottom: 2px;
+}
+.web-hero-link:hover { color: var(--ink); border-color: var(--ink); }
+
+/* «как это работает» — главная должна отвечать, что это за сервис */
+.web-how {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;
+  padding-top: 40px; padding-bottom: 8px;
+}
+.web-how-step {
+  background: #fff; border: 1px solid var(--line-2); border-radius: 20px; padding: 22px 22px 24px;
+}
+.web-how-icon {
+  width: 42px; height: 42px; border-radius: 13px; background: var(--berry-50);
+  display: flex; align-items: center; justify-content: center; margin-bottom: 14px;
+}
+.web-how-num {
+  font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--berry);
+}
+.web-how-step h3 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; margin: 6px 0 8px; }
+.web-how-step p { font-size: 14.5px; line-height: 1.5; color: var(--ink-2); margin: 0; }
+@media (max-width: 1000px) { .web-how { grid-template-columns: 1fr; } }
 
 /* big search bar */
 .web-bigsearch {

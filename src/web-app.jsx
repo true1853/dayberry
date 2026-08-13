@@ -1,7 +1,7 @@
 // web-app.jsx — desktop web layout (Airbnb-inspired)
 import React from 'react';
 import { CITIES, REMOTE, VLADIMIR_REGION } from './cities.js';
-import { CAT, CAT_IDS, catOf, normalizeCat } from './data.js';
+import { CAT, CAT_IDS, catOf, normalizeCat, matchesQuery } from './data.js';
 import { Icon } from './icons.jsx';
 import { fmt, Logo, Credit, Photo, Avatar, Stars, CatTag, AIBadge } from './ui.jsx';
 import { EditProfileSheet, resizeImage, SettingsScreen, BroadcastScreen, DisputesScreen, ResetsScreen, ReportsScreen, RulesScreen } from './screen-profile.jsx';
@@ -10,10 +10,23 @@ import { DealStatus } from './screen-deal.jsx';
 import { ChatThread } from './screen-chat.jsx';
 import { FeedChain, ChainDetail } from './screen-chain.jsx';
 
+// Ссылки ведут в существующие разделы. Прежний набор («Карьера», «Блог»,
+// «Арендовать на день») достался от шаблона: все двенадцать пунктов гасили
+// клик и ничего не открывали.
 const FOOTER_COLS = [
-  { h: 'Поддержка', links: ['Справка', 'Безопасность', 'Центр доверия', 'Правила сообщества', 'Связь с нами'] },
-  { h: 'Размещение', links: ['Стать участником', 'Арендовать на день', 'Бартер-бизнес', 'Гиды и промо', 'Опыт соседей'] },
-  { h: 'Дайбери', links: ['Новости', 'Карьера', 'Блог', 'Благотворительность', 'Контакты'] },
+  { h: 'Обмен', links: [
+    { label: 'Лента объявлений', to: 'home' },
+    { label: 'Цепочки обмена', to: 'chains' },
+    { label: 'Разместить объявление', act: 'create' },
+  ] },
+  { h: 'Правила и помощь', links: [
+    { label: 'Правила сервиса', act: 'rules' },
+    { label: 'Что нельзя менять', act: 'rules' },
+    { label: 'Настройки аккаунта', act: 'settings', auth: true },
+  ] },
+  { h: 'Дайбери', links: [
+    { label: 'Студия ПРИЗМАТИКА', href: 'https://prismatica.agency/' },
+  ] },
 ];
 
 function fmtDate(iso) {
@@ -111,14 +124,23 @@ function WebNav({ view, setView, user, avatar, query, setQuery, onLogout, onCrea
 }
 
 // ---------------- footer ----------------
-function WebFooter() {
+function WebFooter({ authed = true, onTab, onCreate, onRules, onSettings }) {
+  const run = (l) => {
+    if (l.to) return onTab && onTab(l.to);
+    if (l.act === 'create') return onCreate && onCreate();
+    if (l.act === 'rules') return onRules && onRules();
+    if (l.act === 'settings') return onSettings && onSettings();
+  };
   return (
     <footer className="web-footer">
       <div className="web-footer-inner">
         {FOOTER_COLS.map(c => (
           <div key={c.h} className="web-footer-col">
             <h3>{c.h}</h3>
-            {c.links.map(l => <a key={l} href="#" onClick={e => e.preventDefault()}>{l}</a>)}
+            {c.links.filter(l => authed || !l.auth).map(l => (l.href
+              ? <a key={l.label} href={l.href} target="_blank" rel="noopener noreferrer">{l.label}</a>
+              : <a key={l.label} href="#" onClick={e => { e.preventDefault(); run(l); }}>{l.label}</a>
+            ))}
           </div>
         ))}
       </div>
@@ -207,39 +229,73 @@ function WebLotSkeleton() {
   );
 }
 
-function HomeView({ lots, lotsLoading = false, myLots = [], matches = [], query, setQuery, cat, setCat, city, setCity, onOpen, onChains, favIds, onToggleFav }) {
+// Шаги «как это работает». Без них главная не отвечала на вопрос
+// «что это вообще за сайт»: бренда, который объясняет себя сам, у нас нет.
+const HOW_STEPS = [
+  { icon: 'plus', h: 'Выставляете вещь или услугу', p: 'ИИ подскажет категорию и справедливую оценку в баллах. 1 балл = 1 ₽.' },
+  { icon: 'swap', h: 'Находите обмен', p: 'Прямой — или цепочка на 3–5 человек, если напрямую не сходится.' },
+  { icon: 'shield', h: 'Меняетесь под эскроу', p: 'Разница в цене замораживается в баллах и уходит продавцу после подтверждения.' },
+];
+
+function HomeView({ lots, lotsLoading = false, myLots = [], matches = [], query, setQuery, cat, setCat, city, setCity, onOpen, onChains, onCreate, authed = true, favIds, onToggleFav }) {
   const [cityOpen, setCityOpen] = React.useState(false);
-  const q = (query || '').toLowerCase();
+  const [cityQ, setCityQ] = React.useState('');
+  const cityBox = React.useRef(null);
+  const q = (query || '').trim();
   const items = lots.filter(l => {
     const matchesCat = cat === 'all' || normalizeCat(l.cat) === cat;
-    const matchesQ = !q || l.title.toLowerCase().includes(q);
     const lc = (l.city || '').toLowerCase();
     const matchesCity = city === 'all' || (city === REMOTE ? lc === REMOTE : (lc === city.toLowerCase() || lc === REMOTE || !lc));
-    return matchesCat && matchesQ && matchesCity;
+    return matchesCat && matchesQuery(l, q) && matchesCity;
   });
 
+  // Клик мимо выпадашки городов её закрывает: раньше она перекрывала ленту,
+  // пока не выберешь город.
+  React.useEffect(() => {
+    if (!cityOpen) return undefined;
+    const onDown = (e) => { if (cityBox.current && !cityBox.current.contains(e.target)) setCityOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [cityOpen]);
+
   const cityLabel = city === 'all' ? 'Везде' : (city === REMOTE ? 'Удалённо' : city);
+  // Городов 79 — прокручивать список до «Ярославля» дольше, чем набрать «яр».
+  const cityHits = CITIES.filter(c => c.toLowerCase().includes(cityQ.trim().toLowerCase()));
+  const pickCity = (c) => { setCity(c); setCityOpen(false); setCityQ(''); };
+
   return (
     <>
       <div className="web-hero">
         <div className="web-hero-inner">
-          <h1>Вдохновение для будущих обменов</h1>
-          <p>Обмен без денег: бартер-кредиты, эскроу и честные сделки по всей России.</p>
+          <span className="web-hero-kicker">Бартер-площадка</span>
+          <h1>Меняйтесь вещами и услугами — без денег</h1>
+          <p>Отдали вещь — получили баллы, потратили на что угодно. Эскроу держит доплату, а цепочки собирают обмен, который напрямую не сходится.</p>
           <form className="web-bigsearch" onSubmit={e => { e.preventDefault(); setCityOpen(false); }}>
-            <div className="web-bigsearch-seg" style={{ position: 'relative' }} onClick={() => setCityOpen(o => !o)}>
-              <b>Где</b><span className="web-city-label">{cityLabel}</span>
+            <div className="web-bigsearch-seg" style={{ position: 'relative' }} ref={cityBox}>
+              <label htmlFor="web-big-city" style={{ display: 'block' }}><b>Где</b></label>
+              <input
+                id="web-big-city"
+                value={cityOpen ? cityQ : cityLabel}
+                onChange={e => { setCityQ(e.target.value); setCityOpen(true); }}
+                onFocus={() => { setCityOpen(true); setCityQ(''); }}
+                placeholder="Город или «Везде»"
+                style={bigInputStyle}
+                autoComplete="off"
+              />
               <Icon name="chevD" size={14} color="var(--ink-2)" style={{ position: 'absolute', right: 14, bottom: 22 }} />
               {cityOpen && (
                 <div className="web-city-drop">
-                  <button type="button" className={'web-city-item' + (city === 'all' ? ' is-on' : '')} onClick={() => { setCity('all'); setCityOpen(false); }}><Icon name="map" size={15} color="var(--ink-3)" />Везде</button>
-                  <button type="button" className={'web-city-item' + (city === REMOTE ? ' is-on' : '')} onClick={() => { setCity(REMOTE); setCityOpen(false); }}><Icon name="spark" size={15} color="var(--ink-3)" />Удалённо</button>
+                  <button type="button" className={'web-city-item' + (city === 'all' ? ' is-on' : '')} onClick={() => pickCity('all')}><Icon name="map" size={15} color="var(--ink-3)" />Везде</button>
+                  <button type="button" className={'web-city-item' + (city === REMOTE ? ' is-on' : '')} onClick={() => pickCity(REMOTE)}><Icon name="spark" size={15} color="var(--ink-3)" />Удалённо</button>
                   <div className="web-city-sep" />
-                  {CITIES.map((c, i) => (
+                  {cityHits.length ? cityHits.map((c, i) => (
                     <React.Fragment key={c}>
-                      {i === VLADIMIR_REGION.length && <div className="web-city-sep" />}
-                      <button type="button" className={'web-city-item' + (city === c ? ' is-on' : '')} onClick={() => { setCity(c); setCityOpen(false); }}>{c}</button>
+                      {!cityQ.trim() && i === VLADIMIR_REGION.length && <div className="web-city-sep" />}
+                      <button type="button" className={'web-city-item' + (city === c ? ' is-on' : '')} onClick={() => pickCity(c)}>{c}</button>
                     </React.Fragment>
-                  ))}
+                  )) : (
+                    <span className="web-city-item" style={{ color: 'var(--ink-3)' }}>Такого города в списке нет</span>
+                  )}
                 </div>
               )}
             </div>
@@ -249,14 +305,34 @@ function HomeView({ lots, lotsLoading = false, myLots = [], matches = [], query,
                 id="web-big-q"
                 value={query || ''}
                 onChange={e => setQuery(e.target.value)}
-                placeholder="Техника, услуги, вещи…"
+                placeholder="Велосипед, ремонт, фотоаппарат…"
                 style={bigInputStyle}
               />
             </div>
-            <div className="web-bigsearch-seg"><b>Кто</b><span>Добавить участников</span></div>
+            {/* сегмент «Кто · Добавить участников» был декорацией из шаблона
+                бронирования: он ничего не делал и сбивал с толку */}
             <button type="submit" className="web-search-orb" style={{ width: 52, height: 52 }} aria-label="Найти"><Icon name="search" size={22} color="#fff" /></button>
           </form>
+          <div className="web-hero-cta">
+            <button className="btn btn-primary btn-lg" onClick={onCreate}>
+              <Icon name="plus" size={19} color="#fff" />{authed ? 'Разместить объявление' : 'Начать — разместить объявление'}
+            </button>
+            <a className="web-hero-link" href="#how" onClick={(e) => { e.preventDefault(); const el = document.getElementById('how'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>
+              Как это работает →
+            </a>
+          </div>
         </div>
+      </div>
+
+      <div id="how" className="web-container web-how">
+        {HOW_STEPS.map((s, i) => (
+          <div key={s.h} className="web-how-step">
+            <div className="web-how-icon"><Icon name={s.icon} size={20} color="var(--berry)" /></div>
+            <span className="web-how-num">Шаг {i + 1}</span>
+            <h3>{s.h}</h3>
+            <p>{s.p}</p>
+          </div>
+        ))}
       </div>
 
       <div className="web-container web-section-tight">

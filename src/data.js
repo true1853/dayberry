@@ -35,3 +35,19 @@ export function normalizeCat(cat) {
 export function catOf(cat) {
   return CAT[normalizeCat(cat)];
 }
+
+/**
+ * Поиск по объявлению. Раньше сверялось только название, поэтому запрос
+ * «велосипед» не находил лот «Стелс Навигатор 500» с велосипедом в описании —
+ * и поиск выглядел сломанным. Слова ищутся по всем полям карточки и все
+ * должны найтись: «детский велосипед» не должен вываливать всё детское.
+ */
+export function matchesQuery(lot, query) {
+  const words = String(query || '').toLowerCase().split(/[\s,]+/).filter(Boolean);
+  if (!words.length) return true;
+  const hay = [
+    lot.title, lot.desc, lot.wants, lot.condition, lot.city, lot.ownerCity,
+    catOf(lot.cat).label, catOf(lot.cat).hint,
+  ].filter(Boolean).join(' ').toLowerCase();
+  return words.every(w => hay.includes(w));
+}
