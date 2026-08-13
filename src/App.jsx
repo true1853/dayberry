@@ -892,6 +892,12 @@ export default function App() {
           await refreshWallet();
           const ch = await listChatsAction();
           setChats(ch || []);
+          // Инициатор сделки не получал вообще ничего: уведомление уходит
+          // владельцу лота, а тому, кто нажал «Предложить обмен», казалось,
+          // что ничего не произошло.
+          showSnack(credits > 0
+            ? `Предложение отправлено, ${credits} Б заморожены в эскроу. Ждём ответа владельца.`
+            : 'Предложение отправлено — ждём ответа владельца.');
           go('deal', { id: d.id });
         } catch (e) {
           console.error('createDealAction failed', e);

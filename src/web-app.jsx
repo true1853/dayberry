@@ -24,18 +24,20 @@ function fmtDate(iso) {
 }
 
 // ---------------- top nav ----------------
-function WebNav({ view, setView, user, avatar, query, setQuery, onLogout, onCreate, authed = true, onAuthRequired, chatUnread = 0, isAdmin = false, onSettings, onBroadcast }) {
+function WebNav({ view, setView, user, avatar, query, setQuery, onLogout, onCreate, authed = true, onAuthRequired, chatUnread = 0, unread = 0, onBell, isAdmin = false, onSettings, onBroadcast }) {
   const [menu, setMenu] = React.useState(false);
   const [q, setQ] = React.useState(query || '');
   const tabs = [
-    { id: 'home', label: 'Обмен' },
-    { id: 'chains', label: 'Цепочки' },
-    { id: 'favorites', label: 'Избранное' },
-    { id: 'deals', label: 'Сделки', badge: chatUnread },
+    { id: 'home', label: 'Обмен', title: 'Лента объявлений: вещи и услуги на обмен' },
+    // «Цепочки» без пояснения читаются как жаргон: подпись объясняет механику
+    { id: 'chains', label: 'Цепочки', title: 'Круговой обмен на 3–5 человек, когда прямой не сходится' },
+    { id: 'mylots', label: 'Мои объявления', title: 'Ваши товары и услуги', auth: true },
+    { id: 'favorites', label: 'Избранное', auth: true },
+    { id: 'deals', label: 'Сделки', badge: chatUnread, auth: true },
     // «Профиль» живёт в меню под аватаром — там его и ищут
   ];
   const goTab = (id) => {
-    if (!authed && (id === 'deals' || id === 'profile' || id === 'favorites')) {
+    if (!authed && (id === 'deals' || id === 'profile' || id === 'favorites' || id === 'mylots')) {
       onAuthRequired && onAuthRequired('Войдите, чтобы открыть этот раздел');
       return;
     }
@@ -50,46 +52,56 @@ function WebNav({ view, setView, user, avatar, query, setQuery, onLogout, onCrea
           <Logo size={30} />Дайбери
         </div>
         <div className="web-tabs">
-          {tabs.map(t => (
-            <button key={t.id} className={'web-tab' + (view === t.id ? ' is-on' : '')} onClick={() => goTab(t.id)}>
+          {tabs.filter(t => authed || !t.auth).map(t => (
+            <button key={t.id} className={'web-tab' + (view === t.id ? ' is-on' : '')} title={t.title || ''} onClick={() => goTab(t.id)}>
               {t.label}
               {t.badge ? <span className="web-new" style={{ background: 'var(--berry)', color: '#fff' }}>{t.badge > 99 ? '99+' : t.badge}</span> : null}
             </button>
           ))}
         </div>
-        <form className="web-search-pill" onSubmit={submit}>
+        {/* На главной большой поиск в шапке ленты — второе поле в навигации
+            только съедало ширину строки и заставляло её разъезжаться. */}
+        <form className="web-search-pill" onSubmit={submit} style={view === 'home' ? { display: 'none' } : undefined}>
           <Icon name="search" size={17} color="var(--ink-3)" />
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="Что ищете для обмена?" />
           <button type="submit" className="web-search-orb"><Icon name="search" size={17} color="#fff" /></button>
         </form>
         <div className="web-nav-right" style={{ position: 'relative' }}>
           <button className="btn btn-primary web-nav-create" onClick={onCreate}><Icon name="plus" size={18} color="#fff" />Разместить объявление</button>
-          <button className="web-account" onClick={() => setMenu(m => !m)}>
-            <div className="web-account-avatar">
-              {avatar ? <img src={avatar} alt="" /> : (user?.name || 'А').charAt(0)}
-            </div>
-            <Icon name="chevD" size={16} color="var(--ink-2)" />
-          </button>
-          {menu && (
+          {/* Гостю аватар с буквой врал, что он уже вошёл, а после регистрации
+              ничего не менялось. Теперь до входа тут кнопка, после — имя и фото. */}
+          {authed ? (
+            <>
+              <button className="web-bell" onClick={onBell} aria-label="Уведомления" title="Уведомления">
+                <Icon name="bell" size={19} color="var(--ink)" />
+                {unread ? <span className="web-bell-badge">{unread > 99 ? '99+' : unread}</span> : null}
+              </button>
+              <button className="web-account" onClick={() => setMenu(m => !m)} title={user?.name || 'Аккаунт'}>
+                <div className="web-account-avatar">
+                  {avatar ? <img src={avatar} alt="" /> : (user?.name || '?').charAt(0).toUpperCase()}
+                </div>
+                <span className="web-account-name">{(user?.name || '').split(' ')[0]}</span>
+                <Icon name="chevD" size={16} color="var(--ink-2)" />
+              </button>
+            </>
+          ) : (
+            <button className="btn btn-soft web-nav-login" onClick={() => onAuthRequired && onAuthRequired('Войдите или зарегистрируйтесь')}>
+              <Icon name="user" size={17} color="var(--ink)" />Войти
+            </button>
+          )}
+          {menu && authed && (
             <div className="web-drop">
-              {authed ? (
-                <>
-                  <button className="web-drop-item" onClick={() => goTab('profile')}><Icon name="user" size={17} color="var(--ink-2)" />Профиль</button>
-                  <button className="web-drop-item" onClick={() => goTab('deals')}><Icon name="chat" size={17} color="var(--ink-2)" />Мои сделки</button>
-                  <button className="web-drop-item" onClick={() => goTab('favorites')}><Icon name="heart" size={17} color="var(--ink-2)" />Избранное</button>
-                  <div className="web-drop-sep" />
-                  <button className="web-drop-item" onClick={() => { setMenu(false); onSettings && onSettings(); }}><Icon name="settings" size={17} color="var(--ink-2)" />Настройки</button>
-                  {isAdmin && (
-                    <button className="web-drop-item" onClick={() => { setMenu(false); onBroadcast && onBroadcast(); }}><Icon name="send" size={17} color="var(--ink-2)" />Рассылка</button>
-                  )}
-                  <div className="web-drop-sep" />
-                  <button className="web-drop-item danger" onClick={() => { setMenu(false); onLogout(); }}><Icon name="close" size={17} color="var(--berry-700)" />Выйти</button>
-                </>
-              ) : (
-                <button className="web-drop-item" onClick={() => { setMenu(false); onAuthRequired && onAuthRequired('Войдите, чтобы открыть сделки и кошелёк'); }}>
-                  <Icon name="user" size={17} color="var(--berry)" />Войти / Регистрация
-                </button>
+              <button className="web-drop-item" onClick={() => goTab('profile')}><Icon name="user" size={17} color="var(--ink-2)" />Профиль</button>
+              <button className="web-drop-item" onClick={() => goTab('mylots')}><Icon name="grid" size={17} color="var(--ink-2)" />Мои объявления</button>
+              <button className="web-drop-item" onClick={() => goTab('deals')}><Icon name="chat" size={17} color="var(--ink-2)" />Мои сделки</button>
+              <button className="web-drop-item" onClick={() => goTab('favorites')}><Icon name="heart" size={17} color="var(--ink-2)" />Избранное</button>
+              <div className="web-drop-sep" />
+              <button className="web-drop-item" onClick={() => { setMenu(false); onSettings && onSettings(); }}><Icon name="settings" size={17} color="var(--ink-2)" />Настройки</button>
+              {isAdmin && (
+                <button className="web-drop-item" onClick={() => { setMenu(false); onBroadcast && onBroadcast(); }}><Icon name="send" size={17} color="var(--ink-2)" />Рассылка</button>
               )}
+              <div className="web-drop-sep" />
+              <button className="web-drop-item danger" onClick={() => { setMenu(false); onLogout(); }}><Icon name="close" size={17} color="var(--berry-700)" />Выйти</button>
             </div>
           )}
         </div>
