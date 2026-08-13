@@ -611,8 +611,63 @@ function DealsView({ onBack, chats = [], deals = [], onOpenDeal, onOpenChat }) {
   );
 }
 
+// ---------------- my lots ----------------
+// Свои объявления жили только внутри профиля, под аватаром, без адреса —
+// «фиг найдёшь и непонятно». Теперь это отдельный раздел с архивом.
+function MyLotsView({ myLots = [], archivedLots = [], onOpen, onCreate, onEdit, onArchive, onRestore, onDelete }) {
+  const [tab, setTab] = React.useState('active');
+  const items = tab === 'active' ? myLots : archivedLots;
+  return (
+    <div className="web-container web-section">
+      <div className="web-head">
+        <h2>Мои объявления</h2>
+        <button className="btn btn-primary" style={{ padding: '11px 16px', fontSize: 14 }} onClick={onCreate}>
+          <Icon name="plus" size={17} color="#fff" />Разместить объявление
+        </button>
+      </div>
+      <div className="web-cats" style={{ marginBottom: 20 }}>
+        <button className={'web-cat' + (tab === 'active' ? ' is-on' : '')} onClick={() => setTab('active')}>
+          <Icon name="grid" size={15} color={tab === 'active' ? '#fff' : 'var(--ink-3)'} />В ленте · {myLots.length}
+        </button>
+        <button className={'web-cat' + (tab === 'archive' ? ' is-on' : '')} onClick={() => setTab('archive')}>
+          <Icon name="archive" size={15} color={tab === 'archive' ? '#fff' : 'var(--ink-3)'} />Архив · {archivedLots.length}
+        </button>
+      </div>
+      {items.length ? (
+        <div className="web-grid">
+          {items.map(L => (
+            <div key={L.id} className="col gap8">
+              <WebLotCard L={L} onOpen={onOpen} onEdit={tab === 'active' ? onEdit : undefined} />
+              <div className="row gap8">
+                {tab === 'active' ? (
+                  <button className="btn btn-soft grow" style={{ padding: '9px 12px', fontSize: 13.5 }} onClick={() => onArchive && onArchive(L)}>
+                    <Icon name="archive" size={15} color="var(--ink)" />В архив
+                  </button>
+                ) : (
+                  <button className="btn btn-soft grow" style={{ padding: '9px 12px', fontSize: 13.5 }} onClick={() => onRestore && onRestore(L)}>
+                    <Icon name="check" size={15} color="var(--ink)" />Вернуть в ленту
+                  </button>
+                )}
+                <button className="btn btn-soft" style={{ padding: '9px 12px', fontSize: 13.5, color: 'var(--berry-700)' }} onClick={() => onDelete && onDelete(L)}>
+                  <Icon name="close" size={15} color="var(--berry-700)" />Удалить
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="web-empty">
+          <Icon name="tag" size={36} color="var(--ink-3)" />
+          <span>{tab === 'active' ? 'Пока ни одного объявления — начните с того, что вам не нужно' : 'В архиве пусто'}</span>
+          {tab === 'active' && <button className="btn btn-primary" onClick={onCreate}><Icon name="plus" size={17} color="#fff" />Разместить объявление</button>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ---------------- profile ----------------
-function ProfileView({ user, profile, myLots, onOpenLot, onLogout, onProfileSaved, onWallet, onEditLot }) {
+function ProfileView({ user, profile, myLots, onOpenLot, onLogout, onProfileSaved, onWallet, onEditLot, onAllLots }) {
   const [editing, setEditing] = React.useState(false);
   const avatarRef = React.useRef(null);
   const name = (user && user.name) || '';
@@ -678,7 +733,7 @@ function ProfileView({ user, profile, myLots, onOpenLot, onLogout, onProfileSave
           </div>
 
           <div className="grow col" style={{ minWidth: 0 }}>
-            <div className="web-head"><h2>Объявления</h2><a href="#" onClick={e => e.preventDefault()}>Все →</a></div>
+            <div className="web-head"><h2>Объявления</h2><a href="#" onClick={e => { e.preventDefault(); onAllLots && onAllLots(); }}>Все, включая архив →</a></div>
             {myLots.length ? (
               <div className="web-grid">
                 {myLots.map(L => <WebLotCard key={L.id} L={L} onOpen={onOpenLot} onEdit={onEditLot} />)}
@@ -712,15 +767,28 @@ function ProfileView({ user, profile, myLots, onOpenLot, onLogout, onProfileSave
 }
 
 // ---------------- root ----------------
-export default function WebApp({ lots, lotsLoading = false, myLots, user, profile, onLogout, onProfileSaved, onOffer, onCreate, onEditLot, matches = [], chats = [], chains = [], deals = [], favorites = [], onToggleFav, onConfirmDeal, onCancelDeal, onRateDeal, onDisputeDeal, authed = true, onAuthRequired, onOwnerChat, onChatRead, onChatsChanged, chainProps = {}, chainActions = {}, chainBusy = false }) {
-  const [view, setView] = React.useState('home');
+export default function WebApp({ route = { tab: 'search', stack: [] }, onTab, go, back, lots, lotsLoading = false, myLots, archivedLots = [], onArchiveLot, onRestoreLot, onDeleteLot, notifications = { unread: 0 }, onOpenNotifications, user, profile, onLogout, onProfileSaved, onOffer, onCreate, onEditLot, matches = [], chats = [], chains = [], deals = [], favorites = [], onToggleFav, onConfirmDeal, onCancelDeal, onRateDeal, onDisputeDeal, authed = true, onAuthRequired, onOwnerChat, onChatRead, onChatsChanged, chainProps = {}, chainActions = {}, chainBusy = false }) {
+  // Экран десктопа выводится из адреса, а не из локального состояния: раньше
+  // «Назад» в браузере уносило с сайта целиком, ссылка на объявление никуда
+  // не вела, а переход из кода (`go('deal')` после создания сделки) на
+  // десктопе просто ничего не открывал — сделка создавалась молча.
+  const stack = route.stack || [];
+  const top = stack[stack.length - 1] || null;
+  const topName = top ? top.name : '';
+  const view = topName === 'lot' ? 'lot'
+    : (topName === 'chainfeed' || topName === 'chain') ? 'chains'
+    : route.tab === 'search' ? 'home'
+    : route.tab === 'wallet' ? 'profile'   // кошелька отдельным экраном на десктопе нет
+    : route.tab;
+  const setView = (id) => onTab && onTab(id === 'home' ? 'search' : id);
+  const selLot = topName === 'lot' ? top.params.lotId : null;
+  const selDeal = topName === 'deal' ? top.params.id : null;
+  const selChat = topName === 'chat' ? top.params.id : null;
+  const selChain = topName === 'chain' ? top.params.id : null;
+  const openLot = (id) => go && go('lot', { lotId: id });
   const [cat, setCat] = React.useState('all');
   const [city, setCity] = React.useState('all');
   const [query, setQuery] = React.useState('');
-  const [selLot, setSelLot] = React.useState(null);
-  const [selDeal, setSelDeal] = React.useState(null);
-  const [selChat, setSelChat] = React.useState(null);
-  const [selChain, setSelChain] = React.useState(null);
   const avatar = (profile && profile.avatar) || (user && user.avatar) || '';
   // Лента чужая — своих лотов в ней нет. Открытие карточки из профиля
   // искало только в ленте и отдавало пустой экран.
@@ -733,49 +801,43 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
   const chatUnread = React.useMemo(() => (chats || []).reduce((n, c) => n + (c.unread || 0), 0), [chats]);
   // Настроек на десктопе не было вовсе — ни смены пароля, ни уведомлений,
   // ни рассылки. Переиспользуем мобильные экраны в модалке, как чат и сделку.
-  const [settingsOpen, setSettingsOpen] = React.useState(false);
-  const [broadcastOpen, setBroadcastOpen] = React.useState(false);
-  const [disputesOpen, setDisputesOpen] = React.useState(false);
-  const [resetsOpen, setResetsOpen] = React.useState(false);
-  const [reportsOpen, setReportsOpen] = React.useState(false);
-  const [rulesOpen, setRulesOpen] = React.useState(false);
+  const settingsOpen = topName === 'settings';
+  const broadcastOpen = topName === 'broadcast';
+  const disputesOpen = topName === 'disputes';
+  const resetsOpen = topName === 'resets';
+  const reportsOpen = topName === 'reports';
+  const rulesOpen = topName === 'rules';
   const [isAdmin, setIsAdmin] = React.useState(false);
   React.useEffect(() => {
     if (!authed) { setIsAdmin(false); return; }
     broadcastInfoAction().then(r => setIsAdmin(!!r?.admin)).catch(() => {});
   }, [authed]);
 
-  const goHome = () => { setView('home'); setSelLot(null); setSelDeal(null); setSelChat(null); setSelChain(null); };
-
-  // Уход в другой раздел закрывает открытую сделку, чат или настройки:
-  // иначе новый раздел откроется под модалкой и человек его не увидит.
-  React.useEffect(() => {
-    setSelDeal(null);
-    setSelChat(null);
-    setSelChain(null);
-    setSettingsOpen(false);
-    setBroadcastOpen(false);
-    setDisputesOpen(false);
-    setResetsOpen(false);
-    setReportsOpen(false);
-    setRulesOpen(false);
-  }, [view]);
+  const goHome = () => setView('home');
+  const closeTop = () => (back ? back() : goHome());
   const dealOpen = selDeal ? deals.find(x => x.id === selDeal) || null : null;
 
   return (
     <div className="web">
-      <WebNav view={view} setView={setView} user={user} avatar={avatar} query={query} setQuery={setQuery} onLogout={onLogout} onCreate={onCreate} authed={authed} onAuthRequired={onAuthRequired} chatUnread={chatUnread} isAdmin={isAdmin} onSettings={() => setSettingsOpen(true)} onBroadcast={() => setBroadcastOpen(true)} />
+      <WebNav
+        view={view} setView={setView} user={user} avatar={avatar} query={query} setQuery={setQuery}
+        onLogout={onLogout} onCreate={onCreate} authed={authed} onAuthRequired={onAuthRequired}
+        chatUnread={chatUnread} isAdmin={isAdmin}
+        unread={notifications.unread || 0} onBell={onOpenNotifications}
+        onSettings={() => go && go('settings')} onBroadcast={() => go && go('broadcast')}
+      />
       <div className="web-body">
-        {view === 'home' && <HomeView lots={lots} lotsLoading={lotsLoading} myLots={myLots} matches={matches} query={query} setQuery={setQuery} cat={cat} setCat={setCat} city={city} setCity={setCity} onOpen={(id) => { setSelLot(id); setView('lot'); }} onChains={() => setView('chains')} favIds={favIds} onToggleFav={onToggleFav} />}
-        {view === 'favorites' && <FavoritesView lots={favorites} onBack={goHome} onOpen={(id) => { setSelLot(id); setView('lot'); }} onToggleFav={onToggleFav} />}
+        {view === 'home' && <HomeView lots={lots} lotsLoading={lotsLoading} myLots={myLots} matches={matches} query={query} setQuery={setQuery} cat={cat} setCat={setCat} city={city} setCity={setCity} onOpen={openLot} onChains={() => setView('chains')} onCreate={onCreate} authed={authed} favIds={favIds} onToggleFav={onToggleFav} />}
+        {view === 'favorites' && <FavoritesView lots={favorites} onBack={goHome} onOpen={openLot} onToggleFav={onToggleFav} />}
+        {view === 'mylots' && <MyLotsView myLots={myLots} archivedLots={archivedLots} onOpen={openLot} onCreate={onCreate} onEdit={onEditLot} onArchive={onArchiveLot} onRestore={onRestoreLot} onDelete={onDeleteLot} />}
         {view === 'lot' && (selected
-          ? <LotView L={selected} isMine={selectedIsMine} lots={lots} onBack={goHome} onOffer={onOffer} onOwnerChat={onOwnerChat} onEdit={onEditLot} onOpenLot={(id) => { setSelLot(id); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />
+          ? <LotView L={selected} isMine={selectedIsMine} lots={lots} onBack={closeTop} onOffer={onOffer} onOwnerChat={onOwnerChat} onEdit={onEditLot} onOpenLot={(id) => { openLot(id); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />
           : <div className="web-container web-section"><div className="web-empty"><Icon name="tag" size={36} color="var(--ink-3)" /><span>Объявление не найдено — возможно, оно снято с публикации</span><button className="btn btn-soft" onClick={goHome}>На главную</button></div></div>)}
-        {view === 'chains' && <ChainsView onBack={goHome} chains={chains} chainProps={chainProps} onOpenChain={(id) => setSelChain(id)} />}
-        {view === 'deals' && <DealsView onBack={goHome} chats={chats} deals={deals} onOpenDeal={(id) => setSelDeal(id)} onOpenChat={(id) => setSelChat(id)} />}
-        {view === 'profile' && <ProfileView user={user} profile={profile} myLots={myLots} onOpenLot={(id) => { setSelLot(id); setView('lot'); }} onLogout={onLogout} onProfileSaved={onProfileSaved} onWallet={goHome} onEditLot={onEditLot} />}
+        {view === 'chains' && <ChainsView onBack={goHome} chains={chains} chainProps={chainProps} onOpenChain={(id) => go && go('chain', { id })} />}
+        {view === 'deals' && <DealsView onBack={goHome} chats={chats} deals={deals} onOpenDeal={(id) => go && go('deal', { id })} onOpenChat={(id) => go && go('chat', { id })} />}
+        {view === 'profile' && <ProfileView user={user} profile={profile} myLots={myLots} onOpenLot={openLot} onLogout={onLogout} onProfileSaved={onProfileSaved} onWallet={goHome} onEditLot={onEditLot} onAllLots={() => setView('mylots')} />}
       </div>
-      <WebFooter />
+      <WebFooter authed={authed} onTab={setView} onCreate={onCreate} onRules={() => go && go('rules')} onSettings={() => go && go('settings')} />
 
       {settingsOpen && (
         <div className="web-modal">
@@ -784,15 +846,15 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
             <SettingsScreen
               user={user}
               profile={profile}
-              onBack={() => setSettingsOpen(false)}
-              onLogout={() => { setSettingsOpen(false); onLogout(); }}
+              onBack={closeTop}
+              onLogout={() => { closeTop(); onLogout(); }}
               onProfileSaved={onProfileSaved}
-              onGoWallet={() => setSettingsOpen(false)}
-              onBroadcast={() => { setSettingsOpen(false); setBroadcastOpen(true); }}
-              onDisputes={() => { setSettingsOpen(false); setDisputesOpen(true); }}
-              onResets={() => { setSettingsOpen(false); setResetsOpen(true); }}
-              onReports={() => { setSettingsOpen(false); setReportsOpen(true); }}
-              onRules={() => { setSettingsOpen(false); setRulesOpen(true); }}
+              onGoWallet={closeTop}
+              onBroadcast={() => go && go('broadcast')}
+              onDisputes={() => go && go('disputes')}
+              onResets={() => go && go('resets')}
+              onReports={() => go && go('reports')}
+              onRules={() => go && go('rules')}
             />
           </div>
         </div>
@@ -802,7 +864,7 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
         <div className="web-modal">
           <div className="app">
             <div className="safe-top" />
-            <RulesScreen onBack={() => setRulesOpen(false)} />
+            <RulesScreen onBack={closeTop} />
           </div>
         </div>
       )}
@@ -811,7 +873,7 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
         <div className="web-modal">
           <div className="app">
             <div className="safe-top" />
-            <ReportsScreen onBack={() => setReportsOpen(false)} />
+            <ReportsScreen onBack={closeTop} />
           </div>
         </div>
       )}
@@ -820,7 +882,7 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
         <div className="web-modal">
           <div className="app">
             <div className="safe-top" />
-            <ResetsScreen onBack={() => setResetsOpen(false)} />
+            <ResetsScreen onBack={closeTop} />
           </div>
         </div>
       )}
@@ -829,7 +891,7 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
         <div className="web-modal">
           <div className="app">
             <div className="safe-top" />
-            <DisputesScreen onBack={() => setDisputesOpen(false)} />
+            <DisputesScreen onBack={closeTop} />
           </div>
         </div>
       )}
@@ -838,7 +900,7 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
         <div className="web-modal">
           <div className="app">
             <div className="safe-top" />
-            <BroadcastScreen onBack={() => setBroadcastOpen(false)} />
+            <BroadcastScreen onBack={closeTop} />
           </div>
         </div>
       )}
@@ -849,11 +911,11 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
             <div className="safe-top" />
             <DealStatus
               deal={dealOpen}
-              onBack={() => setSelDeal(null)}
+              onBack={closeTop}
               onConfirm={() => onConfirmDeal(dealOpen)}
-              onCancel={async () => { const ok = await onCancelDeal(dealOpen); if (ok) setSelDeal(null); }}
-              onChat={() => { const c = chats.find(x => x.deal && x.deal.id === selDeal); if (c) { setSelChat(c.id); setSelDeal(null); } }}
-              onDone={() => setSelDeal(null)}
+              onCancel={async () => { const ok = await onCancelDeal(dealOpen); if (ok) closeTop(); }}
+              onChat={() => { const c = chats.find(x => x.deal && x.deal.id === selDeal); if (c && go) go('chat', { id: c.id }); }}
+              onDone={closeTop}
               onRate={onRateDeal}
               onDispute={(text) => onDisputeDeal && onDisputeDeal(dealOpen, text)}
             />
@@ -864,8 +926,8 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
           <ChatThread
             chatId={selChat}
             onRead={onChatRead}
-            onBack={() => { setSelChat(null); onChatsChanged && onChatsChanged(); }}
-            onOpenDeal={() => { const c = chats.find(x => x.id === selChat); if (c && c.deal) setSelDeal(c.deal.id); }}
+            onBack={() => { closeTop(); onChatsChanged && onChatsChanged(); }}
+            onOpenDeal={() => { const c = chats.find(x => x.id === selChat); if (c && c.deal && go) go('deal', { id: c.deal.id }); }}
           />
         </div>
       ) : selChain ? (
@@ -876,15 +938,15 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
               chainId={selChain}
               chains={chains}
               busy={chainBusy}
-              onBack={() => setSelChain(null)}
+              onBack={closeTop}
               onStart={chainActions.onStart}
               onRespond={async (ch, accept) => {
                 await chainActions.onRespond?.(ch, accept);
-                if (!accept) setSelChain(null);
+                if (!accept) closeTop();
               }}
               onSent={chainActions.onSent}
               onReceived={chainActions.onReceived}
-              onOpenChat={(chatId) => { setSelChain(null); setSelChat(chatId); }}
+              onOpenChat={(chatId) => go && go('chat', { id: chatId })}
             />
           </div>
         </div>

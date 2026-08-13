@@ -812,9 +812,19 @@ export default function App() {
     <>
       {isDesktop ? (
         <WebApp
+          route={route}
+          onTab={guardedTab}
+          go={go}
+          back={back}
           lots={lots}
           lotsLoading={lotsLoading}
           myLots={myLots}
+          archivedLots={archivedLots}
+          onArchiveLot={handleArchiveLot}
+          onRestoreLot={handleRestoreLot}
+          onDeleteLot={handleDeleteLot}
+          notifications={notifications}
+          onOpenNotifications={openNotifications}
           user={currentUser}
           profile={profile}
           authed={authed}
