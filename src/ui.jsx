@@ -427,6 +427,21 @@ export function TabBar({ tab, setTab, unread }) {
   );
 }
 
+/**
+ * Главное действие поверх ленты. Раньше разместить объявление на телефоне
+ * можно было только через вкладку «Объявления» → «Добавить»: с первого экрана
+ * приложение ничего не предлагало сделать, а гостю — тем более. Гостю здесь
+ * кнопка регистрации: без аккаунта всё равно ничего не выйдет.
+ */
+export function FabCreate({ onClick, authed = true }) {
+  return (
+    <button className={'fab-create' + (authed ? '' : ' is-guest')} onClick={onClick}>
+      <Icon name={authed ? 'plus' : 'user'} size={20} color="#fff" />
+      {authed ? 'Разместить объявление' : 'Зарегистрироваться'}
+    </button>
+  );
+}
+
 // ---- bottom sheet ----
 export function Sheet({ open, onClose, children, title }) {
   if (!open) return null;

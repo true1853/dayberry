@@ -3,6 +3,7 @@
 import React from 'react';
 import { bootstrapAction, loadAuthedDataAction, logoutAction, createLotAction, updateLotAction, getWalletAction, listDealsAction, listChatsAction, getMatchesAction, createDealAction, confirmReceiptAction, confirmPartnerAction, cancelDealAction, createReviewAction, openDisputeAction, topUpAction, startChatAction, getDealChatAction, toggleFavoriteAction, listChainsAction, refreshChainsAction, startChainAction, respondChainAction, confirmChainSentAction, confirmChainReceivedAction, listNotificationsAction, markNotificationsReadAction, getArchivedLots, archiveLotAction, restoreLotAction, deleteLotAction } from './server/actions.js';
 import { FeedList, FeedSwipe, CatRow, FavoritesScreen } from './screen-feed.jsx';
+import { matchesQuery } from './data.js';
 import { FeedChain, ChainDetail } from './screen-chain.jsx';
 import { NotificationsSheet } from './screen-notifications.jsx';
 import { LotDetail, OfferSheet } from './screen-lot.jsx';
@@ -15,7 +16,7 @@ import { ProfileScreen, SettingsScreen, MyLotsScreen, BroadcastScreen, DisputesS
 import WebApp from './web-app.jsx';
 import { parseRoute, tabPath, screenPath, readPath } from './router.js';
 
-import { Logo, AppBar, IconBtn, TabBar, SplashScreen, PullToRefresh } from './ui.jsx';
+import { Logo, AppBar, IconBtn, TabBar, SplashScreen, PullToRefresh, FabCreate } from './ui.jsx';
 import { Icon } from './icons.jsx';
 import { useTweaks } from './tweaks-panel.jsx';
 import { registerServiceWorker, useInstallPrompt, InstallBanner } from './pwa.jsx';
@@ -612,7 +613,7 @@ export default function App() {
     if (tab === 'search') {
       return (
         <HomeTab
-          t={t} go={go} tab={tab} setTab={guardedTab} onCreate={onCreate}
+          t={t} go={go} tab={tab} setTab={guardedTab} onCreate={onCreate} authed={authed}
           lots={lots} lotsLoading={lotsLoading} myLots={myLots} matches={matches}
           chains={chains} favIds={favIds} onToggleFav={toggleFav}
           unread={notifications.unread || 0}
@@ -979,11 +980,11 @@ const VIEW_MODES = [
 ];
 
 // unread — колокольчик уведомлений, chatUnread — бейдж на вкладке сообщений
-function HomeTab({ t, go, tab, setTab, onCreate, lots, lotsLoading, matches, chains, myLots, favIds, onToggleFav, unread = 0, chatUnread = 0, onBell, onRefresh, chainProps = {} }) {
+function HomeTab({ t, go, tab, setTab, onCreate, authed = true, lots, lotsLoading, matches, chains, myLots, favIds, onToggleFav, unread = 0, chatUnread = 0, onBell, onRefresh, chainProps = {} }) {
   const [cat, setCat] = React.useState('all');
   const [view, setView] = React.useState(t.mechanic || 'list');
   const [q, setQ] = React.useState('');
-  const shown = lots.filter(l => (!q.trim() || l.title.toLowerCase().includes(q.trim().toLowerCase())));
+  const shown = lots.filter(l => matchesQuery(l, q));
 
   return (
     <div className="app">
@@ -1017,7 +1018,11 @@ function HomeTab({ t, go, tab, setTab, onCreate, lots, lotsLoading, matches, cha
         {view === 'list' && <FeedList cat={cat} lots={shown} loading={lotsLoading} matches={matches} hints={t.matchHints} myLots={myLots} myLot={myLots && myLots[0]} onOpen={(id) => go('lot', { lotId: id })} onChains={() => setView('chain')} favIds={favIds} onToggleFav={onToggleFav} />}
         {view === 'swipe' && <FeedSwipe cat={cat} lots={shown} myLot={myLots && myLots[0]} onOpen={(id) => go('lot', { lotId: id })} />}
         {view === 'chain' && <FeedChain chains={chains} onOpenChain={(id) => go('chain', { id })} {...chainProps} />}
+        {/* место под кнопку «Разместить объявление»: без него она накрывает
+            последний ряд карточек */}
+        <div style={{ height: 64 }} aria-hidden="true" />
       </PullToRefresh>
+      <FabCreate onClick={onCreate} authed={authed} />
       <TabBar tab={tab} setTab={setTab} onCreate={onCreate} unread={chatUnread} />
     </div>
   );

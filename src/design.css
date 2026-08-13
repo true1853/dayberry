@@ -221,6 +221,23 @@ button { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 }
 .tab.is-on { color: var(--berry); }
 .tab-label { font-size: 10.5px; font-weight: 600; letter-spacing: -0.01em; }
+/* главное действие над таббаром */
+.fab-create {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(max(env(safe-area-inset-bottom, 0px), 8px) + 62px);
+  z-index: 45;
+  display: flex; align-items: center; gap: 8px;
+  padding: 13px 20px; border: none; border-radius: 999px;
+  background: var(--berry); color: #fff; cursor: pointer;
+  font-family: var(--font); font-size: 14.5px; font-weight: 700; letter-spacing: -0.01em;
+  box-shadow: 0 8px 22px rgba(75,43,201,0.34);
+  white-space: nowrap;
+}
+.fab-create:active { transform: translateX(-50%) scale(0.97); }
+.fab-create.is-guest { background: var(--berry-700); }
+
 .tab-fab {
   width: 50px; height: 38px; border-radius: 13px; background: var(--berry);
   display: flex; align-items: center; justify-content: center; color: #fff;
