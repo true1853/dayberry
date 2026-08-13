@@ -124,13 +124,48 @@ function WishStep({ value, onChange, onSubmit, onSkip, saving }) {
   );
 }
 
-export function Onboarding({ onDone, initialWants = '' }) {
-  const [i, setI] = React.useState(0);
+// Приветствие после регистрации. Раньше на месте отправки формы сразу
+// появлялся слайд «Проблема: прямой бартер не сходится» — человек не понимал,
+// зарегистрировался ли он вообще и что это за экран.
+function WelcomeStep({ name, steps, onStart, onSkip }) {
+  return (
+    <>
+      <div className="grow col" style={{ justifyContent: 'center', padding: '0 26px', gap: 26 }}>
+        <div className="col gap12 fade-in" style={{ alignItems: 'center', textAlign: 'center' }}>
+          <div className="avatar" style={{ width: 72, height: 72, background: 'var(--berry-50)' }}>
+            <Icon name="checkCircle" size={34} color="var(--berry)" />
+          </div>
+          <span className="tag" style={{ background: 'var(--ok-soft, var(--berry-50))', color: 'var(--berry-700)' }}>Аккаунт создан</span>
+          <span className="h1" style={{ fontSize: 30, lineHeight: 1.12 }}>
+            {name ? `С регистрацией, ${name}!` : 'С регистрацией!'}
+          </span>
+          <span className="body" style={{ color: 'var(--ink-2)', fontSize: 16, lineHeight: 1.5 }}>
+            Вы на Дайбери — здесь меняются вещами и услугами без денег.
+            Дальше {steps} коротких экрана про то, как это устроено: меньше минуты.
+          </span>
+        </div>
+      </div>
+      <div className="col gap10" style={{ padding: '0 26px calc(28px + env(safe-area-inset-bottom))' }}>
+        <button className="btn btn-primary btn-block btn-lg" onClick={onStart}>
+          Показать, как это работает<Icon name="arrowR" size={20} color="#fff" />
+        </button>
+        <button className="cap" style={{ border: 'none', background: 'none', color: 'var(--ink-3)', cursor: 'pointer', padding: 6 }} onClick={onSkip}>
+          Сразу к объявлениям
+        </button>
+      </div>
+    </>
+  );
+}
+
+export function Onboarding({ onDone, initialWants = '', welcomeName = null }) {
+  // Шаг −1 — приветствие; показываем только тем, кто только что зарегистрировался.
+  const [i, setI] = React.useState(welcomeName === null ? 0 : -1);
   const [wants, setWants] = React.useState(initialWants || '');
   const [saving, setSaving] = React.useState(false);
+  const welcomeStep = i < 0;
   const wishStep = i === SLIDES.length;   // шаг вишлиста идёт после слайдов
   const last = i === SLIDES.length - 1;
-  const s = SLIDES[Math.min(i, SLIDES.length - 1)];
+  const s = SLIDES[Math.min(Math.max(i, 0), SLIDES.length - 1)];
 
   const finish = async () => {
     const list = parseWishes(wants);
@@ -150,10 +185,17 @@ export function Onboarding({ onDone, initialWants = '' }) {
       <div className="safe-top" />
       <div className="row" style={{ justifyContent: 'space-between', padding: '4px 18px 0' }}>
         <span className="row gap8"><Logo size={26} /><span className="h3">Дайбери</span></span>
-        <button className="cap" style={{ border: 'none', background: 'none', color: 'var(--ink-3)', cursor: 'pointer' }} onClick={() => onDone()}>Пропустить</button>
+        <span className="row gap10" style={{ alignItems: 'center' }}>
+          {/* «Непонятно, что начался онбординг» — счётчик показывает, что
+              это конечная последовательность экранов, а не сам сервис */}
+          {!welcomeStep && <span className="cap">Знакомство · {Math.min(i + 1, SLIDES.length + 1)} из {SLIDES.length + 1}</span>}
+          <button className="cap" style={{ border: 'none', background: 'none', color: 'var(--ink-3)', cursor: 'pointer' }} onClick={() => onDone()}>Пропустить</button>
+        </span>
       </div>
 
-      {wishStep ? (
+      {welcomeStep ? (
+        <WelcomeStep name={welcomeName} steps={SLIDES.length} onStart={() => setI(0)} onSkip={() => onDone()} />
+      ) : wishStep ? (
         <WishStep value={wants} onChange={setWants} onSubmit={finish} onSkip={() => onDone()} saving={saving} />
       ) : (
         <>

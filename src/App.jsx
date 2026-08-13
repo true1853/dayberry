@@ -74,6 +74,7 @@ export default function App() {
   const [path, setPath] = React.useState(readPath);
   const publishingRef = React.useRef(false);
   const [authOpen, setAuthOpen] = React.useState(false);
+  const [justRegistered, setJustRegistered] = React.useState(false);
   const [authMsg, setAuthMsg] = React.useState('');
   const pendingActionRef = React.useRef(null);
   const [offerLot, setOfferLot] = React.useState(null);
@@ -350,10 +351,13 @@ export default function App() {
     return () => { cancelled = true; };
   }, []);
 
-  const handleAuth = async (user) => {
+  const handleAuth = async (user, opts = {}) => {
     setCurrentUser(user);
     setAuthed(true);
     setAuthOpen(false);
+    // Приветственный экран показываем только что зарегистрировавшимся: тому,
+    // кто просто вошёл с нового устройства, «С регистрацией!» — враньё.
+    if (opts.registered) setJustRegistered(true);
     // Цели Метрики: без них в отчётах видно только «ходили по страницам»,
     // а нам нужна воронка до реального обмена.
     trackGoal('auth');
@@ -937,8 +941,10 @@ export default function App() {
       <div className="app-root">
         <Onboarding
           initialWants={(currentUser && currentUser.wants) || ''}
+          welcomeName={justRegistered ? ((currentUser && currentUser.name) || '').split(' ')[0] : null}
           onDone={(wants) => {
             setOnboarded(true);
+            setJustRegistered(false);
             if (typeof wants === 'string') {
               setCurrentUser(u => (u ? { ...u, wants } : u));
               setProfile(p => (p ? { ...p, wants } : p));
