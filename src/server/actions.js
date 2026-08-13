@@ -516,7 +516,7 @@ export async function createLotAction(input) {
       photoUrl: mainUrl || photoList[0] || '',
       wants: wants.trim(),
       desc: desc || '',
-      condition: condition || (kind === 'service' ? 'Услуга' : 'Новое или Б/У'),
+      condition: condition || (kind === 'service' ? 'Услуга' : 'Хорошее'),
       posted: 'только что',
       sortOrder: 0,
       ...(photoList.length ? {

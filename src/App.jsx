@@ -493,7 +493,14 @@ export default function App() {
       }
       setCreating(false);
       setEditingLot(null);
-      resetTo('home');
+      // «Ни уведомления, ни бросило в окно с моими заявками — ощущение, что
+      // глюкануло». Ведём туда, где объявление видно, и говорим, что вышло.
+      if (lotData && lotData.id) {
+        showSnack('Изменения сохранены');
+      } else {
+        showSnack('Объявление опубликовано — оно уже в ленте');
+      }
+      navigate(tabPath('mylots'));
     } catch (e) {
       console.error('publish failed', e);
       if (!(e && e.message && e.message.indexOf('Не удалось сохранить объявление') === 0)) {

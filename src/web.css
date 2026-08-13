@@ -419,6 +419,22 @@
 /* Вход и регистрация: на десктопе экран растягивался во всю ширину монитора —
    поля по 1400px и километр пустоты между подписью и значением. Собираем в
    карточку по центру. */
+/* Форма объявления на десктопе тоже растягивалась во всю ширину монитора:
+   поле «Название» на 1400px и чипы категорий, разъехавшиеся в одну строку
+   через весь экран. Собираем в колонку, как остальные модалки. */
+@media (min-width: 1128px) {
+  .overlay-layer > .app:not(.auth-card) {
+    max-width: 760px;
+    margin: 0 auto;
+    border-left: 1px solid var(--line-2);
+    border-right: 1px solid var(--line-2);
+    box-shadow: var(--sh-3);
+  }
+  .overlay-layer:has(> .app:not(.auth-card)) {
+    background: rgba(28, 12, 18, 0.35);
+  }
+}
+
 @media (min-width: 1128px) {
   .overlay-layer:has(> .auth-card) {
     background: rgba(28, 12, 18, 0.45);
