@@ -348,7 +348,9 @@ function HomeView({ lots, lotsLoading = false, myLots = [], matches = [], query,
       <div className="web-container web-section">
         <div className="web-head">
           <h2>{q ? `Результаты по «${query}»` : cat === 'all' ? (city === 'all' ? 'Свежие объявления' : `Обмены · ${cityLabel}`) : CATS.find(c => c[0] === cat)?.[1]}</h2>
-          <a href="#" onClick={e => e.preventDefault()}>Все объявления →</a>
+          {(q || cat !== 'all' || city !== 'all') && (
+            <a href="#" onClick={e => { e.preventDefault(); setQuery(''); setCat('all'); setCity('all'); }}>Сбросить фильтры →</a>
+          )}
         </div>
         {lotsLoading && !items.length ? (
           <div className="web-grid">
