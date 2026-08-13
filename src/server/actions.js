@@ -948,19 +948,25 @@ const WALLET_TX_LIMIT = 50;
 
 async function walletOf(user) {
   if (!user) return null;
-  const [txs, heldSum, delta] = await Promise.all([
+  const [txs, heldSum, earned] = await Promise.all([
     prisma.transaction.findMany({ where: { userId: user.id }, orderBy: { createdAt: 'desc' }, take: WALLET_TX_LIMIT }),
     prisma.transaction.aggregate({ where: { userId: user.id, status: 'held' }, _sum: { amt: true } }),
     prisma.transaction.aggregate({
-      where: { userId: user.id, createdAt: { gte: new Date(Date.now() - 30 * 86400000) }, status: 'done' },
+      where: {
+        userId: user.id,
+        createdAt: { gte: new Date(Date.now() - 30 * 86400000) },
+        status: 'done',
+        kind: { in: ['earn', 'bonus'] },
+      },
       _sum: { amt: true },
     }),
   ]);
   return {
     balance: user.balance,
     escrow: heldSum._sum.amt || 0,
-    delta30: delta._sum.amt || 0,
-    demurrageInDays: 164,
+    // Только поступления: раньше сюда попадал и escrow-in, то есть
+    // потраченное складывалось с полученным и показывалось со знаком плюс.
+    earned30: earned._sum.amt || 0,
     tx: txs.map(t => ({
       id: t.id,
       kind: t.kind,

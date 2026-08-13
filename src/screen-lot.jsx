@@ -146,7 +146,7 @@ export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, onOpenLot, onEd
 
       <div className="px col gap16" style={{ paddingTop: 16, paddingBottom: 20 }}>
         <div className="col gap8">
-          <div className="row gap6"><CatTag cat={L.cat} /><span className="tag" style={{ background: 'var(--line-2)', color: 'var(--ink-2)' }}>{L.condition}</span>{L.hot && <span className="tag" style={{ background: 'var(--berry-50)', color: 'var(--berry)' }}><Icon name="flame" size={12} color="var(--berry)" />Хит</span>}</div>
+          <div className="row gap6"><CatTag cat={L.cat} /><span className="tag" style={{ background: 'var(--line-2)', color: 'var(--ink-2)' }}>{L.condition}</span></div>
           <span className="h2">{L.title}</span>
           <div className="row gap10 cap"><span className="row gap4"><Icon name="eye" size={14} color="var(--ink-3)" />{views ?? L.views ?? 0}</span><span className="row gap4"><Icon name="map" size={14} color="var(--ink-3)" />{owner.city}</span><span title={fmtDateTime(L.createdAt)}>{timeAgo(L.createdAt) || L.posted}</span></div>
         </div>
@@ -318,9 +318,20 @@ export function OfferSheet({ L, myLots = [], balance = 0, open, onClose, onConfi
   }, [L, MY && MY.value, myLots]);
   if (!L) return null;
   const balanced = (MY ? MY.value : 0) + credits;
-  const ok = Math.abs(balanced - L.value) <= L.value * 0.12;
+  const gap = L.value - balanced;                 // + не хватает, − перебор
+  const tolerance = Math.round(L.value * 0.12);
+  const ok = Math.abs(gap) <= tolerance;
   const enough = credits <= balance;
   const canConfirm = enough && ok;
+  // «Разница великовата» — оценка вместо факта: человеку нужно знать, сколько
+  // именно добавить или убрать, а не как мы относимся к его предложению.
+  const balanceNote = !enough
+    ? `Не хватает ${fmt(credits - balance)} Б на балансе`
+    : ok
+      ? 'Обмен равноценный'
+      : gap > 0
+        ? `Не хватает ${fmt(gap)} Б до равноценного обмена`
+        : `Переплата ${fmt(-gap)} Б — можно уменьшить`;
 
   return (
     <Sheet open={open} onClose={onClose} title="Предложить обмен">
@@ -370,7 +381,7 @@ export function OfferSheet({ L, myLots = [], balance = 0, open, onClose, onConfi
         </div>
 
         <div className="card" style={{ padding: 13, background: 'var(--berry-50)' }}>
-          <div className="row gap8" style={{ marginBottom: 8 }}><AIBadge>AI предлагает</AIBadge><span className="grow" /><span className="sub">расчёт доплаты баллами</span></div>
+          <div className="row gap8" style={{ marginBottom: 8 }}><AIBadge>AI-оценка</AIBadge><span className="grow" /><span className="sub">разницу можно изменить</span></div>
           <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
             <span className="title">Доплата баллами</span>
             <div className="row gap8" style={{ alignItems: 'center' }}>
@@ -381,8 +392,8 @@ export function OfferSheet({ L, myLots = [], balance = 0, open, onClose, onConfi
           </div>
           <div className="row" style={{ justifyContent: 'space-between', marginTop: 10 }}>
             <span className="cap">Ваш баланс: <b className="amount">{fmt(balance)} Б</b></span>
-            <span className="cap" style={{ color: enough ? (ok ? 'var(--ok)' : 'var(--warn)') : 'var(--warn)' }}>
-              {!enough ? 'недостаточно баллов' : (ok ? '✓ обмен сбалансирован' : 'разница великовата')}
+            <span className="cap" style={{ color: enough && ok ? 'var(--ok)' : 'var(--warn)', textAlign: 'right' }}>
+              {balanceNote}
             </span>
           </div>
         </div>
@@ -395,7 +406,7 @@ export function OfferSheet({ L, myLots = [], balance = 0, open, onClose, onConfi
         <button className="btn btn-primary btn-block btn-lg" disabled={!canConfirm} onClick={() => onConfirm(L, credits, MY ? MY.id : null)} style={{ opacity: canConfirm ? 1 : 0.5 }}>
           <Icon name="shield" size={20} color="#fff" />Открыть сделку · заморозить <Credit n={credits} size={15} coin={14} color="#fff" />
         </button>
-        {!enough && <span className="cap" style={{ textAlign: 'center', color: 'var(--warn)' }}>Пополните кошелёк, чтобы заблокировать доплату</span>}
+        {!enough && <span className="cap" style={{ textAlign: 'center', color: 'var(--warn)' }}>Пополните кошелёк — доплата замораживается сразу при открытии сделки</span>}
       </div>
     </Sheet>
   );

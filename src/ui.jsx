@@ -235,7 +235,7 @@ export function LotCard({ lot, onClick, compact, fav = false, onToggleFav, onEdi
         <Photo label={lot.photo} url={lot.photoUrl} cat={lot.cat} style={{ aspectRatio: compact ? '1/1' : '4/3' }} />
         <div className="row gap6" style={{ position: 'absolute', top: 10, left: 10, maxWidth: 'calc(100% - 60px)' }}>
           <span className="tag ellipsis" style={{ background: 'rgba(255,255,255,0.92)', color: catOf(lot.cat).color, backdropFilter: 'blur(6px)' }}>{catOf(lot.cat).label}</span>
-          {lot.hot && <span className="tag" style={{ background: 'rgba(255,255,255,0.9)', color: 'var(--berry)', backdropFilter: 'blur(6px)' }}><Icon name="flame" size={12} color="var(--berry)" />Хит</span>}
+          
         </div>
         {onEdit && (
           <button

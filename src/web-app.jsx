@@ -43,7 +43,7 @@ function WebNav({ view, setView, user, avatar, query, setQuery, onLogout, onCrea
   const tabs = [
     { id: 'home', label: 'Обмен', title: 'Лента объявлений: вещи и услуги на обмен' },
     // «Цепочки» без пояснения читаются как жаргон: подпись объясняет механику
-    { id: 'chains', label: 'Цепочки', title: 'Круговой обмен на 3–5 человек, когда прямой не сходится' },
+    { id: 'chains', label: 'Цепочки', title: 'Круговой обмен на троих, когда прямой не сходится' },
     { id: 'mylots', label: 'Мои объявления', title: 'Ваши товары и услуги', auth: true },
     { id: 'favorites', label: 'Избранное', auth: true },
     { id: 'deals', label: 'Сделки', badge: chatUnread, auth: true },
@@ -184,9 +184,9 @@ function WebLotCard({ L, onOpen, onEdit, fav = false, onToggleFav }) {
         {/* рамка карточки квадратная — обёртка фото должна её заполнить,
             иначе снизу остаётся полоса фона под широким кадром */}
         <Photo label={L.photo} url={L.photoUrl} cat={L.cat} style={{ position: 'absolute', inset: 0 }} />
-        {L.hot
-          ? <span className="web-lot-badge"><Icon name="flame" size={11} color="var(--berry)" /> Хит</span>
-          : <span className="web-lot-badge" style={{ color: catOf(L.cat).color }}>{catOf(L.cat).label}</span>}
+        {/* «Хит» убран: флаг hot никто не выставляет — ни код, ни человек.
+            Вернуть, когда появится критерий (просмотры, избранное, спрос). */}
+        <span className="web-lot-badge" style={{ color: catOf(L.cat).color }}>{catOf(L.cat).label}</span>
         {onEdit && <button className="web-lot-heart" title="Редактировать" onClick={(e) => { e.stopPropagation(); onEdit(L); }}><Icon name="edit" size={15} color="var(--ink-2)" /></button>}
         {onToggleFav && (
           <button
@@ -233,7 +233,7 @@ function WebLotSkeleton() {
 // «что это вообще за сайт»: бренда, который объясняет себя сам, у нас нет.
 const HOW_STEPS = [
   { icon: 'plus', h: 'Выставляете вещь или услугу', p: 'ИИ подскажет категорию и справедливую оценку в баллах. 1 балл = 1 ₽.' },
-  { icon: 'swap', h: 'Находите обмен', p: 'Прямой — или цепочка на 3–5 человек, если напрямую не сходится.' },
+  { icon: 'swap', h: 'Находите обмен', p: 'Прямой — или цепочка на троих, если напрямую не сходится.' },
   { icon: 'shield', h: 'Меняетесь под эскроу', p: 'Разница в цене замораживается в баллах и уходит продавцу после подтверждения.' },
 ];
 
@@ -431,9 +431,6 @@ function ReservationRail({ L, onOffer, isMine, onEdit, onShare }) {
   return (
     <div className="web-reserve">
       <div className="web-reserve-price"><b>Обмен</b><span>· {L.condition}</span></div>
-      <div className="web-reserve-dates">
-        <div className="web-reserve-date" style={{ flex: 1 }}><b>Срок</b><span>по договорённости</span></div>
-      </div>
       <div className="web-reserve-row"><span>Категория</span><b>{catOf(L.cat).label}</b></div>
       <div className="web-reserve-row"><span>Город</span><b>{L.ownerCity || '—'}</b></div>
       {!isMine && (
@@ -504,7 +501,7 @@ function LotView({ L, isMine = false, lots = [], onBack, onOffer, onOwnerChat, o
     <>
       <div className="web-detail-hero">
         <button className="web-back" onClick={onBack}><Icon name="back" size={16} color="var(--ink-2)" />Все объявления</button>
-        <div className="row gap6" style={{ marginTop: 10 }}><CatTag cat={L.cat} /><span className="tag" style={{ background: 'var(--line-2)', color: 'var(--ink-2)' }}>{L.condition}</span>{L.hot && <span className="tag" style={{ background: 'var(--berry-50)', color: 'var(--berry)' }}><Icon name="flame" size={12} color="var(--berry)" />Хит</span>}</div>
+        <div className="row gap6" style={{ marginTop: 10 }}><CatTag cat={L.cat} /><span className="tag" style={{ background: 'var(--line-2)', color: 'var(--ink-2)' }}>{L.condition}</span></div>
         <h1 className="web-detail-title">{L.title}</h1>
         <div className="web-detail-meta">
           <span className="web-rating-row"><Icon name="star" size={14} color="var(--ink)" fill="star" />{owner.rating} · {owner.deals} сделок</span>

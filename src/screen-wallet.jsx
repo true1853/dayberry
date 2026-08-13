@@ -1,7 +1,7 @@
 // screen-wallet.jsx — barter-credit wallet
 import React from 'react';
 import { Icon } from './icons.jsx';
-import { fmt, Coin, Credit, Avatar, AppBar, IconBtn, Sheet, PullToRefresh } from './ui.jsx';
+import { fmt, Coin, Credit, Avatar, AppBar, IconBtn, Sheet, PullToRefresh, timeAgo } from './ui.jsx';
 
 const TX_ICON = {
   'escrow-in': { icon: 'lock', c: 'var(--berry)', bg: 'var(--berry-50)' },
@@ -12,7 +12,7 @@ const TX_ICON = {
 
 export function Wallet({ bell = null, wallet, onInfo, onTopUp, onRefresh }) {
   const [topUpOpen, setTopUpOpen] = React.useState(false);
-  const w = wallet || { balance: 0, escrow: 0, delta30: 0, demurrageInDays: 0, tx: [] };
+  const w = wallet || { balance: 0, escrow: 0, earned30: 0, tx: [] };
   return (
     <PullToRefresh onRefresh={onRefresh}>
       <AppBar title="Кошелёк" big sub="Бартер-кредиты · 1 Б = 1 ₽" right={<span className="row gap8">{bell}<IconBtn name="info" onClick={onInfo} /></span>} />
@@ -34,8 +34,8 @@ export function Wallet({ bell = null, wallet, onInfo, onTopUp, onRefresh }) {
               <span className="amount" style={{ fontSize: 18, fontWeight: 700, color: '#fff' }}>{fmt(w.escrow)}</span>
             </div>
             <div className="grow" style={{ background: 'rgba(255,255,255,0.14)', borderRadius: 13, padding: '10px 12px' }}>
-              <div className="row gap6" style={{ color: 'rgba(255,255,255,0.78)', fontSize: 11.5, fontWeight: 600 }}><Icon name="flame" size={13} color="rgba(255,255,255,0.78)" />За 30 дней</div>
-              <span className="amount" style={{ fontSize: 18, fontWeight: 700, color: '#fff' }}>+{fmt(w.delta30)}</span>
+              <div className="row gap6" style={{ color: 'rgba(255,255,255,0.78)', fontSize: 11.5, fontWeight: 600 }}><Icon name="arrowR" size={13} color="rgba(255,255,255,0.78)" />Получено за 30 дней</div>
+              <span className="amount" style={{ fontSize: 18, fontWeight: 700, color: '#fff' }}>{fmt(w.earned30)}</span>
             </div>
           </div>
         </div>
@@ -46,15 +46,10 @@ export function Wallet({ bell = null, wallet, onInfo, onTopUp, onRefresh }) {
           <button className="btn btn-soft grow" style={{ flexDirection: 'column', gap: 6, padding: '13px' }}><Icon name="gift" size={22} color="var(--berry)" /><span style={{ fontSize: 12.5 }}>Пригласить</span></button>
         </div>
 
-        <div className="card" style={{ padding: 13, background: 'var(--warn-soft)' }}>
-          <div className="row gap10" style={{ alignItems: 'flex-start' }}>
-            <Icon name="clock" size={20} color="var(--warn)" style={{ marginTop: 1 }} />
-            <div className="col gap2">
-              <span className="title" style={{ fontSize: 13.5, color: '#7a5410' }}>Баллы любят движение</span>
-              <span className="sub" style={{ color: '#8a6320' }}>Неактивные баллы начнут таять через <b>{w.demurrageInDays} дней</b>. Потратьте их на обмен, чтобы сохранить полную ценность.</span>
-            </div>
-          </div>
-        </div>
+        {/* Блок «баллы тают через 164 дня» убран: демереджа в системе нет —
+            ни планировщика, ни кода, который уменьшал бы баланс. Число было
+            зашито константой и одинаково у всех. Вернуть, когда появится
+            настоящая механика и настоящий срок. */}
 
         <div className="col gap10">
           <div className="row" style={{ justifyContent: 'space-between' }}>
@@ -73,7 +68,7 @@ export function Wallet({ bell = null, wallet, onInfo, onTopUp, onRefresh }) {
                   </div>
                   <div className="col" style={{ alignItems: 'flex-end', gap: 2 }}>
                     <span className="amount" style={{ fontSize: 14.5, fontWeight: 700, color: t.amt > 0 ? (t.status === 'held' ? 'var(--berry)' : 'var(--ok)') : 'var(--ink)' }}>{t.status === 'held' ? '' : (t.amt > 0 ? '+' : '')}{fmt(t.amt)}</span>
-                    <span className="cap" style={{ fontSize: 10.5 }}>{t.status === 'held' ? 'заморожено' : t.when}</span>
+                    <span className="cap" style={{ fontSize: 10.5 }}>{t.status === 'held' ? 'заморожено' : timeAgo(t.when)}</span>
                   </div>
                 </div>
               );
