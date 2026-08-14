@@ -8,8 +8,12 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "node --test --test-concurrency=1 test/*.test.mjs",
     "postinstall": "prisma generate",
     "db:push": "prisma db push",
+    "escrow:backup": "node scripts/backup-snapshot.mjs",
+    "escrow:audit": "node scripts/audit-deal-escrow.mjs",
+    "escrow:verify-restore": "node scripts/verify-restored-copy.mjs",
     "migrate:photos": "node scripts/migrate-photos.mjs",
     "migrate:chains": "node scripts/migrate-chains.mjs"
   },

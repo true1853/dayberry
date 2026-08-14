@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
@@ -325,6 +325,7 @@ test('restore verification proves a clean snapshot and rejects checksum mismatch
   ]);
   assert.equal(verified.status, 0, `${verified.stdout}\n${verified.stderr}`);
 
+  await chmod(snapshot, 0o644);
   await writeFile(snapshot, 'tampered');
   const tampered = runScript('scripts/verify-restored-copy.mjs', [
     '--database', snapshot,
