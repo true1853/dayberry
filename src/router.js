@@ -23,6 +23,7 @@ export function parseRoute(path) {
       return { tab: 'wallet', stack: [] };
     case 'profile':
       if (b === 'settings') return { tab: 'profile', stack: [{ name: 'settings' }] };
+      if (b === 'analytics') return { tab: 'profile', stack: [{ name: 'settings' }, { name: 'analytics' }] };
       if (b === 'broadcast') return { tab: 'profile', stack: [{ name: 'settings' }, { name: 'broadcast' }] };
       if (b === 'disputes') return { tab: 'profile', stack: [{ name: 'settings' }, { name: 'disputes' }] };
       if (b === 'resets') return { tab: 'profile', stack: [{ name: 'settings' }, { name: 'resets' }] };
@@ -64,6 +65,8 @@ export function screenPath(name, params = {}) {
       return '/chains';
     case 'settings':
       return '/profile/settings';
+    case 'analytics':
+      return '/profile/analytics';
     case 'broadcast':
       return '/profile/broadcast';
     case 'disputes':

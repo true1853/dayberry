@@ -4,7 +4,7 @@ import { CITIES, REMOTE, VLADIMIR_REGION } from './cities.js';
 import { CAT, CAT_IDS, catOf, normalizeCat } from './data.js';
 import { Icon } from './icons.jsx';
 import { fmt, Logo, Credit, Photo, Avatar, Stars, CatTag, AIBadge } from './ui.jsx';
-import { EditProfileSheet, resizeImage, SettingsScreen, BroadcastScreen, DisputesScreen, ResetsScreen, ReportsScreen, RulesScreen } from './screen-profile.jsx';
+import { EditProfileSheet, resizeImage, SettingsScreen, FunnelScreen, BroadcastScreen, DisputesScreen, ResetsScreen, ReportsScreen, RulesScreen } from './screen-profile.jsx';
 import { updateAvatarAction, broadcastInfoAction } from './server/actions.js';
 import { DealStatus } from './screen-deal.jsx';
 import { ChatThread } from './screen-chat.jsx';
@@ -734,6 +734,7 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
   // Настроек на десктопе не было вовсе — ни смены пароля, ни уведомлений,
   // ни рассылки. Переиспользуем мобильные экраны в модалке, как чат и сделку.
   const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const [analyticsOpen, setAnalyticsOpen] = React.useState(false);
   const [broadcastOpen, setBroadcastOpen] = React.useState(false);
   const [disputesOpen, setDisputesOpen] = React.useState(false);
   const [resetsOpen, setResetsOpen] = React.useState(false);
@@ -754,6 +755,7 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
     setSelChat(null);
     setSelChain(null);
     setSettingsOpen(false);
+    setAnalyticsOpen(false);
     setBroadcastOpen(false);
     setDisputesOpen(false);
     setResetsOpen(false);
@@ -788,12 +790,22 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
               onLogout={() => { setSettingsOpen(false); onLogout(); }}
               onProfileSaved={onProfileSaved}
               onGoWallet={() => setSettingsOpen(false)}
+              onAnalytics={() => { setSettingsOpen(false); setAnalyticsOpen(true); }}
               onBroadcast={() => { setSettingsOpen(false); setBroadcastOpen(true); }}
               onDisputes={() => { setSettingsOpen(false); setDisputesOpen(true); }}
               onResets={() => { setSettingsOpen(false); setResetsOpen(true); }}
               onReports={() => { setSettingsOpen(false); setReportsOpen(true); }}
               onRules={() => { setSettingsOpen(false); setRulesOpen(true); }}
             />
+          </div>
+        </div>
+      )}
+
+      {analyticsOpen && (
+        <div className="web-modal">
+          <div className="app">
+            <div className="safe-top" />
+            <FunnelScreen onBack={() => setAnalyticsOpen(false)} />
           </div>
         </div>
       )}

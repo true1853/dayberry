@@ -331,7 +331,7 @@ async function lotsFeed(user) {
   // hidden сюда не попадает по определению (ищем только active), а вот
   // лоты заблокированных надо отсекать явно: блокировка прячет их скопом,
   // но между блокировкой и размещением бывает гонка.
-  const where = { status: 'active', owner: { status: { not: 'blocked' } } };
+  const where = { status: 'active', owner: { is: { status: { not: 'blocked' } } } };
   if (user) where.ownerId = { not: user.id };
   const lots = await prisma.lot.findMany({
     where,
@@ -464,7 +464,7 @@ export async function listFavoritesAction() {
 async function favoritesOf(user) {
   if (!user) return [];
   const favs = await prisma.favorite.findMany({
-    where: { userId: user.id, lot: { status: 'active' } },
+    where: { userId: user.id, lot: { is: { status: 'active' } } },
     include: {
       lot: {
         include: {
@@ -769,7 +769,7 @@ export async function listDealsAction() {
 async function dealsOf(user) {
   if (!user) return [];
   const deals = await prisma.deal.findMany({
-    where: { OR: [{ userId: user.id }, { lot: { ownerId: user.id } }], status: { not: 'cancelled' } },
+    where: { OR: [{ userId: user.id }, { lot: { is: { ownerId: user.id } } }], status: { not: 'cancelled' } },
     include: dealWith(),
     orderBy: { createdAt: 'desc' },
   });
@@ -1805,6 +1805,17 @@ const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '')
 
 const isAdmin = (user) => !!user && ADMIN_EMAILS.includes((user.email || '').toLowerCase());
 
+// Тестовые аккаунты не должны искажать воронку реального запуска. Админы
+// исключаются автоматически; друзей и внутренние аккаунты можно добавить в
+// ANALYTICS_TEST_EMAILS через запятую без миграции базы и нового деплоя кода.
+const ANALYTICS_TEST_EMAILS = [...new Set([
+  ...ADMIN_EMAILS,
+  ...(process.env.ANALYTICS_TEST_EMAILS || '')
+    .split(',')
+    .map(s => s.trim().toLowerCase())
+    .filter(Boolean),
+])];
+
 const BROADCAST_MAX_TITLE = 120;
 const BROADCAST_MAX_BODY = 400;
 // Рассылка уходит всем живым людям: пять штук в час — это уже много.
@@ -1827,6 +1838,152 @@ export async function broadcastInfoAction() {
     prisma.user.count({ where: { lots: { some: { status: { in: ['active', 'in_chain'] } } } } }),
   ]);
   return { admin: true, all, withLots };
+}
+
+const FUNNEL_PERIODS = new Set([7, 30]);
+
+const addToSet = (set, value) => {
+  if (value) set.add(value);
+};
+
+const intersectSets = (left, right) => new Set([...left].filter(id => right.has(id)));
+
+// Когортная воронка: берём людей, зарегистрированных в выбранный период, и
+// смотрим, какой последовательный путь они успели пройти после регистрации.
+// Это не сумма событий: один активный человек считается на каждом шаге один раз.
+export async function funnelAnalyticsAction(input = {}) {
+  const admin = await getCurrentUser();
+  if (!isAdmin(admin)) return { admin: false };
+
+  const requestedDays = Number(input?.days);
+  const days = FUNNEL_PERIODS.has(requestedDays) ? requestedDays : 0;
+  const since = days ? new Date(Date.now() - days * 86400000) : null;
+  const includeTest = input?.includeTest === true;
+  const excludedEmails = includeTest ? [] : ANALYTICS_TEST_EMAILS;
+  const createdAt = since ? { gte: since } : undefined;
+  const cohortWhere = {
+    ...(createdAt ? { createdAt } : {}),
+    ...(excludedEmails.length ? { email: { notIn: excludedEmails } } : {}),
+  };
+
+  const cohort = await prisma.user.findMany({
+    where: cohortWhere,
+    select: { id: true },
+    orderBy: { createdAt: 'asc' },
+  });
+  const cohortIds = cohort.map(row => row.id);
+
+  const emptyFunnel = [
+    { id: 'registered', label: 'Зарегистрировались', value: cohortIds.length },
+    { id: 'listed', label: 'Разместили лот', value: 0 },
+    { id: 'messaged', label: 'Написали сообщение', value: 0 },
+    { id: 'deal', label: 'Открыли сделку', value: 0 },
+    { id: 'done', label: 'Завершили обмен', value: 0 },
+  ];
+
+  const testUserWhere = {
+    ...(createdAt ? { createdAt } : {}),
+    ...(ANALYTICS_TEST_EMAILS.length ? { email: { in: ANALYTICS_TEST_EMAILS } } : { id: '__none__' }),
+  };
+  const entityDate = createdAt ? { createdAt } : {};
+  const nonTestUser = excludedEmails.length ? { email: { notIn: excludedEmails } } : {};
+
+  const [
+    cohortLots,
+    cohortMessages,
+    cohortDeals,
+    excludedUsers,
+    lotsTotal,
+    lotsWithoutViews,
+    dealsTotal,
+    dealsDone,
+    dealsActive,
+    dealsCancelled,
+    disputesOpen,
+    chainsTotal,
+    chainsCandidate,
+    chainsPending,
+    chainsActive,
+    chainsDone,
+    chainsFailed,
+  ] = await Promise.all([
+    cohortIds.length
+      ? prisma.lot.findMany({ where: { ownerId: { in: cohortIds } }, select: { ownerId: true } })
+      : [],
+    cohortIds.length
+      ? prisma.message.findMany({ where: { fromId: { in: cohortIds } }, select: { fromId: true } })
+      : [],
+    cohortIds.length
+      ? prisma.deal.findMany({ where: { userId: { in: cohortIds } }, select: { userId: true, status: true, stage: true } })
+      : [],
+    includeTest ? 0 : prisma.user.count({ where: testUserWhere }),
+    prisma.lot.count({ where: { ...entityDate, owner: { is: nonTestUser } } }),
+    prisma.lot.count({ where: { ...entityDate, views: 0, owner: { is: nonTestUser } } }),
+    prisma.deal.count({ where: { ...entityDate, user: { is: nonTestUser }, lot: { is: { owner: { is: nonTestUser } } } } }),
+    prisma.deal.count({ where: { ...entityDate, status: 'done', user: { is: nonTestUser }, lot: { is: { owner: { is: nonTestUser } } } } }),
+    prisma.deal.count({ where: { ...entityDate, status: 'active', user: { is: nonTestUser }, lot: { is: { owner: { is: nonTestUser } } } } }),
+    prisma.deal.count({ where: { ...entityDate, status: 'cancelled', user: { is: nonTestUser }, lot: { is: { owner: { is: nonTestUser } } } } }),
+    prisma.deal.count({ where: { ...entityDate, status: 'active', disputedAt: { not: null }, user: { is: nonTestUser }, lot: { is: { owner: { is: nonTestUser } } } } }),
+    prisma.chain.count({ where: { ...entityDate, ...(excludedEmails.length ? { steps: { none: { user: { is: { email: { in: excludedEmails } } } } } } : {}) } }),
+    prisma.chain.count({ where: { ...entityDate, status: 'candidate', ...(excludedEmails.length ? { steps: { none: { user: { is: { email: { in: excludedEmails } } } } } } : {}) } }),
+    prisma.chain.count({ where: { ...entityDate, status: 'pending', ...(excludedEmails.length ? { steps: { none: { user: { is: { email: { in: excludedEmails } } } } } } : {}) } }),
+    prisma.chain.count({ where: { ...entityDate, status: 'active', ...(excludedEmails.length ? { steps: { none: { user: { is: { email: { in: excludedEmails } } } } } } : {}) } }),
+    prisma.chain.count({ where: { ...entityDate, status: 'done', ...(excludedEmails.length ? { steps: { none: { user: { is: { email: { in: excludedEmails } } } } } } : {}) } }),
+    prisma.chain.count({ where: { ...entityDate, status: { in: ['failed', 'expired'] }, ...(excludedEmails.length ? { steps: { none: { user: { is: { email: { in: excludedEmails } } } } } } : {}) } }),
+  ]);
+
+  let funnel = emptyFunnel;
+  if (cohortIds.length) {
+    const registered = new Set(cohortIds);
+    const listedRaw = new Set();
+    const messagedRaw = new Set();
+    const dealRaw = new Set();
+    const doneRaw = new Set();
+    cohortLots.forEach(row => addToSet(listedRaw, row.ownerId));
+    cohortMessages.forEach(row => addToSet(messagedRaw, row.fromId));
+    cohortDeals.forEach(row => {
+      addToSet(dealRaw, row.userId);
+      if (row.status === 'done' || row.stage === 'done') addToSet(doneRaw, row.userId);
+    });
+
+    const listed = intersectSets(registered, listedRaw);
+    const messaged = intersectSets(listed, messagedRaw);
+    const openedDeal = intersectSets(messaged, dealRaw);
+    const completed = intersectSets(openedDeal, doneRaw);
+    funnel = [
+      { id: 'registered', label: 'Зарегистрировались', value: registered.size },
+      { id: 'listed', label: 'Разместили лот', value: listed.size },
+      { id: 'messaged', label: 'Написали сообщение', value: messaged.size },
+      { id: 'deal', label: 'Открыли сделку', value: openedDeal.size },
+      { id: 'done', label: 'Завершили обмен', value: completed.size },
+    ];
+  }
+
+  return {
+    admin: true,
+    period: { days, since: since?.toISOString() || null },
+    filters: {
+      includeTest,
+      excludedUsers,
+      testFilterConfigured: ANALYTICS_TEST_EMAILS.length > 0,
+    },
+    funnel,
+    totals: {
+      lots: lotsTotal,
+      lotsWithoutViews,
+      deals: dealsTotal,
+      dealsDone,
+      dealsActive,
+      dealsCancelled,
+      disputesOpen,
+      chains: chainsTotal,
+      chainsCandidate,
+      chainsPending,
+      chainsActive,
+      chainsDone,
+      chainsFailed,
+    },
+  };
 }
 
 export async function broadcastAction(input) {
@@ -2420,7 +2577,7 @@ export async function blockUserAction(userId, reason) {
 
   // Активные сделки — в спор: там чужие замороженные баллы.
   const deals = await prisma.deal.findMany({
-    where: { status: 'active', disputedAt: null, OR: [{ userId: target.id }, { lot: { ownerId: target.id } }] },
+    where: { status: 'active', disputedAt: null, OR: [{ userId: target.id }, { lot: { is: { ownerId: target.id } } }] },
     include: dealWith(),
   });
   for (const d of deals) {

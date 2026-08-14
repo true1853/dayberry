@@ -3,7 +3,7 @@ import React from 'react';
 import { Icon } from './icons.jsx';
 import { WISH_GROUPS, ALL_WISHES } from './wishes.js';
 import { Logo, Credit, AppBar, IconBtn, TabBar, Photo, Sheet, LotCard, PullToRefresh, timeAgo } from './ui.jsx';
-import { updateProfileAction, updateAvatarAction, changePasswordAction, updateSettingsAction, broadcastInfoAction, broadcastAction, listDisputesAction, resolveDisputeAction, listResetRequestsAction, issueTempPasswordAction, dismissResetRequestAction, listReportsAction, hideLotAction, unhideLotAction, dismissReportsAction, blockUserAction, unblockUserAction } from './server/actions.js';
+import { updateProfileAction, updateAvatarAction, changePasswordAction, updateSettingsAction, broadcastInfoAction, broadcastAction, funnelAnalyticsAction, listDisputesAction, resolveDisputeAction, listResetRequestsAction, issueTempPasswordAction, dismissResetRequestAction, listReportsAction, hideLotAction, unhideLotAction, dismissReportsAction, blockUserAction, unblockUserAction } from './server/actions.js';
 import { enablePush, disablePush, pushState } from './pwa.jsx';
 import { PhoneField, CityField } from './fields.jsx';
 
@@ -1209,7 +1209,154 @@ const bcFieldStyle = {
   color: 'var(--ink)',
 };
 
-export function SettingsScreen({ user, profile, onBack, onLogout, onProfileSaved, onGoWallet, onBroadcast, onDisputes, onResets, onReports, onRules }) {
+const pct = (value, total) => total > 0 ? Math.round((value / total) * 100) : 0;
+
+function FunnelMetric({ value, label, note, tone = 'var(--berry)' }) {
+  return (
+    <div style={{ padding: 14, borderRadius: 14, background: '#fff', boxShadow: 'var(--sh-1)', minWidth: 0 }}>
+      <div style={{ fontSize: 24, lineHeight: 1.05, fontWeight: 750, color: tone, letterSpacing: '-0.04em' }}>{value}</div>
+      <div style={{ marginTop: 5, fontSize: 13, fontWeight: 650, color: 'var(--ink)' }}>{label}</div>
+      {note && <div style={{ marginTop: 3, fontSize: 11.5, color: 'var(--ink-3)' }}>{note}</div>}
+    </div>
+  );
+}
+
+export function FunnelScreen({ onBack }) {
+  const [days, setDays] = React.useState(30);
+  const [includeTest, setIncludeTest] = React.useState(false);
+  const [state, setState] = React.useState({ loading: true, data: null, error: '' });
+
+  React.useEffect(() => {
+    let alive = true;
+    setState(prev => ({ ...prev, loading: true, error: '' }));
+    funnelAnalyticsAction({ days, includeTest })
+      .then(data => { if (alive) setState({ loading: false, data, error: '' }); })
+      .catch(() => { if (alive) setState({ loading: false, data: null, error: 'Не удалось загрузить аналитику' }); });
+    return () => { alive = false; };
+  }, [days, includeTest]);
+
+  const data = state.data;
+  const stages = data?.funnel || [];
+  const registered = stages[0]?.value || 0;
+  const totals = data?.totals || {};
+  const zeroViewShare = pct(totals.lotsWithoutViews || 0, totals.lots || 0);
+
+  if (data && !data.admin) {
+    return (
+      <div className="app-scroll">
+        <AppBar title="Воронка" left={<IconBtn name="back" onClick={onBack} />} />
+        <div className="px"><span className="sub">Раздел доступен только администратору.</span></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="app-scroll">
+      <AppBar title="Воронка" sub="Подготовка к реальному запуску" left={<IconBtn name="back" onClick={onBack} />} />
+
+      <div className="row" style={{ padding: '14px 16px 2px', gap: 8, flexWrap: 'wrap' }}>
+        {[
+          { value: 7, label: '7 дней' },
+          { value: 30, label: '30 дней' },
+          { value: 0, label: 'Всё время' },
+        ].map(option => (
+          <button
+            key={option.value}
+            type="button"
+            className={`chip chip-berry${days === option.value ? ' is-on' : ''}`}
+            onClick={() => setDays(option.value)}
+          >{option.label}</button>
+        ))}
+      </div>
+
+      <div style={{ margin: '12px 16px 0', padding: '12px 14px', borderRadius: 14, background: 'var(--berry-50)', border: '1px solid var(--berry-100)' }}>
+        <div className="row" style={{ alignItems: 'center', gap: 12 }}>
+          <div className="grow col" style={{ gap: 2 }}>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--ink)' }}>Показывать тестовые аккаунты</span>
+            <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>
+              {data?.filters?.excludedUsers
+                ? `Сейчас исключено: ${data.filters.excludedUsers}`
+                : 'Список задаётся через ANALYTICS_TEST_EMAILS'}
+            </span>
+          </div>
+          <Switch on={includeTest} onChange={setIncludeTest} />
+        </div>
+      </div>
+
+      {state.loading ? (
+        <div className="col" style={{ alignItems: 'center', padding: '56px 20px', gap: 12, color: 'var(--ink-3)' }}>
+          <Icon name="clock" size={26} />
+          <span>Считаем воронку…</span>
+        </div>
+      ) : state.error ? (
+        <div style={{ ...ERR_BOX, margin: '18px 16px' }}>{state.error}</div>
+      ) : (
+        <>
+          <SectionHeader title="Когорта пользователей" />
+          <div style={{ margin: '0 16px', padding: '8px 16px 14px', background: '#fff', borderRadius: 16, boxShadow: 'var(--sh-1)' }}>
+            {stages.map((stage, index) => {
+              const previous = index ? stages[index - 1].value : stage.value;
+              const fromPrevious = index ? pct(stage.value, previous) : 100;
+              const fromStart = pct(stage.value, registered);
+              return (
+                <div key={stage.id} style={{ padding: '11px 0', borderBottom: index < stages.length - 1 ? '1px solid var(--line)' : 'none' }}>
+                  <div className="row" style={{ alignItems: 'baseline', gap: 8 }}>
+                    <span className="grow" style={{ fontSize: 14, fontWeight: 650, color: 'var(--ink)' }}>{stage.label}</span>
+                    <b style={{ fontSize: 20, color: index === stages.length - 1 ? 'var(--berry)' : 'var(--ink)' }}>{stage.value}</b>
+                  </div>
+                  <div style={{ height: 7, marginTop: 8, borderRadius: 999, overflow: 'hidden', background: 'var(--line-2)' }}>
+                    <div style={{ width: `${fromStart}%`, minWidth: stage.value ? 5 : 0, height: '100%', borderRadius: 999, background: index === stages.length - 1 ? 'var(--berry)' : 'var(--berry-200)' }} />
+                  </div>
+                  <div style={{ marginTop: 5, fontSize: 11.5, color: 'var(--ink-3)' }}>
+                    {index ? `${fromPrevious}% с предыдущего шага · ${fromStart}% от регистраций` : 'Начало когорты'}
+                  </div>
+                </div>
+              );
+            })}
+            {!registered && <div style={{ padding: '12px 0 2px', fontSize: 13, color: 'var(--ink-3)' }}>В выбранной когорте пока нет пользователей.</div>}
+          </div>
+
+          <SectionHeader title="Активность за период" />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, padding: '0 16px' }}>
+            <FunnelMetric value={totals.lots || 0} label="Новых лотов" />
+            <FunnelMetric value={`${zeroViewShare}%`} label="Без просмотров" note={`${totals.lotsWithoutViews || 0} лотов`} tone={zeroViewShare > 50 ? 'var(--warn)' : 'var(--berry)'} />
+            <FunnelMetric value={totals.deals || 0} label="Открыто сделок" />
+            <FunnelMetric value={totals.dealsDone || 0} label="Завершено" tone="var(--ok)" />
+            <FunnelMetric value={totals.dealsActive || 0} label="Активные сделки" />
+            <FunnelMetric value={totals.dealsCancelled || 0} label="Отменено" tone="var(--ink-2)" />
+            <FunnelMetric value={totals.disputesOpen || 0} label="Открытые споры" tone={totals.disputesOpen ? 'var(--warn)' : 'var(--ok)'} />
+            <FunnelMetric value={totals.chains || 0} label="Найдено цепочек" />
+          </div>
+
+          <SectionHeader title="Состояние цепочек" />
+          <GroupCard>
+            {[
+              ['Кандидаты', totals.chainsCandidate || 0],
+              ['Ждут участников', totals.chainsPending || 0],
+              ['Активные', totals.chainsActive || 0],
+              ['Завершены', totals.chainsDone || 0],
+              ['Не состоялись', totals.chainsFailed || 0],
+            ].map(([label, value], index, all) => (
+              <React.Fragment key={label}>
+                <div className="row" style={{ padding: '12px 16px', alignItems: 'center' }}>
+                  <span className="grow" style={{ fontSize: 13.5, color: 'var(--ink-2)' }}>{label}</span>
+                  <b style={{ color: 'var(--ink)' }}>{value}</b>
+                </div>
+                {index < all.length - 1 && <Divider />}
+              </React.Fragment>
+            ))}
+          </GroupCard>
+
+          <div style={{ padding: '16px 18px 32px', fontSize: 11.5, lineHeight: 1.45, color: 'var(--ink-3)' }}>
+            Воронка считается последовательно для пользователей, зарегистрированных в выбранный период: каждый следующий шаг включает только тех, кто прошёл предыдущий. Активность ниже считается по дате создания сущности за тот же период.
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+export function SettingsScreen({ user, profile, onBack, onLogout, onProfileSaved, onGoWallet, onAnalytics, onBroadcast, onDisputes, onResets, onReports, onRules }) {
   const [isAdmin, setIsAdmin] = React.useState(false);
   React.useEffect(() => { broadcastInfoAction().then(r => setIsAdmin(!!r?.admin)).catch(() => {}); }, []);
   const [editing, setEditing] = React.useState(false);
@@ -1309,6 +1456,8 @@ export function SettingsScreen({ user, profile, onBack, onLogout, onProfileSaved
         <>
           <SectionHeader title="Администратору" />
           <GroupCard>
+            <SettingsRow icon="grid" label="Воронка" sub="Регистрация → обмен" onClick={onAnalytics} />
+            <Divider />
             <SettingsRow icon="send" label="Рассылка" sub="Уведомление всем пользователям" onClick={onBroadcast} />
             <Divider />
             <SettingsRow icon="info" label="Жалобы" sub="Модерация объявлений" onClick={onReports} />
