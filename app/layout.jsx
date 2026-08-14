@@ -5,6 +5,13 @@ import '../src/design.css';
 import '../src/web.css';
 
 export const metadata = {
+  metadataBase: new URL('https://dayberry.ru'),
+  alternates: {
+    canonical: '/',
+  },
+  verification: {
+    yandex: '502fa61b35fa96f7',
+  },
   title: 'Дайбери',
   description: 'Обмен без денег — бартер-кредиты, эскроу и честные обмены',
   manifest: '/manifest.webmanifest',
