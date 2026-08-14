@@ -447,27 +447,21 @@ Each rehearsal/production run must retain: input snapshot checksum and size; app
 | A1 | Production host topology, DB path, backup retention/encryption, off-host storage, and operator ownership are not represented in this repository. | Runtime State / Runbook / Threat Model | Rollout procedure may target the wrong environment or provide insufficient recovery/security. |
 | A2 | Twenty repeated invocations per terminal test is an adequate minimum stress sample for the phase gate. | Validation Architecture | A rarer race may escape; concurrency correctness must still come from constraints/transactions, not the sample count. |
 
-## Open Questions and Execution Blockers
+## Open Questions (RESOLVED)
 
-1. **Where is the consistent production snapshot?**
-   - Known: local `prisma/dev.db` has zero business rows. [VERIFIED: read-only query]
-   - Needed: snapshot path/checksum and permission to audit the restored copy.
-   - Gate: no backfill or production schema mutation until obtained.
-2. **What are the actual ambiguous row IDs and counts?**
-   - Known: code creates unreferenced direct holds and can select another direct/chain hold. [VERIFIED: source]
-   - Needed: machine-readable audit from the snapshot; manual disposition owner and policy.
-3. **Which SQLite library/version runs inside the deployed Prisma image?**
-   - Known: local CLI is 3.52.0; that does not identify deployed Prisma engine. [VERIFIED: probes]
-   - Needed: `select sqlite_version()` through the built production artifact; WAL-reset patch gate.
-4. **What is the real deployment topology and release controller?**
-   - Known: repository describes one container startup command but not live replica count, scheduler, mounted paths, or CI/CD. [VERIFIED: repo]
-   - Needed: host inventory and an explicit single-writer migration window.
-5. **What backup retention, encryption, and off-host policy is approved?**
-   - Known: snapshot script exists; repository has no policy or automated restore test. [VERIFIED: codebase concerns]
-   - Needed: accountable operator decision before copying live data.
-6. **Should Phase 1 also harden chain exact-once completion?**
-   - Known: chain holds are referenced, but concurrent chain completion is independently unsafe. [VERIFIED: code and concerns]
-   - Recommendation: do not broaden SAFE-01’s direct-deal migration work unless the shared `businessKey` migration would otherwise leave chain writes incompatible; create a separate blocking follow-up before any chain lifecycle expansion.
+The repository cannot supply production-only values, so every such value is resolved as a named, owned, non-autonomous preflight prerequisite. “Unknown” is a stop result, never permission to infer a value.
+
+| ID | Resolution | Owner | Evidence | Stop behavior |
+|----|------------|-------|----------|---------------|
+| PF-01 | The release operator identifies the resolved absolute live SQLite path and creates a unique consistent immutable pre-apply snapshot. Audit scripts reject the resolved live path; all pre-apply domain audits target the snapshot only. | Release operator | `preflight-inventory.json`, `pre-apply-snapshot.json`, snapshot SHA-256 | Missing path/snapshot/checksum or any path equality stops rehearsal and production mutation. |
+| PF-02 | The audit produces actual ambiguous/broken row IDs. A named financial-data reviewer records one disposition for every ID; no timestamp or chat-text inference is allowed. | Financial-data reviewer | `pre-audit.json`, `ambiguity-dispositions.json` | Any unreviewed ID, changed audit hash, or ambiguous ID in the apply manifest stops backfill. |
+| PF-03 | The deployed artifact queries `select sqlite_version()`, compile options and PRAGMAs through its own Prisma runtime. | Runtime owner | `runtime.json` tied to artifact digest | Runtime below 3.51.3 unless patched 3.50.7/3.44.6, or unknown runtime, stops rollout. |
+| PF-04 | The release controller records replica/process count, scheduler, mounted DB/upload paths, current writer, maintenance owner and a single-writer stop-writes window. | Infrastructure owner | `topology.json` | Unknown topology, more than one active writer, or inability to stop writes stops schema/backfill apply. |
+| PF-05 | Retention, encryption, access, off-host copy and deletion date are approved before snapshot creation. | Backup owner | `backup-policy.json` | Missing owner/policy/off-host destination stops copying live data and all later gates. |
+| PF-06 | Final approval occurs only in non-autonomous plan 01-06 after the actual candidate and a separate actual rollback artifact have both passed restored-copy smoke. Capture current/candidate/corrected-rollback/lockfile/both migration SQL digests; rollback must contain the exact corrected escrow core and read the expanded nullable schema, and rollback to any pre-integrity artifact is forbidden. | Release operator | `artifact-digests.json`, candidate smoke log, corrected-rollback smoke log | Missing/mismatched digest, failed artifact smoke, or any pre-integrity rollback artifact stops deployment before live mutation. |
+| PF-07 | A separately created immutable post-apply snapshot is audited after production writes. Neither pre- nor post-audit is permitted to open the resolved live path. | Release operator | `post-apply-snapshot.json`, `post-audit.json` | Snapshot creation failure, HIGH finding, unexplained count/balance delta, or live-path audit attempt stops rollout and keeps reads flag off. |
+
+**Chain scope decision:** chain exact-once completion is explicitly excluded from Phase 1. Shared schema additions remain nullable and compatible with chain rows. Direct-deal classification and every direct terminal command must separate `refType='chain'` rows and must never consume, relabel, or settle a chain hold. Chain lifecycle hardening requires a separate phase before chain expansion.
 
 ## Sources
 
