@@ -4,7 +4,7 @@ import { CITIES, REMOTE, VLADIMIR_REGION } from './cities.js';
 import { CAT, CAT_IDS, catOf, normalizeCat, matchesQuery } from './data.js';
 import { Icon } from './icons.jsx';
 import { fmt, Logo, Credit, Photo, Avatar, Stars, CatTag, AIBadge } from './ui.jsx';
-import { EditProfileSheet, resizeImage, SettingsScreen, BroadcastScreen, DisputesScreen, ResetsScreen, ReportsScreen, RulesScreen } from './screen-profile.jsx';
+import { EditProfileSheet, resizeImage, SettingsScreen, FunnelScreen, BroadcastScreen, DisputesScreen, ResetsScreen, ReportsScreen, RulesScreen } from './screen-profile.jsx';
 import { updateAvatarAction, broadcastInfoAction } from './server/actions.js';
 import { DealStatus } from './screen-deal.jsx';
 import { ChatThread } from './screen-chat.jsx';
@@ -916,6 +916,7 @@ export default function WebApp({ route = { tab: 'search', stack: [] }, onTab, go
   // Настроек на десктопе не было вовсе — ни смены пароля, ни уведомлений,
   // ни рассылки. Переиспользуем мобильные экраны в модалке, как чат и сделку.
   const settingsOpen = topName === 'settings';
+  const analyticsOpen = topName === 'analytics';
   const broadcastOpen = topName === 'broadcast';
   const disputesOpen = topName === 'disputes';
   const resetsOpen = topName === 'resets';
@@ -964,12 +965,22 @@ export default function WebApp({ route = { tab: 'search', stack: [] }, onTab, go
               onLogout={() => { closeTop(); onLogout(); }}
               onProfileSaved={onProfileSaved}
               onGoWallet={closeTop}
+              onAnalytics={() => go && go('analytics')}
               onBroadcast={() => go && go('broadcast')}
               onDisputes={() => go && go('disputes')}
               onResets={() => go && go('resets')}
               onReports={() => go && go('reports')}
               onRules={() => go && go('rules')}
             />
+          </div>
+        </div>
+      )}
+
+      {analyticsOpen && (
+        <div className="web-modal">
+          <div className="app">
+            <div className="safe-top" />
+            <FunnelScreen onBack={closeTop} />
           </div>
         </div>
       )}

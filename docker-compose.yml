@@ -16,6 +16,8 @@ services:
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET is required}
       # кому доступен экран рассылки: список email через запятую
       ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      # внутренние/тестовые аккаунты, которые по умолчанию исключаются из воронки
+      ANALYTICS_TEST_EMAILS: ${ANALYTICS_TEST_EMAILS:-}
       # web-push: пара ключей VAPID, публичный уходит в браузер при подписке
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
