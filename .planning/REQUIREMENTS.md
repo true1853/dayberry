@@ -76,13 +76,43 @@
 
 ## Трассировка
 
-Будет заполнена после утверждения дорожной карты. Каждое требование v1.1 должно относиться ровно к одному этапу.
+| Требование | Этап | Статус |
+|------------|------|--------|
+| SAFE-01 | Phase 1 | Pending |
+| SAFE-02 | Phase 1 | Pending |
+| SAFE-03 | Phase 1 | Pending |
+| DEAL-01 | Phase 5 | Pending |
+| DEAL-02 | Phase 2 | Pending |
+| DEAL-03 | Phase 2 | Pending |
+| DEAL-04 | Phase 5 | Pending |
+| DEAL-05 | Phase 4 | Pending |
+| DEAL-06 | Phase 2 | Pending |
+| AGRE-01 | Phase 5 | Pending |
+| AGRE-02 | Phase 5 | Pending |
+| AGRE-03 | Phase 3 | Pending |
+| AGRE-04 | Phase 3 | Pending |
+| AGRE-05 | Phase 3 | Pending |
+| AGRE-06 | Phase 3 | Pending |
+| AGRE-07 | Phase 3 | Pending |
+| AGRE-08 | Phase 3 | Pending |
+| FULF-01 | Phase 4 | Pending |
+| FULF-02 | Phase 4 | Pending |
+| FULF-03 | Phase 4 | Pending |
+| FULF-04 | Phase 4 | Pending |
+| FULF-05 | Phase 6 | Pending |
+| FULF-06 | Phase 4 | Pending |
+| ANLY-01 | Phase 2 | Pending |
+| ANLY-02 | Phase 6 | Pending |
+| ANLY-03 | Phase 6 | Pending |
+| ANLY-04 | Phase 6 | Pending |
+| ANLY-05 | Phase 6 | Pending |
 
 **Покрытие:**
 - Требований v1.1: 28
-- Распределено по этапам: 0
-- Не распределено: 28
+- Распределено по этапам: 28
+- Не распределено: 0
+- Дублирующихся назначений: 0
 
 ---
 *Требования определены: 2026-08-14*
-*Последнее обновление: 2026-08-14 после исследования и выбора неизменяемых экономических условий*
+*Последнее обновление: 2026-08-14 после создания дорожной карты и проверки покрытия 28/28*
