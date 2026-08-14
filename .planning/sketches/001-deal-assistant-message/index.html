@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Дайбери — сообщение помощника</title>
+  <link rel="stylesheet" href="../themes/default.css">
+  <style>
+    *{box-sizing:border-box} body{margin:0;background:#ecebf3;color:var(--color-text);font-family:var(--font-sans);font-size:var(--text-base)}
+    button,textarea{font:inherit} button{cursor:pointer;transition:all .15s ease} button:hover{filter:brightness(.98);transform:translateY(-1px)} button:active{transform:scale(.98)}
+    #variant-nav{position:fixed;top:0;left:0;right:0;z-index:50;display:flex;justify-content:center;gap:8px;padding:9px 12px;background:rgba(255,255,255,.94);border-bottom:1px solid var(--color-border);backdrop-filter:blur(14px)}
+    .variant-tab{border:1px solid var(--color-border);background:#fff;color:var(--color-text-muted);border-radius:999px;padding:8px 13px;font-size:12px;font-weight:650}
+    .variant-tab.active{background:var(--color-text);border-color:var(--color-text);color:#fff}
+    #canvas{max-width:390px;margin:76px auto 42px;transition:max-width .25s ease}.variant{display:none}.variant.active{display:block}
+    .phone{width:min(100%,390px);height:760px;margin:auto;background:var(--color-bg);border-radius:28px;overflow:hidden;box-shadow:var(--shadow-md);display:flex;flex-direction:column;border:1px solid rgba(23,21,42,.08)}
+    .safe{height:14px;flex:none;background:#fff}.header{height:62px;display:flex;align-items:center;gap:10px;padding:8px 14px 10px;background:#fff;border-bottom:1px solid var(--color-border)}
+    .round{width:38px;height:38px;border:0;border-radius:999px;background:var(--color-bg);display:grid;place-items:center;color:var(--color-text)}
+    .avatar{width:40px;height:40px;border-radius:999px;background:linear-gradient(135deg,#d9b59b,#9a6a5e);color:#fff;display:grid;place-items:center;font-weight:750}.grow{flex:1;min-width:0}.name{font-size:15px;font-weight:650}.meta{font-size:11.5px;color:var(--color-text-soft);margin-top:1px}
+    .deal-strip{margin:10px 14px 4px;padding:9px 10px;border:1px solid var(--color-border);border-radius:14px;background:#fff;display:flex;align-items:center;gap:9px;box-shadow:0 2px 5px rgba(23,21,42,.04)}
+    .swap{width:36px;height:36px;border-radius:11px;background:var(--color-primary-soft);color:var(--color-primary);display:grid;place-items:center;font-size:18px}.deal-title{font-size:12.5px;font-weight:650}.deal-sub{font-size:10.5px;color:var(--color-text-soft);margin-top:2px}.deal-link{border:0;background:var(--color-primary-soft);color:var(--color-primary);padding:7px 9px;border-radius:8px;font-size:11.5px;font-weight:650}
+    .chat{flex:1;overflow:auto;padding:8px 15px 14px;display:flex;flex-direction:column;gap:8px}.day{align-self:center;color:var(--color-text-soft);font-size:10.5px;font-weight:650;margin:5px 0}
+    .bubble{max-width:79%;padding:9px 12px;border-radius:16px;line-height:1.42;font-size:13.5px}.bubble.them{align-self:flex-start;background:#fff;border-bottom-left-radius:4px;box-shadow:var(--shadow-sm)}.bubble.me{align-self:flex-end;background:var(--color-primary);color:#fff;border-bottom-right-radius:4px}.time{font-size:9.5px;opacity:.62;float:right;margin:7px 0 0 8px}
+    .assistant{align-self:stretch;margin:7px 0}.assistant-head{display:flex;align-items:center;gap:8px}.assistant-mark{width:28px;height:28px;flex:none;border-radius:10px;background:linear-gradient(135deg,var(--color-primary),#7561e9);display:grid;place-items:center;color:#fff;font-weight:800}.assistant-name{font-size:11.5px;font-weight:750;color:var(--color-primary)}.private{margin-left:auto;font-size:9.5px;color:var(--color-text-soft);font-weight:650}
+    .card-a{padding:12px;border:1px solid var(--color-primary-mid);border-radius:16px;background:linear-gradient(145deg,#fff 0%,var(--color-primary-soft) 100%);box-shadow:0 4px 14px rgba(75,43,201,.08)}
+    .assist-title{font-size:14px;font-weight:700;margin-top:9px}.assist-copy{font-size:12px;line-height:1.45;color:var(--color-text-muted);margin-top:4px}.primary{width:100%;border:0;border-radius:10px;background:var(--color-primary);color:#fff;padding:11px 13px;font-size:12.5px;font-weight:700;margin-top:10px}.text-btn{border:0;background:transparent;color:var(--color-primary);font-size:11.5px;font-weight:650;padding:8px 4px 0}.why{display:none;margin-top:8px;padding:9px;background:#fff;border-radius:10px;color:var(--color-text-muted);font-size:11.5px;line-height:1.4}.why.open{display:block}
+    .assistant-row{align-self:flex-start;display:flex;align-items:flex-end;gap:7px;max-width:91%;margin:7px 0}.tiny-mark{width:27px;height:27px;border-radius:9px;background:var(--color-primary-soft);color:var(--color-primary);display:grid;place-items:center;font-weight:800}.bubble-b{background:#fff;border:1px solid var(--color-primary-mid);border-radius:16px 16px 16px 4px;padding:10px 11px;box-shadow:var(--shadow-sm)}.bubble-b b{display:block;color:var(--color-primary);font-size:11.5px;margin-bottom:3px}.quick{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.quick button{border:1px solid var(--color-primary-mid);background:var(--color-primary-soft);color:var(--color-primary);border-radius:999px;padding:7px 9px;font-size:11px;font-weight:650}.quick button.selected{background:var(--color-primary);color:#fff}
+    .stage-card{padding:12px 13px;border-radius:16px;background:#fff;border:1px solid var(--color-border);box-shadow:var(--shadow-sm)}.stage-top{display:flex;align-items:center;gap:8px}.step{font:700 10px/1 var(--font-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--color-primary)}.track{height:5px;flex:1;background:var(--color-border-soft);border-radius:999px;overflow:hidden}.fill{width:40%;height:100%;background:var(--color-primary);border-radius:999px}.stage-main{display:flex;gap:10px;margin-top:10px}.stage-icon{width:38px;height:38px;flex:none;border-radius:12px;background:var(--color-primary-soft);display:grid;place-items:center;color:var(--color-primary);font-size:18px}.stage-title{font-size:13.5px;font-weight:700}.stage-copy{font-size:11.5px;line-height:1.4;color:var(--color-text-muted);margin-top:3px}.stage-actions{display:flex;gap:7px;margin-top:10px}.stage-actions .primary{margin:0;flex:1;width:auto}.secondary{border:1px solid var(--color-border);background:#fff;color:var(--color-text-muted);border-radius:10px;padding:9px 10px;font-size:11.5px;font-weight:650}
+    .composer{display:flex;align-items:flex-end;gap:7px;padding:8px 13px 18px;background:#fff;border-top:1px solid var(--color-border)}.composer textarea{height:40px;flex:1;resize:none;border:1px solid var(--color-border);background:var(--color-bg);border-radius:20px;padding:10px 14px;outline:none;font-size:13px}.send{width:40px;height:40px;border:0;border-radius:999px;background:var(--color-primary);color:#fff;display:grid;place-items:center;font-size:17px}
+    .toast{position:fixed;left:50%;bottom:24px;z-index:60;transform:translate(-50%,18px);opacity:0;background:var(--color-text);color:#fff;padding:10px 14px;border-radius:999px;font-size:12px;box-shadow:var(--shadow-md);pointer-events:none;transition:.2s}.toast.show{opacity:1;transform:translate(-50%,0)}
+    #sketch-tools{position:fixed;bottom:12px;right:12px;z-index:70;font:12px system-ui;background:rgba(0,0,0,.76);color:white;padding:8px 10px;border-radius:9px;opacity:.45;transition:opacity .2s;display:flex;gap:6px;align-items:center}#sketch-tools:hover{opacity:1}#sketch-tools button,#sketch-tools select{border:0;background:#fff;color:#222;border-radius:5px;padding:5px 7px;font-size:11px}
+    .annotate [data-label]{outline:1px dashed #e34c6f;position:relative}.annotate [data-label]:hover:after{content:attr(data-label);position:absolute;z-index:90;top:-20px;left:0;background:#e34c6f;color:#fff;padding:2px 5px;border-radius:4px;font:10px system-ui;white-space:nowrap}
+    @media(max-width:440px){#variant-nav{justify-content:flex-start;overflow:auto}.variant-tab{white-space:nowrap}#canvas{margin-top:72px}.phone{height:calc(100vh - 112px);border-radius:0;border-left:0;border-right:0}}
+  </style>
+</head>
+<body>
+  <nav id="variant-nav">
+    <button class="variant-tab" onclick="showVariant('a',this)">A · Мягкая карточка</button>
+    <button class="variant-tab active" onclick="showVariant('b',this)">B · Telegram-пузырь ★ выбран</button>
+    <button class="variant-tab" onclick="showVariant('c',this)">C · Сообщение-этап</button>
+  </nav>
+  <main id="canvas">
+    <section id="variant-a" class="variant"><div class="phone" data-label="Экран чата">
+      <div class="safe"></div><header class="header"><button class="round">←</button><div class="avatar">А</div><div class="grow"><div class="name">Анна</div><div class="meta">Владимир · была недавно</div></div><button class="round">⋯</button></header>
+      <div class="deal-strip" data-label="Сводка сделки"><div class="swap">⇄</div><div class="grow"><div class="deal-title">Кофемашина ↔ кресло</div><div class="deal-sub">1 500 Б в эскроу</div></div><button class="deal-link">Сделка</button></div>
+      <div class="chat"><div class="day">Сегодня</div><div class="bubble them">Здравствуйте! Кресло ещё актуально?<span class="time">12:41</span></div><div class="bubble me">Да. Кофемашина тоже интересна, давайте обсудим передачу.<span class="time">12:43</span></div>
+        <article class="assistant card-a" data-label="Приватное сообщение помощника"><div class="assistant-head"><div class="assistant-mark">Д</div><div class="assistant-name">Помощник Дайбери</div><span class="private">видно только вам</span></div><div class="assist-title">Пора выбрать способ передачи</div><div class="assist-copy">Вы уже согласовали вещи и доплату. Я помогу предложить Анне встречу или отправку — сообщение уйдёт только после вашей проверки.</div><button class="primary" onclick="startHandoff(this,'a')">Уточнить способ передачи</button><button class="text-btn" onclick="toggleWhy(this)">Почему сейчас?</button><div class="why">Без способа передачи сделка часто зависает. Следующим шагом вы выберете вариант и увидите готовый текст перед отправкой.</div></article>
+        <div class="bubble them">Мне удобно встретиться в центре после работы.<span class="time">12:45</span></div>
+      </div><div class="composer"><textarea placeholder="Сообщение…"></textarea><button class="send" onclick="sendDraft(this)">➤</button></div>
+    </div></section>
+
+    <section id="variant-b" class="variant active"><div class="phone" data-label="Экран чата">
+      <div class="safe"></div><header class="header"><button class="round">←</button><div class="avatar">А</div><div class="grow"><div class="name">Анна</div><div class="meta">Владимир · была недавно</div></div><button class="round">⋯</button></header>
+      <div class="deal-strip"><div class="swap">⇄</div><div class="grow"><div class="deal-title">Кофемашина ↔ кресло</div><div class="deal-sub">1 500 Б в эскроу</div></div><button class="deal-link">Сделка</button></div>
+      <div class="chat"><div class="day">Сегодня</div><div class="bubble them">Здравствуйте! Кресло ещё актуально?<span class="time">12:41</span></div><div class="bubble me">Да. Кофемашина тоже интересна, давайте обсудим передачу.<span class="time">12:43</span></div>
+        <div class="assistant-row" data-label="Помощник как участник ритма чата"><div class="tiny-mark">Д</div><div class="bubble-b"><b>Помощник · только для вас</b><span>Как предложим передать вещи?</span><div class="quick"><button onclick="pickQuick(this)">Встретимся</button><button onclick="pickQuick(this)">Отправка</button><button onclick="pickQuick(this)">Позже</button></div></div></div>
+        <div class="bubble them">Я обычно могу после 18:00.<span class="time">12:45</span></div><div class="bubble me">Тогда давайте выберем день.<span class="time">12:46</span></div>
+      </div><div class="composer"><textarea placeholder="Сообщение…"></textarea><button class="send" onclick="sendDraft(this)">➤</button></div>
+    </div></section>
+
+    <section id="variant-c" class="variant"><div class="phone" data-label="Экран чата">
+      <div class="safe"></div><header class="header"><button class="round">←</button><div class="avatar">А</div><div class="grow"><div class="name">Анна</div><div class="meta">Владимир · была недавно</div></div><button class="round">⋯</button></header>
+      <div class="deal-strip"><div class="swap">⇄</div><div class="grow"><div class="deal-title">Кофемашина ↔ кресло</div><div class="deal-sub">1 500 Б в эскроу</div></div><button class="deal-link">Сделка</button></div>
+      <div class="chat"><div class="day">Сегодня</div><div class="bubble them">Здравствуйте! Кресло ещё актуально?<span class="time">12:41</span></div><div class="bubble me">Да. Кофемашина тоже интересна, давайте обсудим передачу.<span class="time">12:43</span></div>
+        <article class="assistant stage-card" data-label="Помощник как этап сделки"><div class="stage-top"><span class="step">Шаг 2 из 5</span><div class="track"><div class="fill"></div></div><span class="private">только вам</span></div><div class="stage-main"><div class="stage-icon">⌖</div><div><div class="stage-title">Согласуйте передачу</div><div class="stage-copy">Вещи и доплата уже понятны. Осталось выбрать встречу или отправку.</div></div></div><div class="stage-actions"><button class="primary" onclick="startHandoff(this,'c')">Выбрать способ</button><button class="secondary" onclick="snooze()">Не сейчас</button></div></article>
+        <div class="bubble them">Мне удобно встретиться в центре после работы.<span class="time">12:45</span></div>
+      </div><div class="composer"><textarea placeholder="Сообщение…"></textarea><button class="send" onclick="sendDraft(this)">➤</button></div>
+    </div></section>
+  </main>
+  <div id="toast" class="toast">Готово</div>
+  <div id="sketch-tools" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='.45'">
+    <select onchange="document.querySelector('link[href*=themes]').href='../themes/'+this.value+'.css'"><option value="default">Dayberry</option></select>
+    <button onclick="viewport(390)">Телефон</button><button onclick="viewport(768)">Планшет</button><button onclick="viewport(1180)">Широко</button><button onclick="annotate()">Размеры</button>
+  </div>
+  <script>
+    function showVariant(id,button){document.querySelectorAll('.variant').forEach(v=>v.classList.remove('active'));document.querySelectorAll('.variant-tab').forEach(v=>v.classList.remove('active'));document.getElementById('variant-'+id).classList.add('active');button.classList.add('active')}
+    function toast(text){const el=document.getElementById('toast');el.textContent=text;el.classList.add('show');clearTimeout(window.toastTimer);window.toastTimer=setTimeout(()=>el.classList.remove('show'),1800)}
+    function toggleWhy(button){button.nextElementSibling.classList.toggle('open');button.textContent=button.nextElementSibling.classList.contains('open')?'Скрыть объяснение':'Почему сейчас?'}
+    function startHandoff(button,variant){button.disabled=true;button.textContent='Готовлю варианты…';setTimeout(()=>{button.disabled=false;button.textContent=variant==='c'?'Выбрать: встреча':'Предложить встречу';toast('Черновик готов — ничего ещё не отправлено')},650)}
+    function pickQuick(button){button.parentElement.querySelectorAll('button').forEach(b=>b.classList.remove('selected'));button.classList.add('selected');toast('Выбрано: '+button.textContent+'. Сначала покажем текст')}
+    function snooze(){toast('Напомним позже, чат остаётся доступен')}
+    function sendDraft(button){const field=button.previousElementSibling;if(!field.value.trim()){toast('Сначала напишите сообщение');field.focus();return}toast('Сообщение отправлено');field.value=''}
+    function viewport(width){document.getElementById('canvas').style.maxWidth=width+'px';toast('Область просмотра: '+width+' px')}
+    function annotate(){document.getElementById('canvas').classList.toggle('annotate');toast('Подсказки размеров переключены')}
+  </script>
+</body>
+</html>
