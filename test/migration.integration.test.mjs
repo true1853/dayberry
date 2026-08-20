@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmod, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
@@ -31,6 +31,7 @@ import {
   tableColumnNames,
   withClient,
 } from './fixtures/escrow-db.mjs';
+import { approvalToken } from '../scripts/backfill-deal-escrow.mjs';
 
 const cleanDeal = {
   id: 'deal-a',
@@ -513,4 +514,270 @@ test('pre-change database resolves baseline and deploys preserving every row', a
 
   const rerun = migrateDeploy(database);
   assert.equal(rerun.status, 0, `${rerun.stdout}\n${rerun.stderr}`);
+});
+
+async function migratedDatabaseWithLegacyRows(dir, name = 'restored.db') {
+  const database = await createPreChangeDatabase(dir, name);
+  await seedLegacyRows(database);
+  const resolved = resolveApplied(database, BASELINE_MIGRATION);
+  assert.equal(resolved.status, 0, `${resolved.stdout}\n${resolved.stderr}`);
+  const deployed = migrateDeploy(database);
+  assert.equal(deployed.status, 0, `${deployed.stdout}\n${deployed.stderr}`);
+  return database;
+}
+
+function auditSnapshot(database, livePath, output, manifest) {
+  return runScript('scripts/audit-deal-escrow.mjs', [
+    '--database', database,
+    '--live-path', livePath,
+    '--output', output,
+    ...(manifest ? ['--manifest', manifest] : []),
+  ]);
+}
+
+function backfill(args) {
+  return runScript('scripts/backfill-deal-escrow.mjs', args);
+}
+
+function manifestHashOf(stdout) {
+  return /manifest-sha256: ([a-f0-9]{64})/.exec(stdout)?.[1];
+}
+
+async function escrowState(database) {
+  return withClient(database, async (prisma) => ({
+    deal: (await prisma.$queryRawUnsafe('SELECT "id","escrowTransactionId" FROM "Deal" ORDER BY "id"'))[0],
+    transactions: await prisma.$queryRawUnsafe('SELECT "id","refType","refId","businessKey" FROM "Transaction" ORDER BY "id"'),
+  }));
+}
+
+test('backfill manifest lists only the canonical unique direct pair', async (t) => {
+  const dir = await createTempDir('manifest');
+  t.after(() => removeTempDir(dir));
+  const database = await migratedDatabaseWithLegacyRows(dir);
+  const livePath = path.join(dir, 'live.db');
+  const auditFile = path.join(dir, 'audit.json');
+  const manifest = path.join(dir, 'manifest.json');
+
+  auditSnapshot(database, livePath, auditFile);
+  const emitted = backfill([
+    '--emit-manifest',
+    '--database', database,
+    '--live-path', livePath,
+    '--audit', auditFile,
+    '--manifest', manifest,
+  ]);
+  assert.equal(emitted.status, 0, `${emitted.stdout}\n${emitted.stderr}`);
+
+  const written = JSON.parse(await readFile(manifest, 'utf8'));
+  assert.deepEqual(written.rows, [{
+    dealId: 'deal-live',
+    transactionId: 'tx-direct-hold',
+    refType: 'deal',
+    refId: 'deal-live',
+    businessKey: 'deal:deal-live:hold',
+  }]);
+  assert.match(manifestHashOf(emitted.stdout), /^[a-f0-9]{64}$/);
+
+  // Манифест ничего не пишет в базу.
+  const state = await escrowState(database);
+  assert.equal(state.deal.escrowTransactionId, null);
+
+  const repeated = backfill([
+    '--emit-manifest',
+    '--database', database,
+    '--live-path', livePath,
+    '--audit', auditFile,
+    '--manifest', manifest,
+  ]);
+  assert.notEqual(repeated.status, 0);
+  assert.match(`${repeated.stdout}\n${repeated.stderr}`, /already exists/i);
+});
+
+test('backfill dry-run rejects manifest hash drift and writes nothing', async (t) => {
+  const dir = await createTempDir('dry-run');
+  t.after(() => removeTempDir(dir));
+  const database = await migratedDatabaseWithLegacyRows(dir);
+  const livePath = path.join(dir, 'live.db');
+  const auditFile = path.join(dir, 'audit.json');
+  const manifest = path.join(dir, 'manifest.json');
+
+  auditSnapshot(database, livePath, auditFile);
+  const emitted = backfill([
+    '--emit-manifest', '--database', database, '--live-path', livePath,
+    '--audit', auditFile, '--manifest', manifest,
+  ]);
+  const hash = manifestHashOf(emitted.stdout);
+
+  const ok = backfill([
+    '--database', database, '--live-path', livePath,
+    '--audit', auditFile, '--manifest', manifest, '--manifest-sha256', hash,
+  ]);
+  assert.equal(ok.status, 0, `${ok.stdout}\n${ok.stderr}`);
+  assert.match(ok.stdout, /"mutations":0/);
+
+  const drifted = backfill([
+    '--database', database, '--live-path', livePath,
+    '--audit', auditFile, '--manifest', manifest,
+    '--manifest-sha256', 'f'.repeat(64),
+  ]);
+  assert.notEqual(drifted.status, 0);
+  assert.match(`${drifted.stdout}\n${drifted.stderr}`, /manifest hash mismatch/i);
+
+  assert.equal((await escrowState(database)).deal.escrowTransactionId, null);
+});
+
+test('rehearsal apply links exact rows, leaves the chain hold alone and reruns as a no-op', async (t) => {
+  const dir = await createTempDir('rehearsal');
+  t.after(() => removeTempDir(dir));
+  const database = await migratedDatabaseWithLegacyRows(dir);
+  const livePath = path.join(dir, 'live.db');
+  const auditFile = path.join(dir, 'audit.json');
+  const manifest = path.join(dir, 'manifest.json');
+
+  auditSnapshot(database, livePath, auditFile);
+  const hash = manifestHashOf(backfill([
+    '--emit-manifest', '--database', database, '--live-path', livePath,
+    '--audit', auditFile, '--manifest', manifest,
+  ]).stdout);
+
+  const applied = backfill([
+    '--rehearsal-apply', '--database', database, '--live-path', livePath,
+    '--audit', auditFile, '--manifest', manifest, '--manifest-sha256', hash,
+  ]);
+  assert.equal(applied.status, 0, `${applied.stdout}\n${applied.stderr}`);
+  assert.match(applied.stdout, /"mutations":1/);
+
+  const state = await escrowState(database);
+  assert.equal(state.deal.escrowTransactionId, 'tx-direct-hold');
+  assert.deepEqual(state.transactions, [
+    { id: 'tx-chain-hold', refType: 'chain', refId: 'chain-live', businessKey: null },
+    { id: 'tx-direct-hold', refType: 'deal', refId: 'deal-live', businessKey: 'deal:deal-live:hold' },
+  ]);
+
+  const rerun = backfill([
+    '--rehearsal-apply', '--database', database, '--live-path', livePath,
+    '--audit', auditFile, '--manifest', manifest, '--manifest-sha256', hash,
+  ]);
+  assert.equal(rerun.status, 0, `${rerun.stdout}\n${rerun.stderr}`);
+  assert.match(rerun.stdout, /"mutations":0/);
+
+  // После бэкфилла аудит со сверкой по манифесту не считает связанную
+  // сделку блокирующей находкой.
+  const postAudit = path.join(dir, 'post-audit.json');
+  const post = auditSnapshot(database, livePath, postAudit, manifest);
+  assert.equal(post.status, 0, `${post.stdout}\n${post.stderr}`);
+  const report = JSON.parse(await readFile(postAudit, 'utf8'));
+  assert.equal(report.high, false);
+  assert.equal(report.classification.manifestApplied, true);
+});
+
+test('rehearsal apply refuses the resolved live path and plain --apply', async (t) => {
+  const dir = await createTempDir('live-deny');
+  t.after(() => removeTempDir(dir));
+  const database = await migratedDatabaseWithLegacyRows(dir);
+  const auditFile = path.join(dir, 'audit.json');
+  const manifest = path.join(dir, 'manifest.json');
+  auditSnapshot(database, path.join(dir, 'live.db'), auditFile);
+
+  const denied = backfill([
+    '--rehearsal-apply', '--database', database, '--live-path', database,
+    '--audit', auditFile, '--manifest', manifest, '--manifest-sha256', 'a'.repeat(64),
+  ]);
+  assert.notEqual(denied.status, 0);
+  assert.match(`${denied.stdout}\n${denied.stderr}`, /live path/i);
+
+  const plainApply = backfill(['--apply', '--database', database]);
+  assert.notEqual(plainApply.status, 0);
+  assert.match(`${plainApply.stdout}\n${plainApply.stderr}`, /--apply is not supported/i);
+});
+
+test('production apply contract fails closed and consumes its token once', async (t) => {
+  const dir = await createTempDir('production');
+  t.after(() => removeTempDir(dir));
+  const database = await migratedDatabaseWithLegacyRows(dir);
+  const auditFile = path.join(dir, 'audit.json');
+  const manifest = path.join(dir, 'manifest.json');
+  const ledger = path.join(dir, 'token-receipt.json');
+
+  auditSnapshot(database, path.join(dir, 'live.db'), auditFile);
+  const hash = manifestHashOf(backfill([
+    '--emit-manifest', '--database', database, '--live-path', path.join(dir, 'live.db'),
+    '--audit', auditFile, '--manifest', manifest,
+  ]).stdout);
+
+  const evidence = {
+    'pre-snapshot-sha256': '1'.repeat(64),
+    'pre-audit-sha256': '2'.repeat(64),
+    'candidate-sha256': '3'.repeat(64),
+    'rollback-sha256': '4'.repeat(64),
+    'single-writer-sha256': '5'.repeat(64),
+  };
+  const token = approvalToken({
+    version: 1,
+    livePath: await realpath(database),
+    preSnapshotSha256: evidence['pre-snapshot-sha256'],
+    preAuditSha256: evidence['pre-audit-sha256'],
+    manifestSha256: hash,
+    candidateSha256: evidence['candidate-sha256'],
+    rollbackSha256: evidence['rollback-sha256'],
+    singleWriterSha256: evidence['single-writer-sha256'],
+  });
+
+  const productionArgs = (overrides = {}) => [
+    '--production-apply',
+    '--database', database,
+    '--live-path', database,
+    '--confirm-live-path', overrides.confirm ?? database,
+    '--audit', auditFile,
+    '--manifest', manifest,
+    '--manifest-sha256', hash,
+    '--pre-snapshot-sha256', evidence['pre-snapshot-sha256'],
+    '--pre-audit-sha256', evidence['pre-audit-sha256'],
+    '--candidate-sha256', evidence['candidate-sha256'],
+    '--rollback-sha256', evidence['rollback-sha256'],
+    '--single-writer-sha256', evidence['single-writer-sha256'],
+    '--approval-token', overrides.token ?? token,
+    '--ledger', overrides.ledger ?? ledger,
+  ];
+
+  const wrongConfirm = backfill(productionArgs({ confirm: path.join(dir, 'other.db') }));
+  assert.notEqual(wrongConfirm.status, 0);
+  assert.match(`${wrongConfirm.stdout}\n${wrongConfirm.stderr}`, /resolve to one path/i);
+
+  const wrongToken = backfill(productionArgs({ token: '9'.repeat(64), ledger: path.join(dir, 'ledger-b.json') }));
+  assert.notEqual(wrongToken.status, 0);
+  assert.match(`${wrongToken.stdout}\n${wrongToken.stderr}`, /approval token/i);
+
+  const first = backfill(productionArgs());
+  assert.equal(first.status, 0, `${first.stdout}\n${first.stderr}`);
+  assert.match(first.stdout, /"mutations":1/);
+  assert.equal((await escrowState(database)).deal.escrowTransactionId, 'tx-direct-hold');
+
+  const reused = backfill(productionArgs());
+  assert.notEqual(reused.status, 0);
+  assert.match(`${reused.stdout}\n${reused.stderr}`, /already consumed/i);
+});
+
+test('ambiguous rows produce an empty manifest and stay untouched', async (t) => {
+  const dir = await createTempDir('ambiguous');
+  t.after(() => removeTempDir(dir));
+  const database = await migratedDatabaseWithLegacyRows(dir, 'ambiguous.db');
+  await withClient(database, prisma => prisma.$executeRawUnsafe(
+    `INSERT INTO "Transaction" ("id","userId","kind","title","amt","status","refType","refId") VALUES ('tx-twin','u-buyer','escrow-in','Эскроу',40,'held','','')`,
+  ));
+
+  const livePath = path.join(dir, 'live.db');
+  const auditFile = path.join(dir, 'audit.json');
+  const manifest = path.join(dir, 'manifest.json');
+  auditSnapshot(database, livePath, auditFile);
+
+  const emitted = backfill([
+    '--emit-manifest', '--database', database, '--live-path', livePath,
+    '--audit', auditFile, '--manifest', manifest,
+  ]);
+  assert.notEqual(emitted.status, 0, 'ambiguity must block the manifest');
+  assert.match(`${emitted.stdout}\n${emitted.stderr}`, /blocking findings/i);
+
+  const state = await escrowState(database);
+  assert.equal(state.deal.escrowTransactionId, null);
 });
