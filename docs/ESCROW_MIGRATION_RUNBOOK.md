@@ -46,23 +46,31 @@ PF-02, PF-03 и PF-06 закрываются в плане 01-06, когда а�
 
 ## Часть A. Репетиция на восстановленной копии
 
-### 1. Остановить запись
+### 1. Снять снимок без остановки приложения
 
-```powershell
-ssh -p 17236 srvadm@185.180.251.60 "docker stop dayberry"
+Репетиция не требует окна: `VACUUM INTO` даёт консистентный файл на работающей
+базе — ради этого он и выбран. Останавливать приложение нужно только в части B.
+
+На сервере (пока боевой образ содержит старую версию скрипта, путь передаётся
+позиционным аргументом; после выката нового образа — флагами `--source`,
+`--target`, `--evidence`):
+
+```bash
+docker exec dayberry rm -f /tmp/rehearsal.db
+docker exec dayberry node /app/scripts/backup-snapshot.mjs /tmp/rehearsal.db
+docker cp dayberry:/tmp/rehearsal.db /home/srvadm/rehearsal.db
+docker exec dayberry rm -f /tmp/rehearsal.db
+sha256sum /home/srvadm/rehearsal.db
 ```
 
-Окно — 10–20 минут. Только остановленный процесс доказывает отсутствие писателей;
-закрытие трафика на прокси такого доказательства не даёт.
-
-### 2. Создать неизменяемый пред-снимок
+Забрать к себе и сверить хеш, затем удалить копию с сервера:
 
 ```powershell
-npm run escrow:backup -- --source $env:ESCROW_LIVE_DB --target $env:ESCROW_PRE_SNAPSHOT --evidence "$env:ESCROW_EVIDENCE_DIR\pre-apply-snapshot.json"
+scp -P 17236 srvadm@185.180.251.60:/home/srvadm/rehearsal.db $env:ESCROW_PRE_SNAPSHOT
+Get-FileHash $env:ESCROW_PRE_SNAPSHOT -Algorithm SHA256
 ```
 
-Снимок создаётся через `VACUUM INTO`, получает права только на чтение и не
-перезаписывается. Повторный запуск обязан упасть.
+### 2. Проверить снимок
 
 ### 3. Аудит только снимка
 
@@ -138,71 +146,187 @@ npm run build
 
 ## Часть B. Продакшен
 
-### 11. Авторизация (PF-06, план 01-06)
+Живая база лежит в docker-томе на сервере и из PowerShell недоступна. Поэтому
+все команды, которые обязаны работать **с ней**, выполняются одноразовым
+контейнером из образа-кандидата, смонтированным на тот же том, пока приложение
+остановлено. Одноразовый контейнер и есть единственный писатель.
 
-Канонический объект авторизации версии 1 содержит точный путь живой базы и шесть
-неизменяемых SHA-256: пред-снимка, пред-аудита, одобренного манифеста, артефакта
-кандидата, артефакта отката с исправленным ядром и доказательства единственного
-писателя. Одноразовый токен — SHA-256 канонического объекта.
+Общая форма такой команды:
 
-Артефакт отката обязан содержать исправленное ядро эскроу и читать расширенную
-схему. Откат на до-интеграционный артефакт запрещён: он вернёт поиск «последнего
-held».
-
-Подтверждение: `approve-production-apply <authorization-sha256> <one-time-token>`.
-
-### 12. Единственное применение к живой базе
-
-Порядок обязателен и не переставляется:
-
-1. запись остановлена (шаг 1) и доказательство пересчитано;
-2. токен и шесть хешей проверены, но не израсходованы;
-3. `npm run migrate:deploy` против точного `$env:ESCROW_LIVE_DB`;
-4. проверить, что колонки `Deal.escrowTransactionId` и `Transaction.businessKey`
-   существуют, `integrity_check` = `ok`, `foreign_key_check` пуст, счётчики
-   совпадают с манифестом;
-5. только теперь:
-
-```powershell
-npm run escrow:backfill:production -- --database $env:ESCROW_LIVE_DB --live-path $env:ESCROW_LIVE_DB --confirm-live-path $env:ESCROW_LIVE_DB --audit "$env:ESCROW_EVIDENCE_DIR\pre-audit.json" --manifest "$env:ESCROW_EVIDENCE_DIR\manifest.json" --manifest-sha256 $env:ESCROW_MANIFEST_SHA256 --dispositions "$env:ESCROW_EVIDENCE_DIR\dispositions.json" --pre-snapshot-sha256 $env:ESCROW_PRE_SNAPSHOT_SHA256 --pre-audit-sha256 $env:ESCROW_PRE_AUDIT_SHA256 --candidate-sha256 $env:ESCROW_CANDIDATE_SHA256 --rollback-sha256 $env:ESCROW_ROLLBACK_SHA256 --single-writer-sha256 $env:ESCROW_SINGLE_WRITER_SHA256 --approval-token $env:ESCROW_APPROVAL_TOKEN --ledger "$env:ESCROW_EVIDENCE_DIR\token-receipt.json"
+```bash
+docker run --rm \
+  -v dayberry_dayberry-data:/app/data \
+  -e DATABASE_URL=file:/app/data/dayberry.db \
+  dayberry-dayberry:candidate <команда>
 ```
 
-Квитанция токена создаётся до открытия базы. Повтор невозможен: применение
-выполняется один раз, повторные попытки отклоняются до любой записи.
+### 11. Подготовка до окна (приложение ещё работает)
 
-### 13. Пост-снимок и сверка (PF-07)
+**11.1. Обновить скрипт бэкапа (BK-01).** Обязательно до сборки нового образа:
+после выката старый позиционный вызов перестанет работать, и ночной бэкап молча
+исчезнет.
+
+В `/home/srvadm/backups/dayberry/backup_dayberry.sh` заменить строку снимка на:
+
+```bash
+if ! docker exec dayberry sh -c 'rm -f /tmp/dayberry-backup.db /tmp/dayberry-backup.json && node /app/scripts/backup-snapshot.mjs --source /app/data/dayberry.db --target /tmp/dayberry-backup.db --evidence /tmp/dayberry-backup.json' >/dev/null; then
+  echo "$(date +%F_%T) ОШИБКА: снимок базы не сделан"
+  exit 1
+fi
+```
+
+`rm -f` обязателен: новый снимок пишется с правами только на чтение и
+отказывается перезаписывать существующий файл.
+
+**11.2. Собрать образ-кандидат, не запуская его:**
+
+```bash
+cd /home/srvadm/apps/dayberry
+git pull
+docker compose build
+docker tag dayberry-dayberry dayberry-dayberry:candidate
+docker image inspect dayberry-dayberry:candidate --format '{{.Id}}'
+```
+
+**11.3. Сохранить артефакт отката.** Откат на текущий боевой образ запрещён — в
+нём живёт `latest-held`. Артефактом отката служит тот же кандидат под отдельным
+тегом: он содержит исправленное ядро и читает расширенную схему.
+
+```bash
+docker tag dayberry-dayberry:candidate dayberry-dayberry:rollback
+docker image inspect dayberry-dayberry:rollback --format '{{.Id}}'
+```
+
+**11.4. Снять боевой пред-снимок** (приложение ещё работает, окна нет):
+команды шага 1, но целевой файл — `$env:ESCROW_PRE_SNAPSHOT`. Забрать к себе,
+сверить хеш, проаудировать по шагу 3, зафиксировать:
 
 ```powershell
-npm run escrow:backup -- --source $env:ESCROW_LIVE_DB --target $env:ESCROW_POST_SNAPSHOT --evidence "$env:ESCROW_EVIDENCE_DIR\post-apply-snapshot.json"
+$env:ESCROW_PRE_SNAPSHOT_SHA256 = (Get-FileHash $env:ESCROW_PRE_SNAPSHOT -Algorithm SHA256).Hash.ToLower()
+$env:ESCROW_PRE_AUDIT_SHA256    = (Get-FileHash "$env:ESCROW_EVIDENCE_DIR\pre-audit.json" -Algorithm SHA256).Hash.ToLower()
+```
+
+Манифест и решения берутся из репетиции: их хеши уже проверены. Если пред-снимок
+отличается от репетиционного составом строк — репетицию повторить, а не
+подгонять решения.
+
+### 12. Авторизация (PF-06)
+
+Канонический объект авторизации версии 1 содержит точный путь живой базы **внутри
+контейнера** (`/app/data/dayberry.db` — именно он резолвится при применении) и
+шесть неизменяемых SHA-256: пред-снимка, пред-аудита, одобренного манифеста,
+образа-кандидата, образа отката и доказательства единственного писателя.
+Одноразовый токен — SHA-256 канонического объекта.
+
+Доказательство единственного писателя — файл с выводом `docker ps` после
+остановки, показывающий, что контейнер `dayberry` не запущен.
+
+Подтверждение оператора: `approve-production-apply <authorization-sha256> <one-time-token>`.
+
+### 13. Окно: остановка и применение
+
+```bash
+docker stop dayberry
+docker ps --format '{{.Names}}' > /home/srvadm/single-writer.txt   # доказательство PF-04
+```
+
+С этого момента и до шага 15 сайт недоступен. Дальше — строго по порядку:
+
+**13.1. Миграция схемы:**
+
+```bash
+docker run --rm -v dayberry_dayberry-data:/app/data -e DATABASE_URL=file:/app/data/dayberry.db \
+  dayberry-dayberry:candidate npx prisma migrate resolve --applied 20260814170000_baseline
+docker run --rm -v dayberry_dayberry-data:/app/data -e DATABASE_URL=file:/app/data/dayberry.db \
+  dayberry-dayberry:candidate npx prisma migrate deploy
+```
+
+`resolve` выполняется один раз и только если гейт эквивалентности из шага 5 дал
+`No difference detected`.
+
+**13.2. Гейты перед записью денег.** Убедиться, что колонки
+`Deal.escrowTransactionId`, `Deal.createCommandKey` и `Transaction.businessKey`
+существуют, `integrity_check` = `ok`, `foreign_key_check` пуст, а счётчики строк
+совпадают с манифестом. Любое расхождение — стоп без бэкфилла.
+
+**13.3. Единственная запись в живые деньги.** Каталог доказательств монтируется
+внутрь контейнера, чтобы манифест, решения и квитанция токена были доступны:
+
+```bash
+docker run --rm \
+  -v dayberry_dayberry-data:/app/data \
+  -v /home/srvadm/escrow-evidence:/evidence \
+  -e DATABASE_URL=file:/app/data/dayberry.db \
+  dayberry-dayberry:candidate node scripts/backfill-deal-escrow.mjs --production-apply \
+    --database /app/data/dayberry.db \
+    --live-path /app/data/dayberry.db \
+    --confirm-live-path /app/data/dayberry.db \
+    --audit /evidence/pre-audit.json \
+    --manifest /evidence/manifest.json \
+    --manifest-sha256 "$ESCROW_MANIFEST_SHA256" \
+    --dispositions /evidence/dispositions.json \
+    --pre-snapshot-sha256 "$ESCROW_PRE_SNAPSHOT_SHA256" \
+    --pre-audit-sha256 "$ESCROW_PRE_AUDIT_SHA256" \
+    --candidate-sha256 "$ESCROW_CANDIDATE_SHA256" \
+    --rollback-sha256 "$ESCROW_ROLLBACK_SHA256" \
+    --single-writer-sha256 "$ESCROW_SINGLE_WRITER_SHA256" \
+    --approval-token "$ESCROW_APPROVAL_TOKEN" \
+    --ledger /evidence/token-receipt.json
+```
+
+Квитанция токена создаётся до открытия базы, поэтому повтор отклоняется раньше
+любой записи. Повторять применение нельзя: идемпотентность уже доказана
+репетицией, а не повторной попыткой на живых данных.
+
+### 14. Поднять новое приложение
+
+```bash
+cd /home/srvadm/apps/dayberry
+docker compose up -d
+docker compose logs --tail 50 dayberry
+```
+
+Старт больше не создаёт каталог загрузок и не выполняет миграций. Если каталога
+нет, создать его до старта:
+
+```bash
+docker run --rm -v dayberry_dayberry-data:/app/data alpine mkdir -p /app/data/uploads
+```
+
+Флаг чтения остаётся выключенным: приложение работает на исправленном ядре, но
+отвечает в прежней форме.
+
+### 15. Пост-снимок и сверка (PF-07)
+
+```bash
+docker exec dayberry sh -c 'rm -f /tmp/post.db /tmp/post.json && node /app/scripts/backup-snapshot.mjs --source /app/data/dayberry.db --target /tmp/post.db --evidence /tmp/post.json'
+docker cp dayberry:/tmp/post.db /home/srvadm/post-apply-snapshot.db
+docker exec dayberry rm -f /tmp/post.db /tmp/post.json
+sha256sum /home/srvadm/post-apply-snapshot.db
+```
+
+Забрать к себе как `$env:ESCROW_POST_SNAPSHOT` и проаудировать со сверкой по
+манифесту:
+
+```powershell
 npm run escrow:audit -- --database $env:ESCROW_POST_SNAPSHOT --live-path $env:ESCROW_LIVE_DB --manifest "$env:ESCROW_EVIDENCE_DIR\manifest.json" --output "$env:ESCROW_EVIDENCE_DIR\post-audit.json"
 ```
 
-Пред- и пост-аудит используют два разных неизменяемых снимка. Живая база не
-аудируется напрямую ни на одном шаге. Сверить дельты строк, балансов,
-замороженных сумм и счётчиков с манифестом.
+Пред- и пост-аудит используют два разных неизменяемых снимка; живая база не
+аудируется напрямую ни на одном шаге. Сверить: связано ровно столько пар,
+сколько в манифесте; неразрешённые строки не изменились; сумма балансов не
+изменилась ни на балл; `integrity_check` = `ok`; `foreign_key_check` пуст.
 
-### 14. Развернуть новый образ и вернуть запись
+### 16. Включить расширенное чтение (отдельно и позже)
 
-```powershell
-ssh -p 17236 srvadm@185.180.251.60 "cd /home/srvadm/apps/dayberry && docker compose up -d --build"
-```
-
-**Обновить серверный скрипт бэкапа до первого запуска нового образа** (BK-01):
-`backup-snapshot.mjs` больше не принимает позиционный путь.
+Только после окна наблюдения без ошибок:
 
 ```bash
-docker exec dayberry sh -c 'rm -f /tmp/dayberry-backup.db /tmp/dayberry-backup.json && node /app/scripts/backup-snapshot.mjs --source /app/data/dayberry.db --target /tmp/dayberry-backup.db --evidence /tmp/dayberry-backup.json'
+cd /home/srvadm/apps/dayberry
+DEAL_ESCROW_EXPANDED_READS=1 docker compose up -d
 ```
 
-Старт контейнера больше не создаёт каталог загрузок и не выполняет миграции:
-`mkdir -p /app/data/uploads` и разовые `migrate:photos` / `migrate:chains`
-выполняются релизным шагом до старта, если они нужны.
-
-Флаг чтения включается отдельно и позже:
-
-```powershell
-ssh -p 17236 srvadm@185.180.251.60 "cd /home/srvadm/apps/dayberry && DEAL_ESCROW_EXPANDED_READS=1 docker compose up -d"
-```
+Выключение флага возвращает прежнюю форму ответа и не влияет на деньги.
 
 ## Откат
 
