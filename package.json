@@ -15,6 +15,10 @@
     "escrow:audit": "node scripts/audit-deal-escrow.mjs",
     "escrow:verify-restore": "node scripts/verify-restored-copy.mjs",
     "escrow:backfill": "node scripts/backfill-deal-escrow.mjs",
+    "escrow:manifest": "node scripts/backfill-deal-escrow.mjs --emit-manifest",
+    "escrow:backfill:rehearse": "node scripts/backfill-deal-escrow.mjs --rehearsal-apply",
+    "escrow:backfill:production": "node scripts/backfill-deal-escrow.mjs --production-apply",
+    "test:compat": "node --test --test-concurrency=1 test/compatibility.integration.test.mjs",
     "migrate:deploy": "prisma migrate deploy",
     "migrate:photos": "node scripts/migrate-photos.mjs",
     "migrate:chains": "node scripts/migrate-chains.mjs"

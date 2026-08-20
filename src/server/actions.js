@@ -19,6 +19,7 @@ import {
   openDealDispute,
   resolveDealDispute,
 } from '../../lib/deals/escrow.js';
+import { expandedDealReadInclude, serializeEscrowReadState } from '../../lib/deals/rollout.js';
 import {
   createSession,
   destroySession,
@@ -616,6 +617,7 @@ class InsufficientFunds extends Error {
 
 function dealWith() {
   return {
+    ...expandedDealReadInclude(),
     lot: { include: { owner: { select: { id: true, name: true, city: true, avatar: true } }, lotPhotos: { orderBy: { order: 'asc' } } } },
     myLot: { include: { lotPhotos: { orderBy: { order: 'asc' } } } },
     // достаточно авторов, чтобы понять, оценил ли текущий пользователь обмен
@@ -645,6 +647,9 @@ async function serializeDeal(d, currentUserId) {
     disputeNote: d.disputeNote || '',
     disputeMine: !!d.disputeById && d.disputeById === currentUserId,
     reviewed: (d.reviews || []).some(r => r.authorId === currentUserId),
+    // Признак состояния эскроу появляется только при включённом флаге и
+    // никогда не содержит идентификатора проводки.
+    ...serializeEscrowReadState(d),
   };
 }
 
