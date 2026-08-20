@@ -163,6 +163,15 @@ model Deal {
   disputedAt         DateTime?
   disputeById        String?
   disputeNote        String   @default("")
+  // Ключ команды создания: повтор запроса от того же инициатора не должен
+  // открыть вторую сделку и заморозить баллы дважды. Заполняется только
+  // новым кодом; у исторических сделок остаётся null.
+  createCommandKey    String?     @unique
+  // Точная ссылка на замороженный холд вместо поиска «последний held
+  // у пользователя»: тот поиск на цепочках забирает чужую доплату.
+  // Restrict — эскроу нельзя удалить, пока на него ссылается сделка.
+  escrowTransactionId String?      @unique
+  escrowTransaction   Transaction? @relation("DealEscrow", fields: [escrowTransactionId], references: [id], onDelete: Restrict)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
   chat               Chat?
@@ -189,6 +198,12 @@ model Transaction {
   // и такой поиск разъезжается — поэтому ссылка явная.
   refType   String   @default("")
   refId     String   @default("")
+  // Стабильный ключ операции: deal:<dealId>:hold, deal:<dealId>:release.
+  // Повтор или гонка терминальной команды не создаёт вторую проводку.
+  // Nullable — исторические строки остаются без ключа. Общего unique на
+  // (refType, refId) быть не может: у одной цепочки законно несколько строк.
+  businessKey String? @unique
+  escrowFor   Deal?   @relation("DealEscrow")
   createdAt DateTime @default(now())
 
   @@index([userId, createdAt])
