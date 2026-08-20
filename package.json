@@ -14,11 +14,13 @@
     "escrow:backup": "node scripts/backup-snapshot.mjs",
     "escrow:audit": "node scripts/audit-deal-escrow.mjs",
     "escrow:verify-restore": "node scripts/verify-restored-copy.mjs",
+    "escrow:backfill": "node scripts/backfill-deal-escrow.mjs",
+    "migrate:deploy": "prisma migrate deploy",
     "migrate:photos": "node scripts/migrate-photos.mjs",
     "migrate:chains": "node scripts/migrate-chains.mjs"
   },
   "dependencies": {
-    "@prisma/client": "^6.2.1",
+    "@prisma/client": "^6.19.3",
     "bcryptjs": "^2.4.3",
     "jose": "^5.9.6",
     "lucide-react": "^1.17.0",
@@ -29,6 +31,6 @@
     "web-push": "^3.6.7"
   },
   "devDependencies": {
-    "prisma": "^6.2.1"
+    "prisma": "^6.19.3"
   }
 }

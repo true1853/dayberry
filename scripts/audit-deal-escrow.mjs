@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { existsSync } from 'node:fs';
-import { mkdir, realpath, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -12,17 +12,27 @@ const ENV_BY_OPTION = {
   output: 'ESCROW_AUDIT_OUTPUT',
 };
 
+// Манифест необязателен: без него отсутствие связи блокирует всё, с ним —
+// только те сделки, которые манифест обещал связать.
+const OPTIONAL_OPTIONS = { manifest: 'ESCROW_MANIFEST' };
+
 function parseOptions(argv, environment = process.env) {
   const parsed = {};
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
     if (!token.startsWith('--')) throw new Error(`unknown argument: ${token}`);
     const name = token.slice(2);
-    if (!(name in ENV_BY_OPTION)) throw new Error(`unknown option: --${name}`);
+    if (!(name in ENV_BY_OPTION) && !(name in OPTIONAL_OPTIONS)) throw new Error(`unknown option: --${name}`);
     const value = argv[index + 1];
     if (value === undefined || value.startsWith('--')) throw new Error(`missing required input: ${name}`);
     parsed[name] = value;
     index += 1;
+  }
+
+  for (const [name, envName] of Object.entries(OPTIONAL_OPTIONS)) {
+    const value = parsed[name] ?? environment[envName];
+    if (typeof value === 'string' && value.trim() !== '') parsed[name] = value.trim();
+    else delete parsed[name];
   }
 
   for (const [name, envName] of Object.entries(ENV_BY_OPTION)) {
@@ -185,7 +195,16 @@ async function readTableCounts(prisma) {
   return counts;
 }
 
-export async function runAudit({ database, livePath, output }) {
+async function readManifestDealIds(manifestPath) {
+  if (!manifestPath) return null;
+  const resolved = await canonicalPath(manifestPath);
+  if (!existsSync(resolved)) throw new Error(`manifest does not exist: ${resolved}`);
+  const manifest = JSON.parse(await readFile(resolved, 'utf8'));
+  if (manifest.kind !== 'escrow-backfill-manifest') throw new Error(`not a backfill manifest: ${resolved}`);
+  return (manifest.rows || []).map(row => String(row.dealId));
+}
+
+export async function runAudit({ database, livePath, output, manifest }) {
   const resolvedDatabase = await canonicalPath(database);
   const resolvedLivePath = await canonicalPath(livePath);
   const resolvedOutput = await canonicalPath(output);
@@ -198,6 +217,8 @@ export async function runAudit({ database, livePath, output }) {
     throw new Error('audit output collides with a database path');
   }
 
+  const manifestDealIds = await readManifestDealIds(manifest);
+
   const prisma = new PrismaClient({ datasourceUrl: sqliteUrl(resolvedDatabase) });
   let report;
   try {
@@ -206,7 +227,7 @@ export async function runAudit({ database, livePath, output }) {
       readRuntime(prisma),
       readTableCounts(prisma),
     ]);
-    const classification = classifyEscrowCandidateGraph(rows);
+    const classification = classifyEscrowCandidateGraph({ ...rows, manifestDealIds });
     report = {
       kind: 'escrow-audit',
       schemaVersion: 2,
@@ -236,6 +257,7 @@ async function main() {
     database: options.database,
     livePath: options['live-path'],
     output: options.output,
+    manifest: options.manifest,
   });
   const bucketCounts = Object.fromEntries(
     Object.entries(report.classification.buckets).map(([name, rows]) => [name, rows.length]),
