@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Помощник сделки MVP
 status: executing
-stopped_at: 01-04 complete and verified; 01-03 (operator inventory) is the remaining Wave 3 item.
+stopped_at: Wave 3 complete (01-03, 01-04); Wave 4 (01-05) is ready to execute.
 last_updated: "2026-08-20T00:00:00.000Z"
-last_activity: 2026-08-20 -- 01-04 completed (exact atomic escrow core, all direct paths routed)
+last_activity: 2026-08-20 -- 01-03 completed (production inventory, unresolved-row dispositions)
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 6
-  completed_plans: 3
-  percent: 50
+  completed_plans: 4
+  percent: 67
 ---
 
 # Project State
@@ -26,17 +26,17 @@ See: .planning/PROJECT.md (updated 2026-08-14)
 ## Current Position
 
 Phase: 1 (escrow-integrity-and-safe-migration) — EXECUTING
-Plan: 01-03 (Wave 3, operator inventory)
-Status: 01-01, 01-02, 01-04 complete; 01-03 needs operator input
-Last activity: 2026-08-20 -- 01-04 completed
+Plan: 01-05 (Wave 4)
+Status: Waves 1-3 complete; 01-05 not started
+Last activity: 2026-08-20 -- 01-03 completed
 
-Progress: [█████░░░░░] 50%
+Progress: [███████░░░] 67%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 3
+- Total plans completed: 4
 - Average duration: not tracked
 - Total execution time: not tracked
 
@@ -44,9 +44,9 @@ Progress: [█████░░░░░] 50%
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 1 | 3/6 | — | — |
+| 1 | 4/6 | — | — |
 
-**Recent Trend:** Waves 1-2 and the code half of Wave 3 complete.
+**Recent Trend:** Waves 1-3 complete; only rollout and the live apply remain.
 
 ## Accumulated Context
 
@@ -64,6 +64,10 @@ Decisions are logged in PROJECT.md. Current milestone decisions:
 - Manifest creation is its own mode (`--emit-manifest`); dry-run stays verifying (01-02).
 - A positive-credit deal without an exact escrow link refuses to settle and asks for
   an operator instead of guessing a hold (01-04).
+- Бэкфилл связывает здоровые пары даже при наличии сломанных строк, но применение
+  требует поимённых решений оператора по каждой неразрешённой строке (01-03).
+- Живой инвентарь: один контейнер, том dayberry_dayberry-data, окно —
+  docker stop dayberry; репетиция идёт на машине оператора (01-03).
 - Server rules remain authoritative; AI is advisory and every consequential action requires explicit user confirmation.
 - Economic terms are frozen after offer creation; only logistics are versioned in v1.1.
 - The complete manual path must work before advisory AI and remain available during AI failure.
@@ -73,17 +77,20 @@ Decisions are logged in PROJECT.md. Current milestone decisions:
 
 - 01-05: the container still runs `db push` at startup (`Dockerfile`); a restart can
   drift production past the new migration history.
-- 01-03: operator must supply live DB path, topology, single-writer window and
-  backup policy (PF-01…PF-05); nothing in the repository can answer these.
-- 01-05/01-06: deploy order is load-bearing — the backfill must run on production
-  before the new escrow core serves traffic, or legacy deals refuse to settle.
+- BK-01 (01-05): backup_dayberry.sh на сервере вызывает backup-snapshot.mjs
+  позиционным аргументом — после 01-01 CLI fail-closed, ночной бэкап сломается
+  при первом деплое нового образа.
+- BK-02 (01-05): CMD контейнера делает prisma db push при каждом старте.
+- BK-03 (01-06): порядок выката несущий — снимок, migrate deploy, бэкфилл,
+  затем новый образ.
 - 01-04: remove the `latest-held` lookup in `completeDeal` and deal cancellation
   (`src/server/actions.js:649`, `:866`) — it can settle a chain topup today.
 
 ### Blockers/Concerns
 
-- Live data may contain chain holds already settled by a direct deal; the pre-apply
-  audit bucket `chainHoldsSettledOutsideChain` must be reviewed before any backfill.
+- Подтверждено на проде: latest-held уже снял чужой холд — 3500 заморожены без
+  основания, активная сделка на 3000 без обеспечения. Строки признаны тестовыми,
+  но проходят через dispositions, а не молча.
 - Phase 1 planning must define manual handling for ambiguous held escrow rows and verify forward migration plus backup/restore on production-like data.
 - Phase 4 planning must settle directional handoff and receipt checkpoints for meetup, shipment, and remote service.
 - Phase 5 planning must verify the selected model/provider contract, privacy, structured output, refusal, and timeout semantics.
@@ -99,5 +106,5 @@ Decisions are logged in PROJECT.md. Current milestone decisions:
 ## Session Continuity
 
 Last session: 2026-08-20 +03:00
-Stopped at: 01-04 complete and verified (38 tests green, build clean).
-Resume file: .planning/phases/01-escrow-integrity-and-safe-migration/01-03-PLAN.md
+Stopped at: 01-03 complete (inventory approved, 38 tests green).
+Resume file: .planning/phases/01-escrow-integrity-and-safe-migration/01-05-PLAN.md

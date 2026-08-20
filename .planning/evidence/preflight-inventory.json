@@ -1,0 +1,129 @@
+{
+  "kind": "escrow-preflight-inventory",
+  "schemaVersion": 1,
+  "phase": "01-escrow-integrity-and-safe-migration",
+  "plan": "01-03",
+  "collectedAt": "2026-08-20",
+  "note": "Собрано read-only с продакшена. Ни снимка, ни аудита, ни изменений базы этот план не делает; PF-06 digests и PF-02 dispositions остаются за 01-06.",
+
+  "paths": {
+    "livePathOnHost": "/var/lib/docker/volumes/dayberry_dayberry-data/_data/dayberry.db",
+    "livePathInContainer": "/app/data/dayberry.db",
+    "volume": "dayberry_dayberry-data",
+    "composeProject": "dayberry",
+    "composeWorkingDir": "/home/srvadm/apps/dayberry",
+    "restoredCopyPath": "E:\\Projects\\dayberry-rehearsal\\restored.db",
+    "evidenceDir": "E:\\Projects\\dayberry-rehearsal\\evidence",
+    "distinct": true,
+    "absolute": true
+  },
+
+  "owners": {
+    "releaseOperator": "Андрей (trushin.av@gmail.com)",
+    "infrastructureOwner": "Андрей (trushin.av@gmail.com)",
+    "runtimeOwner": "Андрей (trushin.av@gmail.com)",
+    "backupOwner": "Андрей (trushin.av@gmail.com)",
+    "financialDataReviewer": "Андрей (trushin.av@gmail.com)",
+    "singleOperatorProject": true
+  },
+
+  "topology": {
+    "containers": [{ "name": "dayberry", "image": "dayberry-dayberry", "imageDigest": "sha256:0d8a77c743ae612bda53252a40fbcff7a49af173aa84bdce377ac7a9e52bcc04", "restartPolicy": "unless-stopped" }],
+    "replicas": 1,
+    "otherContainersOnVolume": [],
+    "mount": { "source": "/var/lib/docker/volumes/dayberry_dayberry-data/_data", "destination": "/app/data", "rw": true },
+    "externalWriters": "none found; host cron only reads the database through VACUUM INTO inside the container",
+    "reverseProxy": "nginx-proxy-manager (external network npm_default), published port 3010:80",
+    "provableSingleWriter": true
+  },
+
+  "stopWritesWindow": {
+    "method": "docker stop dayberry",
+    "approvedBy": "Андрей",
+    "expectedDowntimeMinutes": "10-20",
+    "rationale": "Полная остановка процесса — единственный писатель гарантированно отсутствует; закрытие трафика на прокси такой гарантии не даёт."
+  },
+
+  "backupPolicy": {
+    "script": "/home/srvadm/backups/dayberry/backup_dayberry.sh",
+    "schedule": "0 55 3 * * * (ежедневно 03:55)",
+    "method": "VACUUM INTO внутри контейнера + gzip; фотографии tar.gz",
+    "destination": "/home/srvadm/backups/dayberry (тот же хост)",
+    "offHost": false,
+    "encryption": false,
+    "access": "только srvadm",
+    "retention": { "database": "14 копий", "uploads": "7 копий" },
+    "deletionOwner": "Андрей (ротация в самом скрипте)",
+    "lastVerifiedRun": "2026-08-20 03:55 — ok, база 2.5M, фото 15M",
+    "acceptedRisks": [
+      "Копии не покидают сервер: потеря хоста означает потерю копий.",
+      "Копии не шифруются; доступ ограничен учётной записью srvadm.",
+      "Восстановление из копии ни разу не проверялось — проверка входит в 01-06."
+    ]
+  },
+
+  "runtime": {
+    "sqliteVersion": "3.46.0",
+    "source": "боевой контейнер dayberry",
+    "journalMode": "wal",
+    "synchronous": 2,
+    "diskFreeGb": 22,
+    "databaseSizeMb": 11,
+    "note": "PF-03 закрывается этими значениями только для текущего образа; репетиция идёт на Windows, поэтому runtime-доказательство берётся из контейнера, а не с машины оператора."
+  },
+
+  "baselineCounts": {
+    "deals": 14,
+    "activePaidDeals": 5,
+    "transactions": 10,
+    "heldDirectHolds": 5,
+    "heldChainHolds": 0,
+    "chains": 8,
+    "chainsByStatus": { "candidate": 8 },
+    "chainStepsWithTopup": 9,
+    "sumOfUserBalances": 122500,
+    "purpose": "Опорные числа для сверки дельт после миграции (PF-07)."
+  },
+
+  "expectedBackfill": {
+    "cleanPairs": 4,
+    "unresolvedRows": 2,
+    "unresolved": [
+      { "bucket": "unmatchedDeals", "id": "cmsq7vi9f000bmm01r2k3ih4v", "fact": "активная сделка на 3000, её холд cmsq7vi9d... уже переведён в done" },
+      { "bucket": "orphanDirectHolds", "id": "cmsp566660001o10111xyc02n", "fact": "холд на 3500 в статусе held, активной сделки на эту сумму нет" }
+    ],
+    "cause": "Последствие поиска latest-held: завершение соседней сделки того же пользователя сняло чужой холд. Дефект удалён в 01-04.",
+    "operatorDecision": "Строки признаны тестовыми; разбор не проводится, но применение бэкфилла всё равно потребует файла решений по обеим строкам.",
+    "chainCollisions": 0
+  },
+
+  "blockingForLaterPlans": [
+    {
+      "id": "BK-01",
+      "plan": "01-05",
+      "issue": "backup_dayberry.sh вызывает backup-snapshot.mjs позиционным аргументом, а после 01-01 CLI требует --source/--target/--evidence и падает без них.",
+      "effect": "Первый же деплой нового образа ломает ночной бэкап.",
+      "fix": "Обновить скрипт на сервере в том же выкате; новый снимок создаётся с правами 444 и не перезаписывается, поэтому перед вызовом нужен rm -f."
+    },
+    {
+      "id": "BK-02",
+      "plan": "01-05",
+      "issue": "CMD контейнера выполняет prisma db push при каждом старте.",
+      "effect": "Перезапуск после миграции уводит схему мимо истории миграций.",
+      "fix": "Убрать db push из CMD, схему менять отдельным релизным шагом (migrate deploy)."
+    },
+    {
+      "id": "BK-03",
+      "plan": "01-06",
+      "issue": "Новое ядро эскроу отказывается рассчитывать сделку без точной связи.",
+      "effect": "Если код выкатить раньше бэкфилла, живые сделки перестанут завершаться.",
+      "fix": "Порядок обязателен: снимок → migrate deploy → бэкфилл → новый образ."
+    }
+  ],
+
+  "deferred": {
+    "PF-02": "Решения по неоднозначным строкам — 01-06 (--dispositions).",
+    "PF-03": "Runtime-доказательство из образа-кандидата — 01-06.",
+    "PF-06": "Digests кандидата и rollback-артефакта — 01-06; артефактов ещё не существует."
+  }
+}

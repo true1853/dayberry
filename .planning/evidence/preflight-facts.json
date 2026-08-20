@@ -1,0 +1,207 @@
+{
+  "collectedAt": "2026-08-20T10:40:27.702Z",
+  "chainsByStatus": [
+    {
+      "status": "candidate",
+      "cnt": 8
+    }
+  ],
+  "activePaidDeals": [
+    {
+      "id": "cmsoklee40003kc018g8fvczj",
+      "userId": "cmsohffs20000pe01gw6bfkyc",
+      "credits": 7500,
+      "stage": "created",
+      "status": "active"
+    },
+    {
+      "id": "cmsokp0et000bkc010rtb0vd6",
+      "userId": "cmsohs3s6000lpe01r05cvie5",
+      "credits": 11550,
+      "stage": "confirm",
+      "status": "active"
+    },
+    {
+      "id": "cmsop5ac50007p901t7rgy9rx",
+      "userId": "cmsonihqz0004ml01h6h6sywn",
+      "credits": 500,
+      "stage": "confirm",
+      "status": "active"
+    },
+    {
+      "id": "cmsq7vi9f000bmm01r2k3ih4v",
+      "userId": "cmsohffs20000pe01gw6bfkyc",
+      "credits": 3000,
+      "stage": "confirm",
+      "status": "active"
+    },
+    {
+      "id": "cmsrtuz040007r201youarbk6",
+      "userId": "cmsoxtbwd0014nw015hj1ac98",
+      "credits": 1000,
+      "stage": "confirm",
+      "status": "active"
+    }
+  ],
+  "heldHolds": [
+    {
+      "id": "cmsokleht0005kc014ruzdxta",
+      "userId": "cmsohffs20000pe01gw6bfkyc",
+      "amt": 7500,
+      "refType": "",
+      "refId": ""
+    },
+    {
+      "id": "cmsokp0j1000dkc015j5lluak",
+      "userId": "cmsohs3s6000lpe01r05cvie5",
+      "amt": 11550,
+      "refType": "",
+      "refId": ""
+    },
+    {
+      "id": "cmsop5aga0009p901mqi6fja4",
+      "userId": "cmsonihqz0004ml01h6h6sywn",
+      "amt": 500,
+      "refType": "",
+      "refId": ""
+    },
+    {
+      "id": "cmsp566660001o10111xyc02n",
+      "userId": "cmsohffs20000pe01gw6bfkyc",
+      "amt": 3500,
+      "refType": "",
+      "refId": ""
+    },
+    {
+      "id": "cmsrtuz020005r201i819opu5",
+      "userId": "cmsoxtbwd0014nw015hj1ac98",
+      "amt": 1000,
+      "refType": "",
+      "refId": ""
+    }
+  ],
+  "otherTx": [
+    {
+      "id": "cmsopvaa7000hp901vgksleut",
+      "userId": "cmsohs3s6000lpe01r05cvie5",
+      "kind": "escrow-in",
+      "amt": 116500,
+      "status": "done",
+      "refType": ""
+    },
+    {
+      "id": "cmsoq0uv9000jlb01flqx953j",
+      "userId": "cmsohs3s6000lpe01r05cvie5",
+      "kind": "bonus",
+      "amt": 10000,
+      "status": "done",
+      "refType": ""
+    },
+    {
+      "id": "cmsorvhkl0003mj01iv1nlk0b",
+      "userId": "cmsohffs20000pe01gw6bfkyc",
+      "kind": "earn",
+      "amt": 116500,
+      "status": "done",
+      "refType": ""
+    },
+    {
+      "id": "cmsq7vi9d0009mm018dxyzqsr",
+      "userId": "cmsohffs20000pe01gw6bfkyc",
+      "kind": "escrow-in",
+      "amt": 3000,
+      "status": "done",
+      "refType": ""
+    },
+    {
+      "id": "cmsqehsgb0001kx0191ksms71",
+      "userId": "cmsoxtbwd0014nw015hj1ac98",
+      "kind": "earn",
+      "amt": 3500,
+      "status": "done",
+      "refType": ""
+    }
+  ],
+  "topupSteps": [
+    {
+      "id": "cmsq6cl5g000eo801zw9kv4f4",
+      "userId": "cmsonjavj0005ml01ym19wzc5",
+      "topup": 35000,
+      "chainStatus": "candidate"
+    },
+    {
+      "id": "cmsqdsh51001vpa01t2aq8hxg",
+      "userId": "cmsohffs20000pe01gw6bfkyc",
+      "topup": 48000,
+      "chainStatus": "candidate"
+    },
+    {
+      "id": "cmsqdsh850020pa01qo0z5rju",
+      "userId": "cmsonjavj0005ml01ym19wzc5",
+      "topup": 48000,
+      "chainStatus": "candidate"
+    },
+    {
+      "id": "cmsqdsh9k0025pa01epo4npe4",
+      "userId": "cmsonjavj0005ml01ym19wzc5",
+      "topup": 35000,
+      "chainStatus": "candidate"
+    },
+    {
+      "id": "cmsqdshbu0029pa01axwooxue",
+      "userId": "cmsohffs20000pe01gw6bfkyc",
+      "topup": 13000,
+      "chainStatus": "candidate"
+    },
+    {
+      "id": "cmsqdshbv002apa0199wngly5",
+      "userId": "cmsonjavj0005ml01ym19wzc5",
+      "topup": 35000,
+      "chainStatus": "candidate"
+    },
+    {
+      "id": "cmsqdshfo002fpa01txek1l2x",
+      "userId": "cmsonihqz0004ml01h6h6sywn",
+      "topup": 6500,
+      "chainStatus": "candidate"
+    },
+    {
+      "id": "cmsrzsr70001kr201yjnpn0yo",
+      "userId": "cmsqbu0nk0008pa010py5ci9u",
+      "topup": 300000,
+      "chainStatus": "candidate"
+    },
+    {
+      "id": "cmsrzsr8e001pr201tnlkt6t3",
+      "userId": "cmsohffs20000pe01gw6bfkyc",
+      "topup": 48000,
+      "chainStatus": "candidate"
+    }
+  ],
+  "collisions": [],
+  "runtime": {
+    "journal_mode": [
+      {
+        "journal_mode": "wal"
+      }
+    ],
+    "synchronous": [
+      {
+        "synchronous": 2
+      }
+    ],
+    "sqlite_version": [
+      {
+        "v": "3.46.0"
+      }
+    ]
+  },
+  "counts": {
+    "chains": 8,
+    "activePaidDeals": 5,
+    "heldHolds": 5,
+    "otherTx": 5,
+    "topupSteps": 9,
+    "collisions": 0
+  }
+}
