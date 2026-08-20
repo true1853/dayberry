@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmod, mkdir, mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { chmod, copyFile, mkdir, mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
@@ -695,19 +696,24 @@ test('production apply contract fails closed and consumes its token once', async
   const dir = await createTempDir('production');
   t.after(() => removeTempDir(dir));
   const database = await migratedDatabaseWithLegacyRows(dir);
-  const auditFile = path.join(dir, 'audit.json');
+  // Боевой контракт: аудит делается по неизменяемому снимку, а применение
+  // идёт к живой базе. Совпадение путей здесь запрещено, поэтому снимок —
+  // отдельный файл.
+  const snapshot = path.join(dir, 'pre-apply-snapshot.db');
+  await copyFile(database, snapshot);
+  const auditFile = path.join(dir, 'pre-audit.json');
   const manifest = path.join(dir, 'manifest.json');
   const ledger = path.join(dir, 'token-receipt.json');
 
-  auditSnapshot(database, path.join(dir, 'live.db'), auditFile);
+  auditSnapshot(snapshot, database, auditFile);
   const hash = manifestHashOf(backfill([
-    '--emit-manifest', '--database', database, '--live-path', path.join(dir, 'live.db'),
+    '--emit-manifest', '--database', snapshot, '--live-path', database,
     '--audit', auditFile, '--manifest', manifest,
   ]).stdout);
 
+  const preAuditSha256 = createHash('sha256').update(await readFile(auditFile)).digest('hex');
   const evidence = {
     'pre-snapshot-sha256': '1'.repeat(64),
-    'pre-audit-sha256': '2'.repeat(64),
     'candidate-sha256': '3'.repeat(64),
     'rollback-sha256': '4'.repeat(64),
     'single-writer-sha256': '5'.repeat(64),
@@ -716,7 +722,7 @@ test('production apply contract fails closed and consumes its token once', async
     version: 1,
     livePath: await realpath(database),
     preSnapshotSha256: evidence['pre-snapshot-sha256'],
-    preAuditSha256: evidence['pre-audit-sha256'],
+    preAuditSha256,
     manifestSha256: hash,
     candidateSha256: evidence['candidate-sha256'],
     rollbackSha256: evidence['rollback-sha256'],
@@ -728,11 +734,11 @@ test('production apply contract fails closed and consumes its token once', async
     '--database', database,
     '--live-path', database,
     '--confirm-live-path', overrides.confirm ?? database,
-    '--audit', auditFile,
+    '--audit', overrides.audit ?? auditFile,
     '--manifest', manifest,
     '--manifest-sha256', hash,
     '--pre-snapshot-sha256', evidence['pre-snapshot-sha256'],
-    '--pre-audit-sha256', evidence['pre-audit-sha256'],
+    '--pre-audit-sha256', overrides.preAuditSha256 ?? preAuditSha256,
     '--candidate-sha256', evidence['candidate-sha256'],
     '--rollback-sha256', evidence['rollback-sha256'],
     '--single-writer-sha256', evidence['single-writer-sha256'],
@@ -743,6 +749,17 @@ test('production apply contract fails closed and consumes its token once', async
   const wrongConfirm = backfill(productionArgs({ confirm: path.join(dir, 'other.db') }));
   assert.notEqual(wrongConfirm.status, 0);
   assert.match(`${wrongConfirm.stdout}\n${wrongConfirm.stderr}`, /resolve to one path/i);
+
+  // Аудит, снятый с живой базы, для боевого применения недопустим.
+  const liveAudit = path.join(dir, 'live-audit.json');
+  auditSnapshot(database, path.join(dir, 'elsewhere.db'), liveAudit);
+  const fromLive = backfill(productionArgs({
+    audit: liveAudit,
+    preAuditSha256: createHash('sha256').update(await readFile(liveAudit)).digest('hex'),
+    ledger: path.join(dir, 'ledger-live.json'),
+  }));
+  assert.notEqual(fromLive.status, 0);
+  assert.match(`${fromLive.stdout}\n${fromLive.stderr}`, /immutable snapshot|approval token/i);
 
   const wrongToken = backfill(productionArgs({ token: '9'.repeat(64), ledger: path.join(dir, 'ledger-b.json') }));
   assert.notEqual(wrongToken.status, 0);

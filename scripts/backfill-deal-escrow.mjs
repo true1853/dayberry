@@ -132,10 +132,26 @@ export function approvalToken(authorization) {
   return sha256Text(stableJson(authorization));
 }
 
-function assertAuditUsable(audit, expectedDatabase) {
+// Дры-ран и репетиция работают по той же базе, которую аудировали. В
+// продакшене так нельзя: аудит живой базы запрещён, поэтому источником
+// служит аудит неизменяемого пред-снимка, а его связь с этим выпуском
+// доказывается хешем, а не путём. Подмену данных между снимком и записью
+// ловит перечитывание каждой строки перед изменением.
+function assertAuditUsable(audit, { expectedDatabase, livePath, isProduction, auditSha256, expectedAuditSha256 }) {
   if (audit.kind !== 'escrow-audit') throw new Error('audit file is not an escrow audit');
-  if (!samePath(path.resolve(audit.database), expectedDatabase)) {
-    throw new Error(`audit was produced for a different database: ${audit.database}`);
+
+  if (!isProduction) {
+    if (!samePath(path.resolve(audit.database), expectedDatabase)) {
+      throw new Error(`audit was produced for a different database: ${audit.database}`);
+    }
+    return;
+  }
+
+  if (samePath(path.resolve(audit.database), livePath)) {
+    throw new Error('production audit must come from an immutable snapshot, never from the live database');
+  }
+  if (auditSha256 !== expectedAuditSha256) {
+    throw new Error(`audit does not match the approved pre-audit hash: expected ${expectedAuditSha256}, got ${auditSha256}`);
   }
 }
 
@@ -296,7 +312,13 @@ async function main() {
 
   const auditSha256 = await sha256File(auditFile);
   const audit = JSON.parse(await readFile(auditFile, 'utf8'));
-  assertAuditUsable(audit, database);
+  assertAuditUsable(audit, {
+    expectedDatabase: database,
+    livePath,
+    isProduction,
+    auditSha256,
+    expectedAuditSha256: options['pre-audit-sha256'],
+  });
 
   const expected = buildManifest({
     database,
