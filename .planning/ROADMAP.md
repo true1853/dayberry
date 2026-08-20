@@ -36,7 +36,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-02-PLAN.md — Additive schema, reviewed migrations and hash-guarded backfill
+- [x] 01-02-PLAN.md — Additive schema, reviewed migrations and hash-guarded backfill
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -136,7 +136,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Escrow Integrity and Safe Migration | 1/6 | In progress | - |
+| 1. Escrow Integrity and Safe Migration | 2/6 | In progress | - |
 | 2. Deterministic Deal Core and Scoped Workspace | 0/TBD | Not started | - |
 | 3. Manual Versioned Agreement | 0/TBD | Not started | - |
 | 4. Manual Fulfillment and Existing Terminal Paths | 0/TBD | Not started | - |
