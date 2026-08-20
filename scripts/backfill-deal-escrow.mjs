@@ -27,6 +27,7 @@ const ENV_BY_OPTION = {
   manifest: 'ESCROW_MANIFEST',
   'manifest-sha256': 'ESCROW_MANIFEST_SHA256',
   'confirm-live-path': 'ESCROW_CONFIRM_LIVE_DB',
+  dispositions: 'ESCROW_DISPOSITIONS',
   'pre-snapshot-sha256': 'ESCROW_PRE_SNAPSHOT_SHA256',
   'pre-audit-sha256': 'ESCROW_PRE_AUDIT_SHA256',
   'candidate-sha256': 'ESCROW_CANDIDATE_SHA256',
@@ -49,9 +50,10 @@ const REQUIRED_BY_MODE = {
 };
 
 // Отсутствие связи — единственная категория, которую бэкфилл и должен
-// устранить. Любая другая блокирующая категория означает, что данные не
-// в том состоянии, которое одобрил оператор.
-const ALLOWED_BLOCKING_BUCKETS = new Set(['missingLink']);
+// устранить. Всё остальное он не чинит никогда: такие строки попадают в
+// раздел unresolved манифеста и требуют поимённого решения оператора,
+// но не мешают связать здоровые пары рядом.
+const SELF_HEALING_BUCKETS = new Set(['missingLink']);
 
 export function parseOptions(argv, environment = process.env) {
   const parsed = {};
@@ -135,8 +137,46 @@ function assertAuditUsable(audit, expectedDatabase) {
   if (!samePath(path.resolve(audit.database), expectedDatabase)) {
     throw new Error(`audit was produced for a different database: ${audit.database}`);
   }
-  const blocking = Object.keys(audit.severity?.blocking || {}).filter(name => !ALLOWED_BLOCKING_BUCKETS.has(name));
-  if (blocking.length > 0) throw new Error(`audit has blocking findings: ${blocking.sort().join(', ')}`);
+}
+
+// Каждая строка, которую бэкфилл видит, но чинить не имеет права. Ключ
+// строки — категория плюс идентификатор: он и есть единица решения
+// оператора по PF-02.
+function collectUnresolved(audit) {
+  const rows = [];
+  for (const [bucket, entries] of Object.entries(audit.classification.buckets)) {
+    if (SELF_HEALING_BUCKETS.has(bucket) || entries.length === 0) continue;
+    for (const entry of entries) {
+      const id = entry.dealId || entry.transactionId || entry.refId || entry.userId || entry.businessKey;
+      rows.push({ bucket, id: String(id), row: entry });
+    }
+  }
+  return rows.sort((left, right) => `${left.bucket}:${left.id}`.localeCompare(`${right.bucket}:${right.id}`));
+}
+
+function dispositionKey(entry) {
+  return `${entry.bucket}:${entry.id}`;
+}
+
+// Решения не разрешают запись — они подтверждают, что оператор видел
+// каждую строку поимённо. Несовпадение множеств останавливает применение.
+function assertDispositionsCover(unresolved, dispositions) {
+  if (dispositions.kind !== 'escrow-backfill-dispositions') {
+    throw new Error('dispositions file has the wrong kind');
+  }
+  const decided = new Map((dispositions.rows || []).map(row => [`${row.bucket}:${row.id}`, row]));
+  const expected = unresolved.map(dispositionKey).sort();
+  const actual = [...decided.keys()].sort();
+  if (stableJson(expected) !== stableJson(actual)) {
+    const missing = expected.filter(key => !decided.has(key));
+    const extra = actual.filter(key => !expected.includes(key));
+    throw new Error(`dispositions do not match unresolved rows: missing ${JSON.stringify(missing)}, unexpected ${JSON.stringify(extra)}`);
+  }
+  for (const [key, row] of decided) {
+    if (typeof row.decision !== 'string' || row.decision.trim() === '') {
+      throw new Error(`disposition without a decision: ${key}`);
+    }
+  }
 }
 
 export function buildManifest({ database, livePath, auditFile, auditSha256, audit }) {
@@ -152,7 +192,7 @@ export function buildManifest({ database, livePath, auditFile, auditSha256, audi
 
   return {
     kind: 'escrow-backfill-manifest',
-    schemaVersion: 1,
+    schemaVersion: 2,
     database,
     livePath,
     audit: {
@@ -162,7 +202,12 @@ export function buildManifest({ database, livePath, auditFile, auditSha256, audi
       severity: audit.severity,
     },
     rows,
-    counts: { rows: rows.length, chainRows: audit.classification.chainRows.length },
+    unresolved: collectUnresolved(audit),
+    counts: {
+      rows: rows.length,
+      unresolved: collectUnresolved(audit).length,
+      chainRows: audit.classification.chainRows.length,
+    },
   };
 }
 
@@ -266,7 +311,12 @@ async function main() {
     await writeFile(manifestFile, manifestText(expected), { encoding: 'utf8', flag: 'wx' });
     console.log(`manifest: ${manifestFile}`);
     console.log(`manifest-sha256: ${manifestSha256(expected)}`);
-    console.log(JSON.stringify({ mode, rows: expected.rows.length, mutations: 0 }));
+    console.log(JSON.stringify({
+      mode,
+      rows: expected.rows.length,
+      unresolved: expected.unresolved.length,
+      mutations: 0,
+    }));
     return;
   }
 
@@ -281,6 +331,21 @@ async function main() {
   }
   if (stableJson(approved.rows) !== stableJson(expected.rows)) {
     throw new Error('approved manifest no longer matches the current audit');
+  }
+  if (stableJson(approved.unresolved || []) !== stableJson(expected.unresolved)) {
+    throw new Error('the set of unresolved rows changed since the manifest was approved');
+  }
+
+  // Пока есть строки, которые бэкфилл не чинит, применение требует
+  // поимённого решения оператора по каждой из них.
+  const unresolved = expected.unresolved;
+  if (mode !== 'dry-run' && unresolved.length > 0) {
+    if (!options.dispositions) {
+      throw new Error(`${unresolved.length} unresolved row(s) require --dispositions before any apply`);
+    }
+    const dispositionsFile = await canonicalPath(options.dispositions);
+    if (!existsSync(dispositionsFile)) throw new Error(`dispositions do not exist: ${dispositionsFile}`);
+    assertDispositionsCover(unresolved, JSON.parse(await readFile(dispositionsFile, 'utf8')));
   }
 
   if (isProduction) {
@@ -300,7 +365,16 @@ async function main() {
   }
 
   if (mode === 'dry-run') {
-    console.log(JSON.stringify({ mode, rows: approved.rows.length, mutations: 0, manifestSha256: approvedSha256 }));
+    console.log(JSON.stringify({
+      mode,
+      rows: approved.rows.length,
+      unresolved: unresolved.length,
+      mutations: 0,
+      manifestSha256: approvedSha256,
+    }));
+    if (unresolved.length > 0) {
+      console.log(`unresolved rows requiring a disposition:\n${unresolved.map(entry => `  ${entry.bucket}: ${entry.id}`).join('\n')}`);
+    }
     return;
   }
 
@@ -314,7 +388,13 @@ async function main() {
     await prisma.$disconnect();
   }
 
-  console.log(JSON.stringify({ mode, rows: approved.rows.length, mutations, manifestSha256: approvedSha256 }));
+  console.log(JSON.stringify({
+    mode,
+    rows: approved.rows.length,
+    unresolved: unresolved.length,
+    mutations,
+    manifestSha256: approvedSha256,
+  }));
 }
 
 const isEntrypoint = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
