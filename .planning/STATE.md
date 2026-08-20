@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Помощник сделки MVP
 status: executing
-stopped_at: 01-02 complete and verified; Wave 3 (01-03, 01-04) is ready to execute.
+stopped_at: 01-04 complete and verified; 01-03 (operator inventory) is the remaining Wave 3 item.
 last_updated: "2026-08-20T00:00:00.000Z"
-last_activity: 2026-08-20 -- 01-02 completed (migration history, additive schema, guarded backfill)
+last_activity: 2026-08-20 -- 01-04 completed (exact atomic escrow core, all direct paths routed)
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 6
-  completed_plans: 2
-  percent: 33
+  completed_plans: 3
+  percent: 50
 ---
 
 # Project State
@@ -26,17 +26,17 @@ See: .planning/PROJECT.md (updated 2026-08-14)
 ## Current Position
 
 Phase: 1 (escrow-integrity-and-safe-migration) — EXECUTING
-Plan: 3 of 6 (Wave 3)
-Status: Waves 1-2 complete; 01-03 and 01-04 not started
-Last activity: 2026-08-20 -- 01-02 completed
+Plan: 01-03 (Wave 3, operator inventory)
+Status: 01-01, 01-02, 01-04 complete; 01-03 needs operator input
+Last activity: 2026-08-20 -- 01-04 completed
 
-Progress: [███░░░░░░░] 33%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 2
+- Total plans completed: 3
 - Average duration: not tracked
 - Total execution time: not tracked
 
@@ -44,9 +44,9 @@ Progress: [███░░░░░░░] 33%
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 1 | 2/6 | — | — |
+| 1 | 3/6 | — | — |
 
-**Recent Trend:** Wave 1 and Wave 2 complete; no duration baseline yet.
+**Recent Trend:** Waves 1-2 and the code half of Wave 3 complete.
 
 ## Accumulated Context
 
@@ -62,6 +62,8 @@ Decisions are logged in PROJECT.md. Current milestone decisions:
 - Between migration and backfill the audit compares against the approved manifest:
   only deals the manifest promised to link are blocking (01-02).
 - Manifest creation is its own mode (`--emit-manifest`); dry-run stays verifying (01-02).
+- A positive-credit deal without an exact escrow link refuses to settle and asks for
+  an operator instead of guessing a hold (01-04).
 - Server rules remain authoritative; AI is advisory and every consequential action requires explicit user confirmation.
 - Economic terms are frozen after offer creation; only logistics are versioned in v1.1.
 - The complete manual path must work before advisory AI and remain available during AI failure.
@@ -71,7 +73,10 @@ Decisions are logged in PROJECT.md. Current milestone decisions:
 
 - 01-05: the container still runs `db push` at startup (`Dockerfile`); a restart can
   drift production past the new migration history.
-- 01-04: `multipleLinks` mixes two row shapes; split it before consuming it programmatically.
+- 01-03: operator must supply live DB path, topology, single-writer window and
+  backup policy (PF-01…PF-05); nothing in the repository can answer these.
+- 01-05/01-06: deploy order is load-bearing — the backfill must run on production
+  before the new escrow core serves traffic, or legacy deals refuse to settle.
 - 01-04: remove the `latest-held` lookup in `completeDeal` and deal cancellation
   (`src/server/actions.js:649`, `:866`) — it can settle a chain topup today.
 
@@ -94,5 +99,5 @@ Decisions are logged in PROJECT.md. Current milestone decisions:
 ## Session Continuity
 
 Last session: 2026-08-20 +03:00
-Stopped at: 01-02 complete and verified (npm test 24/24); Wave 3 ready.
+Stopped at: 01-04 complete and verified (38 tests green, build clean).
 Resume file: .planning/phases/01-escrow-integrity-and-safe-migration/01-03-PLAN.md

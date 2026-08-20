@@ -41,7 +41,7 @@ Plans:
 **Wave 3** *(blocked on Wave 2 completion)*
 
 - [ ] 01-03-PLAN.md — Owned production path, topology, policy and single-writer inventory gate
-- [ ] 01-04-PLAN.md — Exact atomic escrow core across all direct-deal terminal paths
+- [x] 01-04-PLAN.md — Exact atomic escrow core across all direct-deal terminal paths
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
@@ -136,7 +136,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Escrow Integrity and Safe Migration | 2/6 | In progress | - |
+| 1. Escrow Integrity and Safe Migration | 3/6 | In progress | - |
 | 2. Deterministic Deal Core and Scoped Workspace | 0/TBD | Not started | - |
 | 3. Manual Versioned Agreement | 0/TBD | Not started | - |
 | 4. Manual Fulfillment and Existing Terminal Paths | 0/TBD | Not started | - |
