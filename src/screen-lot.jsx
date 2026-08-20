@@ -4,6 +4,7 @@ import { Icon } from './icons.jsx';
 import { fmt, Credit, Photo, Avatar, Stars, CatTag, AIBadge, IconBtn, Sheet, timeAgo, fmtDateTime } from './ui.jsx';
 import { trackLotViewAction, reportLotAction } from './server/actions.js';
 import { REPORT_REASONS } from './reports.js';
+import { normalizeCat } from './data.js';
 
 const plural = (n, one, few, many) => {
   const m10 = n % 10;
@@ -94,6 +95,20 @@ export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, onOpenLot, onEd
   const ownerLots = (lots || [])
     .filter(x => x.ownerId && x.ownerId === L.ownerId && x.id !== L.id)
     .slice(0, 8);
+  // Оценка в баллах без соседей по цене — просто число. Показываем, на что
+  // этот лот реально меняется: сначала своя категория, потом коридор ±35%.
+  const priceLow = Math.round(L.value * 0.65);
+  const priceHigh = Math.round(L.value * 1.35);
+  const sameCat = normalizeCat(L.cat);
+  const similar = (lots || [])
+    .filter(x => x.id !== L.id && x.ownerId !== L.ownerId && x.value >= priceLow && x.value <= priceHigh)
+    .sort((a, b) => {
+      const ca = normalizeCat(a.cat) === sameCat ? 0 : 1;
+      const cb = normalizeCat(b.cat) === sameCat ? 0 : 1;
+      if (ca !== cb) return ca - cb;
+      return Math.abs(a.value - L.value) - Math.abs(b.value - L.value);
+    })
+    .slice(0, 8);
   const owner = {
     name: L.ownerName || '',
     city: L.ownerCity || '',
@@ -131,7 +146,7 @@ export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, onOpenLot, onEd
 
       <div className="px col gap16" style={{ paddingTop: 16, paddingBottom: 20 }}>
         <div className="col gap8">
-          <div className="row gap6"><CatTag cat={L.cat} /><span className="tag" style={{ background: 'var(--line-2)', color: 'var(--ink-2)' }}>{L.condition}</span>{L.hot && <span className="tag" style={{ background: 'var(--berry-50)', color: 'var(--berry)' }}><Icon name="flame" size={12} color="var(--berry)" />Хит</span>}</div>
+          <div className="row gap6"><CatTag cat={L.cat} /><span className="tag" style={{ background: 'var(--line-2)', color: 'var(--ink-2)' }}>{L.condition}</span></div>
           <span className="h2">{L.title}</span>
           <div className="row gap10 cap"><span className="row gap4"><Icon name="eye" size={14} color="var(--ink-3)" />{views ?? L.views ?? 0}</span><span className="row gap4"><Icon name="map" size={14} color="var(--ink-3)" />{owner.city}</span><span title={fmtDateTime(L.createdAt)}>{timeAgo(L.createdAt) || L.posted}</span></div>
         </div>
@@ -165,6 +180,26 @@ export function LotDetail({ lotId, onBack, onOffer, onOwnerChat, onOpenLot, onEd
             <Icon name="chevR" size={20} color="var(--ink-3)" />
           </div>
         </div>
+
+        {similar.length > 0 && (
+          <div className="col gap8">
+            <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <span className="over">На это можно поменять</span>
+              <span className="cap">{fmt(priceLow)}–{fmt(priceHigh)} Б</span>
+            </div>
+            <div className="row gap10" style={{ overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
+              {similar.map(x => (
+                <div key={x.id} className="card" style={{ flex: 'none', width: 132, overflow: 'hidden', cursor: 'pointer' }} onClick={() => onOpenLot && onOpenLot(x.id)}>
+                  <Photo label={x.photo} url={x.photoUrl} cat={x.cat} style={{ width: '100%', aspectRatio: '1/1' }} />
+                  <div className="col gap4" style={{ padding: '8px 9px 10px' }}>
+                    <span className="cap ellipsis">{x.title}</span>
+                    <Credit n={x.value} size={13} coin={12} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {ownerLots.length > 0 && (
           <div className="col gap8">
@@ -283,9 +318,20 @@ export function OfferSheet({ L, myLots = [], balance = 0, open, onClose, onConfi
   }, [L, MY && MY.value, myLots]);
   if (!L) return null;
   const balanced = (MY ? MY.value : 0) + credits;
-  const ok = Math.abs(balanced - L.value) <= L.value * 0.12;
+  const gap = L.value - balanced;                 // + не хватает, − перебор
+  const tolerance = Math.round(L.value * 0.12);
+  const ok = Math.abs(gap) <= tolerance;
   const enough = credits <= balance;
   const canConfirm = enough && ok;
+  // «Разница великовата» — оценка вместо факта: человеку нужно знать, сколько
+  // именно добавить или убрать, а не как мы относимся к его предложению.
+  const balanceNote = !enough
+    ? `Не хватает ${fmt(credits - balance)} Б на балансе`
+    : ok
+      ? 'Обмен равноценный'
+      : gap > 0
+        ? `Не хватает ${fmt(gap)} Б до равноценного обмена`
+        : `Переплата ${fmt(-gap)} Б — можно уменьшить`;
 
   return (
     <Sheet open={open} onClose={onClose} title="Предложить обмен">
@@ -335,7 +381,7 @@ export function OfferSheet({ L, myLots = [], balance = 0, open, onClose, onConfi
         </div>
 
         <div className="card" style={{ padding: 13, background: 'var(--berry-50)' }}>
-          <div className="row gap8" style={{ marginBottom: 8 }}><AIBadge>AI предлагает</AIBadge><span className="grow" /><span className="sub">расчёт доплаты баллами</span></div>
+          <div className="row gap8" style={{ marginBottom: 8 }}><AIBadge>AI-оценка</AIBadge><span className="grow" /><span className="sub">разницу можно изменить</span></div>
           <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
             <span className="title">Доплата баллами</span>
             <div className="row gap8" style={{ alignItems: 'center' }}>
@@ -346,8 +392,8 @@ export function OfferSheet({ L, myLots = [], balance = 0, open, onClose, onConfi
           </div>
           <div className="row" style={{ justifyContent: 'space-between', marginTop: 10 }}>
             <span className="cap">Ваш баланс: <b className="amount">{fmt(balance)} Б</b></span>
-            <span className="cap" style={{ color: enough ? (ok ? 'var(--ok)' : 'var(--warn)') : 'var(--warn)' }}>
-              {!enough ? 'недостаточно баллов' : (ok ? '✓ обмен сбалансирован' : 'разница великовата')}
+            <span className="cap" style={{ color: enough && ok ? 'var(--ok)' : 'var(--warn)', textAlign: 'right' }}>
+              {balanceNote}
             </span>
           </div>
         </div>
@@ -360,7 +406,7 @@ export function OfferSheet({ L, myLots = [], balance = 0, open, onClose, onConfi
         <button className="btn btn-primary btn-block btn-lg" disabled={!canConfirm} onClick={() => onConfirm(L, credits, MY ? MY.id : null)} style={{ opacity: canConfirm ? 1 : 0.5 }}>
           <Icon name="shield" size={20} color="#fff" />Открыть сделку · заморозить <Credit n={credits} size={15} coin={14} color="#fff" />
         </button>
-        {!enough && <span className="cap" style={{ textAlign: 'center', color: 'var(--warn)' }}>Пополните кошелёк, чтобы заблокировать доплату</span>}
+        {!enough && <span className="cap" style={{ textAlign: 'center', color: 'var(--warn)' }}>Пополните кошелёк — доплата замораживается сразу при открытии сделки</span>}
       </div>
     </Sheet>
   );

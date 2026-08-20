@@ -20,7 +20,7 @@ const SLIDES = [
   },
   {
     badge: 'Надёжно', title: 'Эскроу и умные\nцепочки обмена',
-    body: 'Баллы замораживаются до подтверждения сделки. А если прямого обмена нет — система соберёт цепочку из 3–5 человек, где каждый получит своё.',
+    body: 'Баллы замораживаются до подтверждения сделки. А если прямого обмена нет — система соберёт цепочку из трёх человек, где каждый получит своё.',
     art: 'chain',
   },
 ];
@@ -124,13 +124,48 @@ function WishStep({ value, onChange, onSubmit, onSkip, saving }) {
   );
 }
 
-export function Onboarding({ onDone, initialWants = '' }) {
-  const [i, setI] = React.useState(0);
+// Приветствие после регистрации. Раньше на месте отправки формы сразу
+// появлялся слайд «Проблема: прямой бартер не сходится» — человек не понимал,
+// зарегистрировался ли он вообще и что это за экран.
+function WelcomeStep({ name, steps, onStart, onSkip }) {
+  return (
+    <>
+      <div className="grow col" style={{ justifyContent: 'center', padding: '0 26px', gap: 26 }}>
+        <div className="col gap12 fade-in" style={{ alignItems: 'center', textAlign: 'center' }}>
+          <div className="avatar" style={{ width: 72, height: 72, background: 'var(--berry-50)' }}>
+            <Icon name="checkCircle" size={34} color="var(--berry)" />
+          </div>
+          <span className="tag" style={{ background: 'var(--ok-soft, var(--berry-50))', color: 'var(--berry-700)' }}>Аккаунт создан</span>
+          <span className="h1" style={{ fontSize: 30, lineHeight: 1.12 }}>
+            {name ? `С регистрацией, ${name}!` : 'С регистрацией!'}
+          </span>
+          <span className="body" style={{ color: 'var(--ink-2)', fontSize: 16, lineHeight: 1.5 }}>
+            Вы на Дайбери — здесь меняются вещами и услугами без денег.
+            Дальше {steps} коротких экрана про то, как это устроено: меньше минуты.
+          </span>
+        </div>
+      </div>
+      <div className="col gap10" style={{ padding: '0 26px calc(28px + env(safe-area-inset-bottom))' }}>
+        <button className="btn btn-primary btn-block btn-lg" onClick={onStart}>
+          Показать, как это работает<Icon name="arrowR" size={20} color="#fff" />
+        </button>
+        <button className="cap" style={{ border: 'none', background: 'none', color: 'var(--ink-3)', cursor: 'pointer', padding: 6 }} onClick={onSkip}>
+          Сразу к объявлениям
+        </button>
+      </div>
+    </>
+  );
+}
+
+export function Onboarding({ onDone, initialWants = '', welcomeName = null }) {
+  // Шаг −1 — приветствие; показываем только тем, кто только что зарегистрировался.
+  const [i, setI] = React.useState(welcomeName === null ? 0 : -1);
   const [wants, setWants] = React.useState(initialWants || '');
   const [saving, setSaving] = React.useState(false);
+  const welcomeStep = i < 0;
   const wishStep = i === SLIDES.length;   // шаг вишлиста идёт после слайдов
   const last = i === SLIDES.length - 1;
-  const s = SLIDES[Math.min(i, SLIDES.length - 1)];
+  const s = SLIDES[Math.min(Math.max(i, 0), SLIDES.length - 1)];
 
   const finish = async () => {
     const list = parseWishes(wants);
@@ -150,10 +185,17 @@ export function Onboarding({ onDone, initialWants = '' }) {
       <div className="safe-top" />
       <div className="row" style={{ justifyContent: 'space-between', padding: '4px 18px 0' }}>
         <span className="row gap8"><Logo size={26} /><span className="h3">Дайбери</span></span>
-        <button className="cap" style={{ border: 'none', background: 'none', color: 'var(--ink-3)', cursor: 'pointer' }} onClick={() => onDone()}>Пропустить</button>
+        <span className="row gap10" style={{ alignItems: 'center' }}>
+          {/* «Непонятно, что начался онбординг» — счётчик показывает, что
+              это конечная последовательность экранов, а не сам сервис */}
+          {!welcomeStep && <span className="cap">Знакомство · {Math.min(i + 1, SLIDES.length + 1)} из {SLIDES.length + 1}</span>}
+          <button className="cap" style={{ border: 'none', background: 'none', color: 'var(--ink-3)', cursor: 'pointer' }} onClick={() => onDone()}>Пропустить</button>
+        </span>
       </div>
 
-      {wishStep ? (
+      {welcomeStep ? (
+        <WelcomeStep name={welcomeName} steps={SLIDES.length} onStart={() => setI(0)} onSkip={() => onDone()} />
+      ) : wishStep ? (
         <WishStep value={wants} onChange={setWants} onSubmit={finish} onSkip={() => onDone()} saving={saving} />
       ) : (
         <>
@@ -204,8 +246,11 @@ const inputStyle = {
 
 export function CreateListing({ onClose, onPublish, initialWants = '', editLot = null }) {
   const [kind, setKind] = React.useState(editLot ? (normalizeCat(editLot.cat) === 'service' ? 'service' : 'item') : 'item'); // 'item' | 'service'
-  const [cat, setCat] = React.useState(editLot ? normalizeCat(editLot.cat) : 'tech');
-  const [condition, setCondition] = React.useState(editLot ? (editLot.condition || 'Новое или Б/У') : 'Новое или Б/У');
+  // Пустые значения — намеренно. С предзаполненными «Техника» и «Новое или
+  // Б/У» половина лотов уезжала в ленту с категорией, которую никто не выбирал.
+  const [cat, setCat] = React.useState(editLot ? normalizeCat(editLot.cat) : '');
+  const [condition, setCondition] = React.useState(editLot ? (editLot.condition || '') : '');
+  const [aiCat, setAiCat] = React.useState('');
   const [title, setTitle] = React.useState(editLot ? editLot.title : '');
   const [value, setValue] = React.useState(editLot ? String(editLot.value) : '');
   const [wants, setWants] = React.useState(editLot ? editLot.wants : (initialWants || ''));
@@ -231,9 +276,18 @@ export function CreateListing({ onClose, onPublish, initialWants = '', editLot =
 
   const chooseKind = (k) => {
     setKind(k);
-    setCat(k === 'service' ? 'service' : 'tech');
-    setCondition(k === 'service' ? 'Услуга' : 'Новое или Б/У');
+    // у услуги категория одна — выбирать нечего
+    setCat(k === 'service' ? 'service' : '');
+    setCondition(k === 'service' ? 'Услуга' : '');
   };
+
+  // Старое «Новое или Б/У» было не состоянием, а отказом выбирать. Значение
+  // из уже опубликованного лота держим в списке, иначе при редактировании
+  // ничего не выбрано и сохранить нельзя.
+  const CONDITIONS = ['Новое', 'Отличное', 'Хорошее', 'Рабочее, со следами'];
+  const conditionOptions = condition && !CONDITIONS.includes(condition)
+    ? [...CONDITIONS, condition]
+    : CONDITIONS;
 
   const valueNum = Number(value);
   const mainPhoto = photos[mainIdx];
@@ -268,12 +322,16 @@ export function CreateListing({ onClose, onPublish, initialWants = '', editLot =
       const shaky = d.confident === false || d.ai === false;
       if (mode === 'price') {
         if (d.value > 0) setValue(String(d.value));
+        if (d.cat && CAT[normalizeCat(d.cat)]) {
+          setAiCat(normalizeCat(d.cat));
+          if (!cat) setCat(normalizeCat(d.cat));
+        }
         setAiNote(shaky
           ? `Точной цены на это ИИ не знает — ${fmt(d.value)} Б это грубый ориентир, проверьте сами. ${d.reasoning || ''}`
           : `AI-оценка: ${fmt(d.value)} Б · диапазон ${fmt(d.aiLow)}–${fmt(d.aiHigh)} Б. ${d.reasoning || ''}`);
       } else {
         if (d.title && !title.trim()) setTitle(d.title);
-        if (d.cat && CAT[normalizeCat(d.cat)]) setCat(normalizeCat(d.cat));
+        if (d.cat && CAT[normalizeCat(d.cat)]) { setCat(normalizeCat(d.cat)); setAiCat(normalizeCat(d.cat)); }
         if (d.condition && kind === 'item') setCondition(d.condition);
         if (d.desc && (!desc.trim() || desc.trim().startsWith('Готов(а)'))) setDesc(d.desc);
         if (d.wants && !wants.trim()) setWants(d.wants);
@@ -333,11 +391,20 @@ export function CreateListing({ onClose, onPublish, initialWants = '', editLot =
     setMainIdx(m => (i === m ? 0 : (i < m ? m - 1 : m)));
   };
 
+  // Что осталось заполнить. Раньше форма пропускала объявление без категории
+  // и состояния (они подставлялись сами), а об остальном сообщала по одной
+  // ошибке за нажатие.
+  const missing = [
+    !title.trim() && 'название',
+    !cat && 'категория',
+    kind === 'item' && !condition && 'состояние',
+    (!valueNum || valueNum <= 0) && 'оценка в баллах',
+    !wants.trim() && 'на что меняете',
+  ].filter(Boolean);
+
   const submit = async () => {
     if (publishingRef.current) return;
-    if (!title.trim()) return setError('Введите название');
-    if (!valueNum || valueNum <= 0) return setError('Укажите оценку в баллах');
-    if (!wants.trim()) return setError('Укажите, на что хотите обменять');
+    if (missing.length) return setError(`Заполните: ${missing.join(', ')}`);
     setError('');
     const placeholder = kind === 'service' ? 'УСЛУГА' : (CAT[cat] ? CAT[cat].label.toUpperCase() : 'ВЕЩЬ');
     const main = photos[mainIdx];
@@ -352,7 +419,7 @@ export function CreateListing({ onClose, onPublish, initialWants = '', editLot =
       photo: main ? (main.name || placeholder) : placeholder,
       photoUrl: main ? main.url : undefined,
       photos: photos.map(p => p.url),
-      condition: condition || (kind === 'service' ? 'Услуга' : 'Новое или Б/У'),
+      condition: condition || (kind === 'service' ? 'Услуга' : 'Хорошее'),
       posted: 'только что',
       owner: 'me',
       wants: wants.trim(),
@@ -455,20 +522,32 @@ export function CreateListing({ onClose, onPublish, initialWants = '', editLot =
         </div>
 
         <div className="col gap8">
-          <span className="over">Категория</span>
+          <span className="over row gap6" style={{ alignItems: 'center' }}>
+            Категория{!cat && <span style={{ color: 'var(--warn)', fontWeight: 700 }}>· нужно выбрать</span>}
+          </span>
           <div className="row gap8" style={{ flexWrap: 'wrap' }}>
             {CATS[kind].map(([id, label]) => (
-              <div key={id} className={'chip chip-berry' + (cat === id ? ' is-on' : '')} onClick={() => setCat(id)}>{label}</div>
+              <div key={id} className={'chip chip-berry' + (cat === id ? ' is-on' : '')} onClick={() => { setCat(id); setError(''); }}>
+                {aiCat === id && cat !== id && <Icon name="ai" size={13} color="var(--berry)" />}
+                {label}
+              </div>
             ))}
           </div>
+          {/* «Если нет нужной категории, что делать?» — отвечаем прямо в форме */}
+          <span className="cap">
+            {aiCat && CAT[aiCat] ? `ИИ предлагает «${CAT[aiCat].label}». ` : ''}
+            Не нашли подходящую — берите «{CAT.other.label}»: {CAT.other.hint}.
+          </span>
         </div>
 
         {kind === 'item' && (
           <div className="col gap8">
-            <span className="over">Состояние</span>
+            <span className="over row gap6" style={{ alignItems: 'center' }}>
+              Состояние{!condition && <span style={{ color: 'var(--warn)', fontWeight: 700 }}>· нужно выбрать</span>}
+            </span>
             <div className="row gap8" style={{ flexWrap: 'wrap' }}>
-              {['Новое или Б/У', 'Отличное', 'Хорошее'].map(c => (
-                <div key={c} className={'chip chip-berry' + (condition === c ? ' is-on' : '')} onClick={() => setCondition(c)}>{c}</div>
+              {conditionOptions.map(c => (
+                <div key={c} className={'chip chip-berry' + (condition === c ? ' is-on' : '')} onClick={() => { setCondition(c); setError(''); }}>{c}</div>
               ))}
             </div>
           </div>
@@ -542,7 +621,17 @@ export function CreateListing({ onClose, onPublish, initialWants = '', editLot =
       </div>
 
       <div className="px" style={{ padding: '12px 18px calc(12px + env(safe-area-inset-bottom, 0px) + 28px)', borderTop: '1px solid var(--line)', background: '#fff' }}>
-        <button className="btn btn-primary btn-block btn-lg" onClick={submit} disabled={publishing} style={{ opacity: publishing ? 0.8 : 1 }}>
+        {missing.length > 0 && !publishing && (
+          <span className="cap" style={{ display: 'block', textAlign: 'center', marginBottom: 8, color: 'var(--ink-3)' }}>
+            Осталось заполнить: {missing.join(', ')}
+          </span>
+        )}
+        <button
+          className="btn btn-primary btn-block btn-lg"
+          onClick={submit}
+          disabled={publishing || missing.length > 0}
+          style={{ opacity: (publishing || missing.length) ? 0.55 : 1 }}
+        >
           {publishing ? (
             <><span className="spin" />{editLot ? 'Сохраняем…' : 'Публикуем…'}</>
           ) : (

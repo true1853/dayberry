@@ -10,6 +10,7 @@ import { saveDataUrl, saveDataUrls, isStorableImage } from '../../lib/storage';
 import { cookies } from 'next/headers';
 import { randomUUID, randomBytes } from 'node:crypto';
 import * as rateLimit from '../../lib/rate-limit';
+import { checkPassword } from '../password.js';
 import { REPORT_REASONS, reasonLabel } from '../reports.js';
 import {
   cancelDealWithEscrow,
@@ -37,7 +38,8 @@ export async function registerAction(input) {
   const { name, email, phone, password, city } = input || {};
   const key = (email || '').trim().toLowerCase();
   if (!key || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(key)) return { ok: false, error: 'Некорректный email' };
-  if (!password || password.length < 6) return { ok: false, error: 'Пароль — минимум 6 символов' };
+  const weak = checkPassword(password);
+  if (weak) return { ok: false, error: weak };
   if (!name || !name.trim()) return { ok: false, error: 'Введите имя' };
 
   // Регистрация тоже стоит одного bcrypt-хэша — ограничиваем частоту.
@@ -285,7 +287,8 @@ export async function changePasswordAction(input) {
 
   const { currentPassword = '', newPassword = '' } = input || {};
   if (!currentPassword) return { ok: false, error: 'Введите текущий пароль' };
-  if (!newPassword || newPassword.length < 6) return { ok: false, error: 'Новый пароль — минимум 6 символов' };
+  const weakNew = checkPassword(newPassword);
+  if (weakNew) return { ok: false, error: weakNew };
 
   const u = await prisma.user.findUnique({ where: { id: user.id } });
   const match = await verifyPassword(currentPassword, u.passwordHash);
@@ -522,7 +525,7 @@ export async function createLotAction(input) {
       photoUrl: mainUrl || photoList[0] || '',
       wants: wants.trim(),
       desc: desc || '',
-      condition: condition || (kind === 'service' ? 'Услуга' : 'Новое или Б/У'),
+      condition: condition || (kind === 'service' ? 'Услуга' : 'Хорошее'),
       posted: 'только что',
       sortOrder: 0,
       ...(photoList.length ? {
@@ -900,19 +903,25 @@ const WALLET_TX_LIMIT = 50;
 
 async function walletOf(user) {
   if (!user) return null;
-  const [txs, heldSum, delta] = await Promise.all([
+  const [txs, heldSum, earned] = await Promise.all([
     prisma.transaction.findMany({ where: { userId: user.id }, orderBy: { createdAt: 'desc' }, take: WALLET_TX_LIMIT }),
     prisma.transaction.aggregate({ where: { userId: user.id, status: 'held' }, _sum: { amt: true } }),
     prisma.transaction.aggregate({
-      where: { userId: user.id, createdAt: { gte: new Date(Date.now() - 30 * 86400000) }, status: 'done' },
+      where: {
+        userId: user.id,
+        createdAt: { gte: new Date(Date.now() - 30 * 86400000) },
+        status: 'done',
+        kind: { in: ['earn', 'bonus'] },
+      },
       _sum: { amt: true },
     }),
   ]);
   return {
     balance: user.balance,
     escrow: heldSum._sum.amt || 0,
-    delta30: delta._sum.amt || 0,
-    demurrageInDays: 164,
+    // Только поступления: раньше сюда попадал и escrow-in, то есть
+    // потраченное складывалось с полученным и показывалось со знаком плюс.
+    earned30: earned._sum.amt || 0,
     tx: txs.map(t => ({
       id: t.id,
       kind: t.kind,

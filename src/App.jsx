@@ -3,6 +3,7 @@
 import React from 'react';
 import { bootstrapAction, loadAuthedDataAction, logoutAction, createLotAction, updateLotAction, getWalletAction, listDealsAction, listChatsAction, getMatchesAction, createDealAction, confirmReceiptAction, confirmPartnerAction, cancelDealAction, createReviewAction, openDisputeAction, topUpAction, startChatAction, getDealChatAction, toggleFavoriteAction, listChainsAction, refreshChainsAction, startChainAction, respondChainAction, confirmChainSentAction, confirmChainReceivedAction, listNotificationsAction, markNotificationsReadAction, getArchivedLots, archiveLotAction, restoreLotAction, deleteLotAction } from './server/actions.js';
 import { FeedList, FeedSwipe, CatRow, FavoritesScreen } from './screen-feed.jsx';
+import { matchesQuery } from './data.js';
 import { FeedChain, ChainDetail } from './screen-chain.jsx';
 import { NotificationsSheet } from './screen-notifications.jsx';
 import { LotDetail, OfferSheet } from './screen-lot.jsx';
@@ -15,7 +16,7 @@ import { ProfileScreen, SettingsScreen, MyLotsScreen, FunnelScreen, BroadcastScr
 import WebApp from './web-app.jsx';
 import { parseRoute, tabPath, screenPath, readPath } from './router.js';
 
-import { Logo, AppBar, IconBtn, TabBar, SplashScreen, PullToRefresh } from './ui.jsx';
+import { Logo, AppBar, IconBtn, TabBar, SplashScreen, PullToRefresh, FabCreate } from './ui.jsx';
 import { Icon } from './icons.jsx';
 import { useTweaks } from './tweaks-panel.jsx';
 import { registerServiceWorker, useInstallPrompt, InstallBanner } from './pwa.jsx';
@@ -74,6 +75,7 @@ export default function App() {
   const [path, setPath] = React.useState(readPath);
   const publishingRef = React.useRef(false);
   const [authOpen, setAuthOpen] = React.useState(false);
+  const [justRegistered, setJustRegistered] = React.useState(false);
   const [authMsg, setAuthMsg] = React.useState('');
   const pendingActionRef = React.useRef(null);
   const [offerLot, setOfferLot] = React.useState(null);
@@ -354,10 +356,13 @@ export default function App() {
     return () => { cancelled = true; };
   }, []);
 
-  const handleAuth = async (user) => {
+  const handleAuth = async (user, opts = {}) => {
     setCurrentUser(user);
     setAuthed(true);
     setAuthOpen(false);
+    // Приветственный экран показываем только что зарегистрировавшимся: тому,
+    // кто просто вошёл с нового устройства, «С регистрацией!» — враньё.
+    if (opts.registered) setJustRegistered(true);
     // Цели Метрики: без них в отчётах видно только «ходили по страницам»,
     // а нам нужна воронка до реального обмена.
     trackGoal('auth');
@@ -493,7 +498,14 @@ export default function App() {
       }
       setCreating(false);
       setEditingLot(null);
-      resetTo('home');
+      // «Ни уведомления, ни бросило в окно с моими заявками — ощущение, что
+      // глюкануло». Ведём туда, где объявление видно, и говорим, что вышло.
+      if (lotData && lotData.id) {
+        showSnack('Изменения сохранены');
+      } else {
+        showSnack('Объявление опубликовано — оно уже в ленте');
+      }
+      navigate(tabPath('mylots'));
     } catch (e) {
       console.error('publish failed', e);
       if (!(e && e.message && e.message.indexOf('Не удалось сохранить объявление') === 0)) {
@@ -605,7 +617,7 @@ export default function App() {
     if (tab === 'search') {
       return (
         <HomeTab
-          t={t} go={go} tab={tab} setTab={guardedTab} onCreate={onCreate}
+          t={t} go={go} tab={tab} setTab={guardedTab} onCreate={onCreate} authed={authed}
           lots={lots} lotsLoading={lotsLoading} myLots={myLots} matches={matches}
           chains={chains} favIds={favIds} onToggleFav={toggleFav}
           unread={notifications.unread || 0}
@@ -822,9 +834,19 @@ export default function App() {
     <>
       {isDesktop ? (
         <WebApp
+          route={route}
+          onTab={guardedTab}
+          go={go}
+          back={back}
           lots={lots}
           lotsLoading={lotsLoading}
           myLots={myLots}
+          archivedLots={archivedLots}
+          onArchiveLot={handleArchiveLot}
+          onRestoreLot={handleRestoreLot}
+          onDeleteLot={handleDeleteLot}
+          notifications={notifications}
+          onOpenNotifications={openNotifications}
           user={currentUser}
           profile={profile}
           authed={authed}
@@ -905,6 +927,12 @@ export default function App() {
           await refreshWallet();
           const ch = await listChatsAction();
           setChats(ch || []);
+          // Инициатор сделки не получал вообще ничего: уведомление уходит
+          // владельцу лота, а тому, кто нажал «Предложить обмен», казалось,
+          // что ничего не произошло.
+          showSnack(credits > 0
+            ? `Предложение отправлено, ${credits} Б заморожены в эскроу. Ждём ответа владельца.`
+            : 'Предложение отправлено — ждём ответа владельца.');
           go('deal', { id: d.id });
         } catch (e) {
           console.error('createDealAction failed', e);
@@ -944,8 +972,10 @@ export default function App() {
       <div className="app-root">
         <Onboarding
           initialWants={(currentUser && currentUser.wants) || ''}
+          welcomeName={justRegistered ? ((currentUser && currentUser.name) || '').split(' ')[0] : null}
           onDone={(wants) => {
             setOnboarded(true);
+            setJustRegistered(false);
             if (typeof wants === 'string') {
               setCurrentUser(u => (u ? { ...u, wants } : u));
               setProfile(p => (p ? { ...p, wants } : p));
@@ -973,11 +1003,11 @@ const VIEW_MODES = [
 ];
 
 // unread — колокольчик уведомлений, chatUnread — бейдж на вкладке сообщений
-function HomeTab({ t, go, tab, setTab, onCreate, lots, lotsLoading, matches, chains, myLots, favIds, onToggleFav, unread = 0, chatUnread = 0, onBell, onRefresh, chainProps = {} }) {
+function HomeTab({ t, go, tab, setTab, onCreate, authed = true, lots, lotsLoading, matches, chains, myLots, favIds, onToggleFav, unread = 0, chatUnread = 0, onBell, onRefresh, chainProps = {} }) {
   const [cat, setCat] = React.useState('all');
   const [view, setView] = React.useState(t.mechanic || 'list');
   const [q, setQ] = React.useState('');
-  const shown = lots.filter(l => (!q.trim() || l.title.toLowerCase().includes(q.trim().toLowerCase())));
+  const shown = lots.filter(l => matchesQuery(l, q));
 
   return (
     <div className="app">
@@ -1011,7 +1041,11 @@ function HomeTab({ t, go, tab, setTab, onCreate, lots, lotsLoading, matches, cha
         {view === 'list' && <FeedList cat={cat} lots={shown} loading={lotsLoading} matches={matches} hints={t.matchHints} myLots={myLots} myLot={myLots && myLots[0]} onOpen={(id) => go('lot', { lotId: id })} onChains={() => setView('chain')} favIds={favIds} onToggleFav={onToggleFav} />}
         {view === 'swipe' && <FeedSwipe cat={cat} lots={shown} myLot={myLots && myLots[0]} onOpen={(id) => go('lot', { lotId: id })} />}
         {view === 'chain' && <FeedChain chains={chains} onOpenChain={(id) => go('chain', { id })} {...chainProps} />}
+        {/* место под кнопку «Разместить объявление»: без него она накрывает
+            последний ряд карточек */}
+        <div style={{ height: 64 }} aria-hidden="true" />
       </PullToRefresh>
+      <FabCreate onClick={onCreate} authed={authed} />
       <TabBar tab={tab} setTab={setTab} onCreate={onCreate} unread={chatUnread} />
     </div>
   );

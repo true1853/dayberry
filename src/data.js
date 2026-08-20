@@ -35,3 +35,23 @@ export function normalizeCat(cat) {
 export function catOf(cat) {
   return CAT[normalizeCat(cat)];
 }
+
+/**
+ * Поиск по объявлению. Сверять только название мало: запрос «велосипед» не
+ * находил «Стелс Навигатор 500» с велосипедом в описании, и поиск выглядел
+ * сломанным. Все слова запроса должны найтись — «детский велосипед» не
+ * должен вываливать всё детское.
+ *
+ * Ищем в том, ЧЕМ является вещь: название, описание, категория. Поле «хочу
+ * взамен» сюда не входит намеренно — по запросу «смартфон» человек ждёт
+ * смартфоны, а не рыбу, владелец которой ищет смартфон. Состояние и город
+ * тоже убраны: «хорошее» находило пол-ленты, а для города есть фильтр.
+ */
+export function matchesQuery(lot, query) {
+  const words = String(query || '').toLowerCase().split(/[\s,]+/).filter(Boolean);
+  if (!words.length) return true;
+  const cat = catOf(lot.cat);
+  const hay = [lot.title, lot.desc, cat.label, cat.hint]
+    .filter(Boolean).join(' ').toLowerCase();
+  return words.every(w => hay.includes(w));
+}

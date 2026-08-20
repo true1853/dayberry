@@ -1,7 +1,7 @@
 // web-app.jsx — desktop web layout (Airbnb-inspired)
 import React from 'react';
 import { CITIES, REMOTE, VLADIMIR_REGION } from './cities.js';
-import { CAT, CAT_IDS, catOf, normalizeCat } from './data.js';
+import { CAT, CAT_IDS, catOf, normalizeCat, matchesQuery } from './data.js';
 import { Icon } from './icons.jsx';
 import { fmt, Logo, Credit, Photo, Avatar, Stars, CatTag, AIBadge } from './ui.jsx';
 import { EditProfileSheet, resizeImage, SettingsScreen, FunnelScreen, BroadcastScreen, DisputesScreen, ResetsScreen, ReportsScreen, RulesScreen } from './screen-profile.jsx';
@@ -10,10 +10,23 @@ import { DealStatus } from './screen-deal.jsx';
 import { ChatThread } from './screen-chat.jsx';
 import { FeedChain, ChainDetail } from './screen-chain.jsx';
 
+// Ссылки ведут в существующие разделы. Прежний набор («Карьера», «Блог»,
+// «Арендовать на день») достался от шаблона: все двенадцать пунктов гасили
+// клик и ничего не открывали.
 const FOOTER_COLS = [
-  { h: 'Поддержка', links: ['Справка', 'Безопасность', 'Центр доверия', 'Правила сообщества', 'Связь с нами'] },
-  { h: 'Размещение', links: ['Стать участником', 'Арендовать на день', 'Бартер-бизнес', 'Гиды и промо', 'Опыт соседей'] },
-  { h: 'Дайбери', links: ['Новости', 'Карьера', 'Блог', 'Благотворительность', 'Контакты'] },
+  { h: 'Обмен', links: [
+    { label: 'Лента объявлений', to: 'home' },
+    { label: 'Цепочки обмена', to: 'chains' },
+    { label: 'Разместить объявление', act: 'create' },
+  ] },
+  { h: 'Правила и помощь', links: [
+    { label: 'Правила сервиса', act: 'rules' },
+    { label: 'Что нельзя менять', act: 'rules' },
+    { label: 'Настройки аккаунта', act: 'settings', auth: true },
+  ] },
+  { h: 'Дайбери', links: [
+    { label: 'Студия ПРИЗМАТИКА', href: 'https://prismatica.agency/' },
+  ] },
 ];
 
 function fmtDate(iso) {
@@ -24,18 +37,20 @@ function fmtDate(iso) {
 }
 
 // ---------------- top nav ----------------
-function WebNav({ view, setView, user, avatar, query, setQuery, onLogout, onCreate, authed = true, onAuthRequired, chatUnread = 0, isAdmin = false, onSettings, onBroadcast }) {
+function WebNav({ view, setView, user, avatar, query, setQuery, onLogout, onCreate, authed = true, onAuthRequired, chatUnread = 0, unread = 0, onBell, isAdmin = false, onSettings, onBroadcast }) {
   const [menu, setMenu] = React.useState(false);
   const [q, setQ] = React.useState(query || '');
   const tabs = [
-    { id: 'home', label: 'Обмен' },
-    { id: 'chains', label: 'Цепочки' },
-    { id: 'favorites', label: 'Избранное' },
-    { id: 'deals', label: 'Сделки', badge: chatUnread },
+    { id: 'home', label: 'Обмен', title: 'Лента объявлений: вещи и услуги на обмен' },
+    // «Цепочки» без пояснения читаются как жаргон: подпись объясняет механику
+    { id: 'chains', label: 'Цепочки', title: 'Круговой обмен на троих, когда прямой не сходится' },
+    { id: 'mylots', label: 'Мои объявления', title: 'Ваши товары и услуги', auth: true },
+    { id: 'favorites', label: 'Избранное', auth: true },
+    { id: 'deals', label: 'Сделки', badge: chatUnread, auth: true },
     // «Профиль» живёт в меню под аватаром — там его и ищут
   ];
   const goTab = (id) => {
-    if (!authed && (id === 'deals' || id === 'profile' || id === 'favorites')) {
+    if (!authed && (id === 'deals' || id === 'profile' || id === 'favorites' || id === 'mylots')) {
       onAuthRequired && onAuthRequired('Войдите, чтобы открыть этот раздел');
       return;
     }
@@ -50,46 +65,56 @@ function WebNav({ view, setView, user, avatar, query, setQuery, onLogout, onCrea
           <Logo size={30} />Дайбери
         </div>
         <div className="web-tabs">
-          {tabs.map(t => (
-            <button key={t.id} className={'web-tab' + (view === t.id ? ' is-on' : '')} onClick={() => goTab(t.id)}>
+          {tabs.filter(t => authed || !t.auth).map(t => (
+            <button key={t.id} className={'web-tab' + (view === t.id ? ' is-on' : '')} title={t.title || ''} onClick={() => goTab(t.id)}>
               {t.label}
               {t.badge ? <span className="web-new" style={{ background: 'var(--berry)', color: '#fff' }}>{t.badge > 99 ? '99+' : t.badge}</span> : null}
             </button>
           ))}
         </div>
-        <form className="web-search-pill" onSubmit={submit}>
+        {/* На главной большой поиск в шапке ленты — второе поле в навигации
+            только съедало ширину строки и заставляло её разъезжаться. */}
+        <form className="web-search-pill" onSubmit={submit} style={view === 'home' ? { display: 'none' } : undefined}>
           <Icon name="search" size={17} color="var(--ink-3)" />
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="Что ищете для обмена?" />
           <button type="submit" className="web-search-orb"><Icon name="search" size={17} color="#fff" /></button>
         </form>
         <div className="web-nav-right" style={{ position: 'relative' }}>
           <button className="btn btn-primary web-nav-create" onClick={onCreate}><Icon name="plus" size={18} color="#fff" />Разместить объявление</button>
-          <button className="web-account" onClick={() => setMenu(m => !m)}>
-            <div className="web-account-avatar">
-              {avatar ? <img src={avatar} alt="" /> : (user?.name || 'А').charAt(0)}
-            </div>
-            <Icon name="chevD" size={16} color="var(--ink-2)" />
-          </button>
-          {menu && (
+          {/* Гостю аватар с буквой врал, что он уже вошёл, а после регистрации
+              ничего не менялось. Теперь до входа тут кнопка, после — имя и фото. */}
+          {authed ? (
+            <>
+              <button className="web-bell" onClick={onBell} aria-label="Уведомления" title="Уведомления">
+                <Icon name="bell" size={19} color="var(--ink)" />
+                {unread ? <span className="web-bell-badge">{unread > 99 ? '99+' : unread}</span> : null}
+              </button>
+              <button className="web-account" onClick={() => setMenu(m => !m)} title={user?.name || 'Аккаунт'}>
+                <div className="web-account-avatar">
+                  {avatar ? <img src={avatar} alt="" /> : (user?.name || '?').charAt(0).toUpperCase()}
+                </div>
+                <span className="web-account-name">{(user?.name || '').split(' ')[0]}</span>
+                <Icon name="chevD" size={16} color="var(--ink-2)" />
+              </button>
+            </>
+          ) : (
+            <button className="btn btn-soft web-nav-login" onClick={() => onAuthRequired && onAuthRequired('Войдите или зарегистрируйтесь')}>
+              <Icon name="user" size={17} color="var(--ink)" />Войти
+            </button>
+          )}
+          {menu && authed && (
             <div className="web-drop">
-              {authed ? (
-                <>
-                  <button className="web-drop-item" onClick={() => goTab('profile')}><Icon name="user" size={17} color="var(--ink-2)" />Профиль</button>
-                  <button className="web-drop-item" onClick={() => goTab('deals')}><Icon name="chat" size={17} color="var(--ink-2)" />Мои сделки</button>
-                  <button className="web-drop-item" onClick={() => goTab('favorites')}><Icon name="heart" size={17} color="var(--ink-2)" />Избранное</button>
-                  <div className="web-drop-sep" />
-                  <button className="web-drop-item" onClick={() => { setMenu(false); onSettings && onSettings(); }}><Icon name="settings" size={17} color="var(--ink-2)" />Настройки</button>
-                  {isAdmin && (
-                    <button className="web-drop-item" onClick={() => { setMenu(false); onBroadcast && onBroadcast(); }}><Icon name="send" size={17} color="var(--ink-2)" />Рассылка</button>
-                  )}
-                  <div className="web-drop-sep" />
-                  <button className="web-drop-item danger" onClick={() => { setMenu(false); onLogout(); }}><Icon name="close" size={17} color="var(--berry-700)" />Выйти</button>
-                </>
-              ) : (
-                <button className="web-drop-item" onClick={() => { setMenu(false); onAuthRequired && onAuthRequired('Войдите, чтобы открыть сделки и кошелёк'); }}>
-                  <Icon name="user" size={17} color="var(--berry)" />Войти / Регистрация
-                </button>
+              <button className="web-drop-item" onClick={() => goTab('profile')}><Icon name="user" size={17} color="var(--ink-2)" />Профиль</button>
+              <button className="web-drop-item" onClick={() => goTab('mylots')}><Icon name="grid" size={17} color="var(--ink-2)" />Мои объявления</button>
+              <button className="web-drop-item" onClick={() => goTab('deals')}><Icon name="chat" size={17} color="var(--ink-2)" />Мои сделки</button>
+              <button className="web-drop-item" onClick={() => goTab('favorites')}><Icon name="heart" size={17} color="var(--ink-2)" />Избранное</button>
+              <div className="web-drop-sep" />
+              <button className="web-drop-item" onClick={() => { setMenu(false); onSettings && onSettings(); }}><Icon name="settings" size={17} color="var(--ink-2)" />Настройки</button>
+              {isAdmin && (
+                <button className="web-drop-item" onClick={() => { setMenu(false); onBroadcast && onBroadcast(); }}><Icon name="send" size={17} color="var(--ink-2)" />Рассылка</button>
               )}
+              <div className="web-drop-sep" />
+              <button className="web-drop-item danger" onClick={() => { setMenu(false); onLogout(); }}><Icon name="close" size={17} color="var(--berry-700)" />Выйти</button>
             </div>
           )}
         </div>
@@ -99,14 +124,23 @@ function WebNav({ view, setView, user, avatar, query, setQuery, onLogout, onCrea
 }
 
 // ---------------- footer ----------------
-function WebFooter() {
+function WebFooter({ authed = true, onTab, onCreate, onRules, onSettings }) {
+  const run = (l) => {
+    if (l.to) return onTab && onTab(l.to);
+    if (l.act === 'create') return onCreate && onCreate();
+    if (l.act === 'rules') return onRules && onRules();
+    if (l.act === 'settings') return onSettings && onSettings();
+  };
   return (
     <footer className="web-footer">
       <div className="web-footer-inner">
         {FOOTER_COLS.map(c => (
           <div key={c.h} className="web-footer-col">
             <h3>{c.h}</h3>
-            {c.links.map(l => <a key={l} href="#" onClick={e => e.preventDefault()}>{l}</a>)}
+            {c.links.filter(l => authed || !l.auth).map(l => (l.href
+              ? <a key={l.label} href={l.href} target="_blank" rel="noopener noreferrer">{l.label}</a>
+              : <a key={l.label} href="#" onClick={e => { e.preventDefault(); run(l); }}>{l.label}</a>
+            ))}
           </div>
         ))}
       </div>
@@ -150,9 +184,9 @@ function WebLotCard({ L, onOpen, onEdit, fav = false, onToggleFav }) {
         {/* рамка карточки квадратная — обёртка фото должна её заполнить,
             иначе снизу остаётся полоса фона под широким кадром */}
         <Photo label={L.photo} url={L.photoUrl} cat={L.cat} style={{ position: 'absolute', inset: 0 }} />
-        {L.hot
-          ? <span className="web-lot-badge"><Icon name="flame" size={11} color="var(--berry)" /> Хит</span>
-          : <span className="web-lot-badge" style={{ color: catOf(L.cat).color }}>{catOf(L.cat).label}</span>}
+        {/* «Хит» убран: флаг hot никто не выставляет — ни код, ни человек.
+            Вернуть, когда появится критерий (просмотры, избранное, спрос). */}
+        <span className="web-lot-badge" style={{ color: catOf(L.cat).color }}>{catOf(L.cat).label}</span>
         {onEdit && <button className="web-lot-heart" title="Редактировать" onClick={(e) => { e.stopPropagation(); onEdit(L); }}><Icon name="edit" size={15} color="var(--ink-2)" /></button>}
         {onToggleFav && (
           <button
@@ -195,39 +229,73 @@ function WebLotSkeleton() {
   );
 }
 
-function HomeView({ lots, lotsLoading = false, myLots = [], matches = [], query, setQuery, cat, setCat, city, setCity, onOpen, onChains, favIds, onToggleFav }) {
+// Шаги «как это работает». Без них главная не отвечала на вопрос
+// «что это вообще за сайт»: бренда, который объясняет себя сам, у нас нет.
+const HOW_STEPS = [
+  { icon: 'plus', h: 'Выставляете вещь или услугу', p: 'ИИ подскажет категорию и справедливую оценку в баллах. 1 балл = 1 ₽.' },
+  { icon: 'swap', h: 'Находите обмен', p: 'Прямой — или цепочка на троих, если напрямую не сходится.' },
+  { icon: 'shield', h: 'Меняетесь под эскроу', p: 'Разница в цене замораживается в баллах и уходит продавцу после подтверждения.' },
+];
+
+function HomeView({ lots, lotsLoading = false, myLots = [], matches = [], query, setQuery, cat, setCat, city, setCity, onOpen, onChains, onCreate, authed = true, favIds, onToggleFav }) {
   const [cityOpen, setCityOpen] = React.useState(false);
-  const q = (query || '').toLowerCase();
+  const [cityQ, setCityQ] = React.useState('');
+  const cityBox = React.useRef(null);
+  const q = (query || '').trim();
   const items = lots.filter(l => {
     const matchesCat = cat === 'all' || normalizeCat(l.cat) === cat;
-    const matchesQ = !q || l.title.toLowerCase().includes(q);
     const lc = (l.city || '').toLowerCase();
     const matchesCity = city === 'all' || (city === REMOTE ? lc === REMOTE : (lc === city.toLowerCase() || lc === REMOTE || !lc));
-    return matchesCat && matchesQ && matchesCity;
+    return matchesCat && matchesQuery(l, q) && matchesCity;
   });
 
+  // Клик мимо выпадашки городов её закрывает: раньше она перекрывала ленту,
+  // пока не выберешь город.
+  React.useEffect(() => {
+    if (!cityOpen) return undefined;
+    const onDown = (e) => { if (cityBox.current && !cityBox.current.contains(e.target)) setCityOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [cityOpen]);
+
   const cityLabel = city === 'all' ? 'Везде' : (city === REMOTE ? 'Удалённо' : city);
+  // Городов 79 — прокручивать список до «Ярославля» дольше, чем набрать «яр».
+  const cityHits = CITIES.filter(c => c.toLowerCase().includes(cityQ.trim().toLowerCase()));
+  const pickCity = (c) => { setCity(c); setCityOpen(false); setCityQ(''); };
+
   return (
     <>
       <div className="web-hero">
         <div className="web-hero-inner">
-          <h1>Вдохновение для будущих обменов</h1>
-          <p>Обмен без денег: бартер-кредиты, эскроу и честные сделки по всей России.</p>
+          <span className="web-hero-kicker">Бартер-площадка</span>
+          <h1>Меняйтесь вещами и услугами — без денег</h1>
+          <p>Отдали вещь — получили баллы, потратили на что угодно. Эскроу держит доплату, а цепочки собирают обмен, который напрямую не сходится.</p>
           <form className="web-bigsearch" onSubmit={e => { e.preventDefault(); setCityOpen(false); }}>
-            <div className="web-bigsearch-seg" style={{ position: 'relative' }} onClick={() => setCityOpen(o => !o)}>
-              <b>Где</b><span className="web-city-label">{cityLabel}</span>
+            <div className="web-bigsearch-seg" style={{ position: 'relative' }} ref={cityBox}>
+              <label htmlFor="web-big-city" style={{ display: 'block' }}><b>Где</b></label>
+              <input
+                id="web-big-city"
+                value={cityOpen ? cityQ : cityLabel}
+                onChange={e => { setCityQ(e.target.value); setCityOpen(true); }}
+                onFocus={() => { setCityOpen(true); setCityQ(''); }}
+                placeholder="Город или «Везде»"
+                style={bigInputStyle}
+                autoComplete="off"
+              />
               <Icon name="chevD" size={14} color="var(--ink-2)" style={{ position: 'absolute', right: 14, bottom: 22 }} />
               {cityOpen && (
                 <div className="web-city-drop">
-                  <button type="button" className={'web-city-item' + (city === 'all' ? ' is-on' : '')} onClick={() => { setCity('all'); setCityOpen(false); }}><Icon name="map" size={15} color="var(--ink-3)" />Везде</button>
-                  <button type="button" className={'web-city-item' + (city === REMOTE ? ' is-on' : '')} onClick={() => { setCity(REMOTE); setCityOpen(false); }}><Icon name="spark" size={15} color="var(--ink-3)" />Удалённо</button>
+                  <button type="button" className={'web-city-item' + (city === 'all' ? ' is-on' : '')} onClick={() => pickCity('all')}><Icon name="map" size={15} color="var(--ink-3)" />Везде</button>
+                  <button type="button" className={'web-city-item' + (city === REMOTE ? ' is-on' : '')} onClick={() => pickCity(REMOTE)}><Icon name="spark" size={15} color="var(--ink-3)" />Удалённо</button>
                   <div className="web-city-sep" />
-                  {CITIES.map((c, i) => (
+                  {cityHits.length ? cityHits.map((c, i) => (
                     <React.Fragment key={c}>
-                      {i === VLADIMIR_REGION.length && <div className="web-city-sep" />}
-                      <button type="button" className={'web-city-item' + (city === c ? ' is-on' : '')} onClick={() => { setCity(c); setCityOpen(false); }}>{c}</button>
+                      {!cityQ.trim() && i === VLADIMIR_REGION.length && <div className="web-city-sep" />}
+                      <button type="button" className={'web-city-item' + (city === c ? ' is-on' : '')} onClick={() => pickCity(c)}>{c}</button>
                     </React.Fragment>
-                  ))}
+                  )) : (
+                    <span className="web-city-item" style={{ color: 'var(--ink-3)' }}>Такого города в списке нет</span>
+                  )}
                 </div>
               )}
             </div>
@@ -237,14 +305,34 @@ function HomeView({ lots, lotsLoading = false, myLots = [], matches = [], query,
                 id="web-big-q"
                 value={query || ''}
                 onChange={e => setQuery(e.target.value)}
-                placeholder="Техника, услуги, вещи…"
+                placeholder="Велосипед, ремонт, фотоаппарат…"
                 style={bigInputStyle}
               />
             </div>
-            <div className="web-bigsearch-seg"><b>Кто</b><span>Добавить участников</span></div>
+            {/* сегмент «Кто · Добавить участников» был декорацией из шаблона
+                бронирования: он ничего не делал и сбивал с толку */}
             <button type="submit" className="web-search-orb" style={{ width: 52, height: 52 }} aria-label="Найти"><Icon name="search" size={22} color="#fff" /></button>
           </form>
+          <div className="web-hero-cta">
+            <button className="btn btn-primary btn-lg" onClick={onCreate}>
+              <Icon name="plus" size={19} color="#fff" />{authed ? 'Разместить объявление' : 'Начать — разместить объявление'}
+            </button>
+            <a className="web-hero-link" href="#how" onClick={(e) => { e.preventDefault(); const el = document.getElementById('how'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>
+              Как это работает →
+            </a>
+          </div>
         </div>
+      </div>
+
+      <div id="how" className="web-container web-how">
+        {HOW_STEPS.map((s, i) => (
+          <div key={s.h} className="web-how-step">
+            <div className="web-how-icon"><Icon name={s.icon} size={20} color="var(--berry)" /></div>
+            <span className="web-how-num">Шаг {i + 1}</span>
+            <h3>{s.h}</h3>
+            <p>{s.p}</p>
+          </div>
+        ))}
       </div>
 
       <div className="web-container web-section-tight">
@@ -260,7 +348,9 @@ function HomeView({ lots, lotsLoading = false, myLots = [], matches = [], query,
       <div className="web-container web-section">
         <div className="web-head">
           <h2>{q ? `Результаты по «${query}»` : cat === 'all' ? (city === 'all' ? 'Свежие объявления' : `Обмены · ${cityLabel}`) : CATS.find(c => c[0] === cat)?.[1]}</h2>
-          <a href="#" onClick={e => e.preventDefault()}>Все объявления →</a>
+          {(q || cat !== 'all' || city !== 'all') && (
+            <a href="#" onClick={e => { e.preventDefault(); setQuery(''); setCat('all'); setCity('all'); }}>Сбросить фильтры →</a>
+          )}
         </div>
         {lotsLoading && !items.length ? (
           <div className="web-grid">
@@ -341,9 +431,6 @@ function ReservationRail({ L, onOffer, isMine, onEdit, onShare }) {
   return (
     <div className="web-reserve">
       <div className="web-reserve-price"><b>Обмен</b><span>· {L.condition}</span></div>
-      <div className="web-reserve-dates">
-        <div className="web-reserve-date" style={{ flex: 1 }}><b>Срок</b><span>по договорённости</span></div>
-      </div>
       <div className="web-reserve-row"><span>Категория</span><b>{catOf(L.cat).label}</b></div>
       <div className="web-reserve-row"><span>Город</span><b>{L.ownerCity || '—'}</b></div>
       {!isMine && (
@@ -382,6 +469,21 @@ function LotView({ L, isMine = false, lots = [], onBack, onOffer, onOwnerChat, o
     }
   };
   const ownerLots = (lots || []).filter(x => x.ownerId && x.ownerId === L.ownerId && x.id !== L.id).slice(0, 4);
+  // Оценка в баллах сама по себе ни о чём не говорит: рядом нужен ряд лотов
+  // того же порядка цены — на них и меняются. Своя категория идёт первой,
+  // потом всё остальное в коридоре ±35%.
+  const priceLow = L.value * 0.65;
+  const priceHigh = L.value * 1.35;
+  const sameCat = normalizeCat(L.cat);
+  const similar = (lots || [])
+    .filter(x => x.id !== L.id && x.ownerId !== L.ownerId && x.value >= priceLow && x.value <= priceHigh)
+    .sort((a, b) => {
+      const ca = normalizeCat(a.cat) === sameCat ? 0 : 1;
+      const cb = normalizeCat(b.cat) === sameCat ? 0 : 1;
+      if (ca !== cb) return ca - cb;
+      return Math.abs(a.value - L.value) - Math.abs(b.value - L.value);
+    })
+    .slice(0, 4);
   const owner = {
     name: L.ownerName || '',
     city: L.ownerCity || '',
@@ -399,7 +501,7 @@ function LotView({ L, isMine = false, lots = [], onBack, onOffer, onOwnerChat, o
     <>
       <div className="web-detail-hero">
         <button className="web-back" onClick={onBack}><Icon name="back" size={16} color="var(--ink-2)" />Все объявления</button>
-        <div className="row gap6" style={{ marginTop: 10 }}><CatTag cat={L.cat} /><span className="tag" style={{ background: 'var(--line-2)', color: 'var(--ink-2)' }}>{L.condition}</span>{L.hot && <span className="tag" style={{ background: 'var(--berry-50)', color: 'var(--berry)' }}><Icon name="flame" size={12} color="var(--berry)" />Хит</span>}</div>
+        <div className="row gap6" style={{ marginTop: 10 }}><CatTag cat={L.cat} /><span className="tag" style={{ background: 'var(--line-2)', color: 'var(--ink-2)' }}>{L.condition}</span></div>
         <h1 className="web-detail-title">{L.title}</h1>
         <div className="web-detail-meta">
           <span className="web-rating-row"><Icon name="star" size={14} color="var(--ink)" fill="star" />{owner.rating} · {owner.deals} сделок</span>
@@ -466,6 +568,18 @@ function LotView({ L, isMine = false, lots = [], onBack, onOffer, onOwnerChat, o
           <ReservationRail L={L} onOffer={onOffer} isMine={isMine} onEdit={onEdit} onShare={share} />
         </div>
       </div>
+
+      {similar.length > 0 && (
+        <div className="web-container web-section" style={{ paddingTop: 0 }}>
+          <div className="web-head">
+            <h2>На это можно поменять</h2>
+            <span className="cap">похожая оценка: {fmt(Math.round(priceLow))}–{fmt(Math.round(priceHigh))} Б</span>
+          </div>
+          <div className="web-grid">
+            {similar.map(x => <WebLotCard key={x.id} L={x} onOpen={onOpenLot} />)}
+          </div>
+        </div>
+      )}
 
       {ownerLots.length > 0 && (
         <div className="web-container web-section" style={{ paddingTop: 0 }}>
@@ -611,8 +725,63 @@ function DealsView({ onBack, chats = [], deals = [], onOpenDeal, onOpenChat }) {
   );
 }
 
+// ---------------- my lots ----------------
+// Свои объявления жили только внутри профиля, под аватаром, без адреса —
+// «фиг найдёшь и непонятно». Теперь это отдельный раздел с архивом.
+function MyLotsView({ myLots = [], archivedLots = [], onOpen, onCreate, onEdit, onArchive, onRestore, onDelete }) {
+  const [tab, setTab] = React.useState('active');
+  const items = tab === 'active' ? myLots : archivedLots;
+  return (
+    <div className="web-container web-section">
+      <div className="web-head">
+        <h2>Мои объявления</h2>
+        <button className="btn btn-primary" style={{ padding: '11px 16px', fontSize: 14 }} onClick={onCreate}>
+          <Icon name="plus" size={17} color="#fff" />Разместить объявление
+        </button>
+      </div>
+      <div className="web-cats" style={{ marginBottom: 20 }}>
+        <button className={'web-cat' + (tab === 'active' ? ' is-on' : '')} onClick={() => setTab('active')}>
+          <Icon name="grid" size={15} color={tab === 'active' ? '#fff' : 'var(--ink-3)'} />В ленте · {myLots.length}
+        </button>
+        <button className={'web-cat' + (tab === 'archive' ? ' is-on' : '')} onClick={() => setTab('archive')}>
+          <Icon name="archive" size={15} color={tab === 'archive' ? '#fff' : 'var(--ink-3)'} />Архив · {archivedLots.length}
+        </button>
+      </div>
+      {items.length ? (
+        <div className="web-grid">
+          {items.map(L => (
+            <div key={L.id} className="col gap8">
+              <WebLotCard L={L} onOpen={onOpen} onEdit={tab === 'active' ? onEdit : undefined} />
+              <div className="row gap8">
+                {tab === 'active' ? (
+                  <button className="btn btn-soft grow" style={{ padding: '9px 12px', fontSize: 13.5 }} onClick={() => onArchive && onArchive(L)}>
+                    <Icon name="archive" size={15} color="var(--ink)" />В архив
+                  </button>
+                ) : (
+                  <button className="btn btn-soft grow" style={{ padding: '9px 12px', fontSize: 13.5 }} onClick={() => onRestore && onRestore(L)}>
+                    <Icon name="check" size={15} color="var(--ink)" />Вернуть в ленту
+                  </button>
+                )}
+                <button className="btn btn-soft" style={{ padding: '9px 12px', fontSize: 13.5, color: 'var(--berry-700)' }} onClick={() => onDelete && onDelete(L)}>
+                  <Icon name="close" size={15} color="var(--berry-700)" />Удалить
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="web-empty">
+          <Icon name="tag" size={36} color="var(--ink-3)" />
+          <span>{tab === 'active' ? 'Пока ни одного объявления — начните с того, что вам не нужно' : 'В архиве пусто'}</span>
+          {tab === 'active' && <button className="btn btn-primary" onClick={onCreate}><Icon name="plus" size={17} color="#fff" />Разместить объявление</button>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ---------------- profile ----------------
-function ProfileView({ user, profile, myLots, onOpenLot, onLogout, onProfileSaved, onWallet, onEditLot }) {
+function ProfileView({ user, profile, myLots, onOpenLot, onLogout, onProfileSaved, onWallet, onEditLot, onAllLots }) {
   const [editing, setEditing] = React.useState(false);
   const avatarRef = React.useRef(null);
   const name = (user && user.name) || '';
@@ -678,7 +847,7 @@ function ProfileView({ user, profile, myLots, onOpenLot, onLogout, onProfileSave
           </div>
 
           <div className="grow col" style={{ minWidth: 0 }}>
-            <div className="web-head"><h2>Объявления</h2><a href="#" onClick={e => e.preventDefault()}>Все →</a></div>
+            <div className="web-head"><h2>Объявления</h2><a href="#" onClick={e => { e.preventDefault(); onAllLots && onAllLots(); }}>Все, включая архив →</a></div>
             {myLots.length ? (
               <div className="web-grid">
                 {myLots.map(L => <WebLotCard key={L.id} L={L} onOpen={onOpenLot} onEdit={onEditLot} />)}
@@ -712,15 +881,28 @@ function ProfileView({ user, profile, myLots, onOpenLot, onLogout, onProfileSave
 }
 
 // ---------------- root ----------------
-export default function WebApp({ lots, lotsLoading = false, myLots, user, profile, onLogout, onProfileSaved, onOffer, onCreate, onEditLot, matches = [], chats = [], chains = [], deals = [], favorites = [], onToggleFav, onConfirmDeal, onCancelDeal, onRateDeal, onDisputeDeal, authed = true, onAuthRequired, onOwnerChat, onChatRead, onChatsChanged, chainProps = {}, chainActions = {}, chainBusy = false }) {
-  const [view, setView] = React.useState('home');
+export default function WebApp({ route = { tab: 'search', stack: [] }, onTab, go, back, lots, lotsLoading = false, myLots, archivedLots = [], onArchiveLot, onRestoreLot, onDeleteLot, notifications = { unread: 0 }, onOpenNotifications, user, profile, onLogout, onProfileSaved, onOffer, onCreate, onEditLot, matches = [], chats = [], chains = [], deals = [], favorites = [], onToggleFav, onConfirmDeal, onCancelDeal, onRateDeal, onDisputeDeal, authed = true, onAuthRequired, onOwnerChat, onChatRead, onChatsChanged, chainProps = {}, chainActions = {}, chainBusy = false }) {
+  // Экран десктопа выводится из адреса, а не из локального состояния: раньше
+  // «Назад» в браузере уносило с сайта целиком, ссылка на объявление никуда
+  // не вела, а переход из кода (`go('deal')` после создания сделки) на
+  // десктопе просто ничего не открывал — сделка создавалась молча.
+  const stack = route.stack || [];
+  const top = stack[stack.length - 1] || null;
+  const topName = top ? top.name : '';
+  const view = topName === 'lot' ? 'lot'
+    : (topName === 'chainfeed' || topName === 'chain') ? 'chains'
+    : route.tab === 'search' ? 'home'
+    : route.tab === 'wallet' ? 'profile'   // кошелька отдельным экраном на десктопе нет
+    : route.tab;
+  const setView = (id) => onTab && onTab(id === 'home' ? 'search' : id);
+  const selLot = topName === 'lot' ? top.params.lotId : null;
+  const selDeal = topName === 'deal' ? top.params.id : null;
+  const selChat = topName === 'chat' ? top.params.id : null;
+  const selChain = topName === 'chain' ? top.params.id : null;
+  const openLot = (id) => go && go('lot', { lotId: id });
   const [cat, setCat] = React.useState('all');
   const [city, setCity] = React.useState('all');
   const [query, setQuery] = React.useState('');
-  const [selLot, setSelLot] = React.useState(null);
-  const [selDeal, setSelDeal] = React.useState(null);
-  const [selChat, setSelChat] = React.useState(null);
-  const [selChain, setSelChain] = React.useState(null);
   const avatar = (profile && profile.avatar) || (user && user.avatar) || '';
   // Лента чужая — своих лотов в ней нет. Открытие карточки из профиля
   // искало только в ленте и отдавало пустой экран.
@@ -733,51 +915,44 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
   const chatUnread = React.useMemo(() => (chats || []).reduce((n, c) => n + (c.unread || 0), 0), [chats]);
   // Настроек на десктопе не было вовсе — ни смены пароля, ни уведомлений,
   // ни рассылки. Переиспользуем мобильные экраны в модалке, как чат и сделку.
-  const [settingsOpen, setSettingsOpen] = React.useState(false);
-  const [analyticsOpen, setAnalyticsOpen] = React.useState(false);
-  const [broadcastOpen, setBroadcastOpen] = React.useState(false);
-  const [disputesOpen, setDisputesOpen] = React.useState(false);
-  const [resetsOpen, setResetsOpen] = React.useState(false);
-  const [reportsOpen, setReportsOpen] = React.useState(false);
-  const [rulesOpen, setRulesOpen] = React.useState(false);
+  const settingsOpen = topName === 'settings';
+  const analyticsOpen = topName === 'analytics';
+  const broadcastOpen = topName === 'broadcast';
+  const disputesOpen = topName === 'disputes';
+  const resetsOpen = topName === 'resets';
+  const reportsOpen = topName === 'reports';
+  const rulesOpen = topName === 'rules';
   const [isAdmin, setIsAdmin] = React.useState(false);
   React.useEffect(() => {
     if (!authed) { setIsAdmin(false); return; }
     broadcastInfoAction().then(r => setIsAdmin(!!r?.admin)).catch(() => {});
   }, [authed]);
 
-  const goHome = () => { setView('home'); setSelLot(null); setSelDeal(null); setSelChat(null); setSelChain(null); };
-
-  // Уход в другой раздел закрывает открытую сделку, чат или настройки:
-  // иначе новый раздел откроется под модалкой и человек его не увидит.
-  React.useEffect(() => {
-    setSelDeal(null);
-    setSelChat(null);
-    setSelChain(null);
-    setSettingsOpen(false);
-    setAnalyticsOpen(false);
-    setBroadcastOpen(false);
-    setDisputesOpen(false);
-    setResetsOpen(false);
-    setReportsOpen(false);
-    setRulesOpen(false);
-  }, [view]);
+  const goHome = () => setView('home');
+  const closeTop = () => (back ? back() : goHome());
   const dealOpen = selDeal ? deals.find(x => x.id === selDeal) || null : null;
 
   return (
     <div className="web">
-      <WebNav view={view} setView={setView} user={user} avatar={avatar} query={query} setQuery={setQuery} onLogout={onLogout} onCreate={onCreate} authed={authed} onAuthRequired={onAuthRequired} chatUnread={chatUnread} isAdmin={isAdmin} onSettings={() => setSettingsOpen(true)} onBroadcast={() => setBroadcastOpen(true)} />
+      <WebNav
+        view={view} setView={setView} user={user} avatar={avatar} query={query} setQuery={setQuery}
+        onLogout={onLogout} onCreate={onCreate} authed={authed} onAuthRequired={onAuthRequired}
+        chatUnread={chatUnread} isAdmin={isAdmin}
+        unread={notifications.unread || 0} onBell={onOpenNotifications}
+        onSettings={() => go && go('settings')} onBroadcast={() => go && go('broadcast')}
+      />
       <div className="web-body">
-        {view === 'home' && <HomeView lots={lots} lotsLoading={lotsLoading} myLots={myLots} matches={matches} query={query} setQuery={setQuery} cat={cat} setCat={setCat} city={city} setCity={setCity} onOpen={(id) => { setSelLot(id); setView('lot'); }} onChains={() => setView('chains')} favIds={favIds} onToggleFav={onToggleFav} />}
-        {view === 'favorites' && <FavoritesView lots={favorites} onBack={goHome} onOpen={(id) => { setSelLot(id); setView('lot'); }} onToggleFav={onToggleFav} />}
+        {view === 'home' && <HomeView lots={lots} lotsLoading={lotsLoading} myLots={myLots} matches={matches} query={query} setQuery={setQuery} cat={cat} setCat={setCat} city={city} setCity={setCity} onOpen={openLot} onChains={() => setView('chains')} onCreate={onCreate} authed={authed} favIds={favIds} onToggleFav={onToggleFav} />}
+        {view === 'favorites' && <FavoritesView lots={favorites} onBack={goHome} onOpen={openLot} onToggleFav={onToggleFav} />}
+        {view === 'mylots' && <MyLotsView myLots={myLots} archivedLots={archivedLots} onOpen={openLot} onCreate={onCreate} onEdit={onEditLot} onArchive={onArchiveLot} onRestore={onRestoreLot} onDelete={onDeleteLot} />}
         {view === 'lot' && (selected
-          ? <LotView L={selected} isMine={selectedIsMine} lots={lots} onBack={goHome} onOffer={onOffer} onOwnerChat={onOwnerChat} onEdit={onEditLot} onOpenLot={(id) => { setSelLot(id); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />
+          ? <LotView L={selected} isMine={selectedIsMine} lots={lots} onBack={closeTop} onOffer={onOffer} onOwnerChat={onOwnerChat} onEdit={onEditLot} onOpenLot={(id) => { openLot(id); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />
           : <div className="web-container web-section"><div className="web-empty"><Icon name="tag" size={36} color="var(--ink-3)" /><span>Объявление не найдено — возможно, оно снято с публикации</span><button className="btn btn-soft" onClick={goHome}>На главную</button></div></div>)}
-        {view === 'chains' && <ChainsView onBack={goHome} chains={chains} chainProps={chainProps} onOpenChain={(id) => setSelChain(id)} />}
-        {view === 'deals' && <DealsView onBack={goHome} chats={chats} deals={deals} onOpenDeal={(id) => setSelDeal(id)} onOpenChat={(id) => setSelChat(id)} />}
-        {view === 'profile' && <ProfileView user={user} profile={profile} myLots={myLots} onOpenLot={(id) => { setSelLot(id); setView('lot'); }} onLogout={onLogout} onProfileSaved={onProfileSaved} onWallet={goHome} onEditLot={onEditLot} />}
+        {view === 'chains' && <ChainsView onBack={goHome} chains={chains} chainProps={chainProps} onOpenChain={(id) => go && go('chain', { id })} />}
+        {view === 'deals' && <DealsView onBack={goHome} chats={chats} deals={deals} onOpenDeal={(id) => go && go('deal', { id })} onOpenChat={(id) => go && go('chat', { id })} />}
+        {view === 'profile' && <ProfileView user={user} profile={profile} myLots={myLots} onOpenLot={openLot} onLogout={onLogout} onProfileSaved={onProfileSaved} onWallet={goHome} onEditLot={onEditLot} onAllLots={() => setView('mylots')} />}
       </div>
-      <WebFooter />
+      <WebFooter authed={authed} onTab={setView} onCreate={onCreate} onRules={() => go && go('rules')} onSettings={() => go && go('settings')} />
 
       {settingsOpen && (
         <div className="web-modal">
@@ -786,16 +961,16 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
             <SettingsScreen
               user={user}
               profile={profile}
-              onBack={() => setSettingsOpen(false)}
-              onLogout={() => { setSettingsOpen(false); onLogout(); }}
+              onBack={closeTop}
+              onLogout={() => { closeTop(); onLogout(); }}
               onProfileSaved={onProfileSaved}
-              onGoWallet={() => setSettingsOpen(false)}
-              onAnalytics={() => { setSettingsOpen(false); setAnalyticsOpen(true); }}
-              onBroadcast={() => { setSettingsOpen(false); setBroadcastOpen(true); }}
-              onDisputes={() => { setSettingsOpen(false); setDisputesOpen(true); }}
-              onResets={() => { setSettingsOpen(false); setResetsOpen(true); }}
-              onReports={() => { setSettingsOpen(false); setReportsOpen(true); }}
-              onRules={() => { setSettingsOpen(false); setRulesOpen(true); }}
+              onGoWallet={closeTop}
+              onAnalytics={() => go && go('analytics')}
+              onBroadcast={() => go && go('broadcast')}
+              onDisputes={() => go && go('disputes')}
+              onResets={() => go && go('resets')}
+              onReports={() => go && go('reports')}
+              onRules={() => go && go('rules')}
             />
           </div>
         </div>
@@ -805,7 +980,7 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
         <div className="web-modal">
           <div className="app">
             <div className="safe-top" />
-            <FunnelScreen onBack={() => setAnalyticsOpen(false)} />
+            <FunnelScreen onBack={closeTop} />
           </div>
         </div>
       )}
@@ -814,7 +989,7 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
         <div className="web-modal">
           <div className="app">
             <div className="safe-top" />
-            <RulesScreen onBack={() => setRulesOpen(false)} />
+            <RulesScreen onBack={closeTop} />
           </div>
         </div>
       )}
@@ -823,7 +998,7 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
         <div className="web-modal">
           <div className="app">
             <div className="safe-top" />
-            <ReportsScreen onBack={() => setReportsOpen(false)} />
+            <ReportsScreen onBack={closeTop} />
           </div>
         </div>
       )}
@@ -832,7 +1007,7 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
         <div className="web-modal">
           <div className="app">
             <div className="safe-top" />
-            <ResetsScreen onBack={() => setResetsOpen(false)} />
+            <ResetsScreen onBack={closeTop} />
           </div>
         </div>
       )}
@@ -841,7 +1016,7 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
         <div className="web-modal">
           <div className="app">
             <div className="safe-top" />
-            <DisputesScreen onBack={() => setDisputesOpen(false)} />
+            <DisputesScreen onBack={closeTop} />
           </div>
         </div>
       )}
@@ -850,7 +1025,7 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
         <div className="web-modal">
           <div className="app">
             <div className="safe-top" />
-            <BroadcastScreen onBack={() => setBroadcastOpen(false)} />
+            <BroadcastScreen onBack={closeTop} />
           </div>
         </div>
       )}
@@ -861,11 +1036,11 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
             <div className="safe-top" />
             <DealStatus
               deal={dealOpen}
-              onBack={() => setSelDeal(null)}
+              onBack={closeTop}
               onConfirm={() => onConfirmDeal(dealOpen)}
-              onCancel={async () => { const ok = await onCancelDeal(dealOpen); if (ok) setSelDeal(null); }}
-              onChat={() => { const c = chats.find(x => x.deal && x.deal.id === selDeal); if (c) { setSelChat(c.id); setSelDeal(null); } }}
-              onDone={() => setSelDeal(null)}
+              onCancel={async () => { const ok = await onCancelDeal(dealOpen); if (ok) closeTop(); }}
+              onChat={() => { const c = chats.find(x => x.deal && x.deal.id === selDeal); if (c && go) go('chat', { id: c.id }); }}
+              onDone={closeTop}
               onRate={onRateDeal}
               onDispute={(text) => onDisputeDeal && onDisputeDeal(dealOpen, text)}
             />
@@ -876,8 +1051,8 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
           <ChatThread
             chatId={selChat}
             onRead={onChatRead}
-            onBack={() => { setSelChat(null); onChatsChanged && onChatsChanged(); }}
-            onOpenDeal={() => { const c = chats.find(x => x.id === selChat); if (c && c.deal) setSelDeal(c.deal.id); }}
+            onBack={() => { closeTop(); onChatsChanged && onChatsChanged(); }}
+            onOpenDeal={() => { const c = chats.find(x => x.id === selChat); if (c && c.deal && go) go('deal', { id: c.deal.id }); }}
           />
         </div>
       ) : selChain ? (
@@ -888,15 +1063,15 @@ export default function WebApp({ lots, lotsLoading = false, myLots, user, profil
               chainId={selChain}
               chains={chains}
               busy={chainBusy}
-              onBack={() => setSelChain(null)}
+              onBack={closeTop}
               onStart={chainActions.onStart}
               onRespond={async (ch, accept) => {
                 await chainActions.onRespond?.(ch, accept);
-                if (!accept) setSelChain(null);
+                if (!accept) closeTop();
               }}
               onSent={chainActions.onSent}
               onReceived={chainActions.onReceived}
-              onOpenChat={(chatId) => { setSelChain(null); setSelChat(chatId); }}
+              onOpenChat={(chatId) => go && go('chat', { id: chatId })}
             />
           </div>
         </div>
