@@ -135,6 +135,71 @@ test('classifier retains corrupt, dangling, duplicate-key and zero-credit row ID
   }]);
 });
 
+test('legacy chain hold without refType never becomes a direct automatic pair', () => {
+  const result = classifyEscrowCandidateGraph({
+    deals: [cleanDeal],
+    transactions: [{ ...cleanHold, id: 'tx-legacy-chain' }],
+    chainSteps: [
+      { chainId: 'chain-legacy', userId: 'buyer-a', topup: 40 },
+    ],
+    users: [],
+  });
+
+  assert.deepEqual(result.automaticPairs, []);
+  assert.deepEqual(result.buckets.legacyChainSuspectHolds, [
+    { chainIds: ['chain-legacy'], transactionId: 'tx-legacy-chain', userId: 'buyer-a' },
+  ]);
+  assert.deepEqual(result.buckets.unmatchedDeals, [{ dealId: 'deal-a' }]);
+  assert.equal(result.high, true);
+});
+
+test('a chain hold settled outside its chain is reported and stays out of the direct graph', () => {
+  const result = classifyEscrowCandidateGraph({
+    deals: [],
+    transactions: [{
+      ...cleanHold,
+      id: 'tx-chain-eaten',
+      status: 'done',
+      refType: 'chain',
+      refId: 'chain-1',
+    }],
+    chains: [{ id: 'chain-1', status: 'active' }],
+    users: [],
+  });
+
+  assert.deepEqual(result.automaticPairs, []);
+  assert.deepEqual(result.buckets.chainHoldsSettledOutsideChain, [
+    { chainId: 'chain-1', chainStatus: 'active', transactionId: 'tx-chain-eaten' },
+  ]);
+  assert.equal(result.high, true);
+});
+
+test('missing linkage is expected before migration and blocking once the column exists', () => {
+  const before = classifyEscrowCandidateGraph({
+    deals: [cleanDeal],
+    transactions: [cleanHold],
+    users: [],
+    schema: { hasDealEscrowLink: false },
+  });
+
+  assert.deepEqual(before.automaticPairs, [{ dealId: 'deal-a', transactionId: 'tx-a' }]);
+  assert.deepEqual(before.buckets.missingLink, [{ dealId: 'deal-a' }]);
+  assert.deepEqual(before.severity.expected.missingLink, 1);
+  assert.equal(before.severity.blocking.missingLink, undefined);
+  assert.equal(before.high, false);
+
+  const after = classifyEscrowCandidateGraph({
+    deals: [cleanDeal],
+    transactions: [cleanHold],
+    users: [],
+    schema: { hasDealEscrowLink: true },
+  });
+
+  assert.deepEqual(after.buckets.missingLink, [{ dealId: 'deal-a' }]);
+  assert.equal(after.severity.blocking.missingLink, 1);
+  assert.equal(after.high, true);
+});
+
 test('classifier invariant validation reports every mismatched field', () => {
   const violations = validateEscrowInvariant(
     { ...cleanDeal, escrowTransactionId: 'tx-bad' },
@@ -179,7 +244,10 @@ async function createEscrowFixture(databasePath, { withCandidate = false } = {})
       await prisma.$executeRawUnsafe("INSERT INTO \"User\" (id, balance, dealsCount) VALUES ('buyer', 60, 0), ('seller', 0, 0)");
       await prisma.$executeRawUnsafe("INSERT INTO \"Lot\" (id, ownerId) VALUES ('lot', 'seller')");
       await prisma.$executeRawUnsafe("INSERT INTO \"Deal\" (id, userId, lotId, credits, stage, status) VALUES ('deal', 'buyer', 'lot', 40, 'created', 'active')");
-      await prisma.$executeRawUnsafe("INSERT INTO \"Transaction\" (id, userId, kind, amt, status, refType, refId) VALUES ('hold', 'buyer', 'escrow-in', 40, 'held', '', '')");
+      // Кандидат на автоматическую связь плюс блокирующая находка: ссылка на
+      // несуществующую сделку. Без неё дозревшая severity-модель не считала бы
+      // pre-migration снимок HIGH, и тест перестал бы проверять отказ команды.
+      await prisma.$executeRawUnsafe("INSERT INTO \"Transaction\" (id, userId, kind, amt, status, refType, refId) VALUES ('hold', 'buyer', 'escrow-in', 40, 'held', '', ''), ('dangling', 'buyer', 'escrow-in', 15, 'held', 'deal', 'missing-deal')");
     }
   } finally {
     await prisma.$disconnect();
