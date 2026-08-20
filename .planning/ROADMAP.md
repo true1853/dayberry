@@ -32,7 +32,7 @@ Milestone v1.1 сначала укрепляет существующий фин
 Plans:
 **Wave 1**
 
-- [ ] 01-01-PLAN.md — Immutable snapshot, read-only audit and restore-verification tooling
+- [x] 01-01-PLAN.md — Immutable snapshot, read-only audit and restore-verification tooling
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -136,7 +136,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Escrow Integrity and Safe Migration | 0/TBD | Not started | - |
+| 1. Escrow Integrity and Safe Migration | 1/6 | In progress | - |
 | 2. Deterministic Deal Core and Scoped Workspace | 0/TBD | Not started | - |
 | 3. Manual Versioned Agreement | 0/TBD | Not started | - |
 | 4. Manual Fulfillment and Existing Terminal Paths | 0/TBD | Not started | - |
