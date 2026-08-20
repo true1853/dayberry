@@ -144,6 +144,7 @@ async function main() {
     audit: {
       file: auditFile,
       high: audit.high,
+      severity: audit.severity,
       classificationHash: audit.classification.hash,
       tableCounts: audit.tableCounts,
     },

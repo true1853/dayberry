@@ -123,7 +123,35 @@ async function readDomainRows(prisma) {
     ORDER BY u."id"
   `);
 
-  return jsonSafe({ deals, transactions, users });
+  // Цепочки нужны не для их собственной сверки, а чтобы прямой граф не
+  // проглотил замороженную доплату участника цепочки.
+  const chainStepColumns = await tableColumns(prisma, 'ChainStep');
+  const chainColumns = await tableColumns(prisma, 'Chain');
+
+  const chainSteps = chainStepColumns.size === 0 ? [] : await prisma.$queryRawUnsafe(`
+    SELECT
+      ${selectColumn(chainStepColumns, 's', 'id')},
+      ${selectColumn(chainStepColumns, 's', 'chainId')},
+      ${selectColumn(chainStepColumns, 's', 'userId')},
+      ${selectColumn(chainStepColumns, 's', 'topup', '0')}
+    FROM "ChainStep" s
+    ORDER BY s."id"
+  `);
+
+  const chains = chainColumns.size === 0 ? [] : await prisma.$queryRawUnsafe(`
+    SELECT
+      ${selectColumn(chainColumns, 'c', 'id')},
+      ${selectColumn(chainColumns, 'c', 'status')}
+    FROM "Chain" c
+    ORDER BY c."id"
+  `);
+
+  const schema = {
+    hasDealEscrowLink: dealColumns.has('escrowTransactionId'),
+    hasTransactionBusinessKey: transactionColumns.has('businessKey'),
+  };
+
+  return jsonSafe({ deals, transactions, users, chainSteps, chains, schema });
 }
 
 async function readRuntime(prisma) {
@@ -179,14 +207,16 @@ export async function runAudit({ database, livePath, output }) {
       readTableCounts(prisma),
     ]);
     const classification = classifyEscrowCandidateGraph(rows);
-    const high = Object.values(classification.buckets).some(bucket => bucket.length > 0);
     report = {
       kind: 'escrow-audit',
-      schemaVersion: 1,
+      schemaVersion: 2,
       mode: 'read-only',
       database: resolvedDatabase,
       livePath: resolvedLivePath,
-      high,
+      // Одно каноничное решение классификатора: блокирует только то, что не
+      // объясняется отсутствием колонки связи до бэкфилла.
+      high: classification.high,
+      severity: classification.severity,
       runtime,
       tableCounts,
       classification,
@@ -211,7 +241,11 @@ async function main() {
     Object.entries(report.classification.buckets).map(([name, rows]) => [name, rows.length]),
   );
   console.log(`escrow audit: hash=${report.classification.hash} high=${report.high}`);
-  console.log(JSON.stringify({ automaticPairs: report.classification.automaticPairs.length, buckets: bucketCounts }));
+  console.log(JSON.stringify({
+    automaticPairs: report.classification.automaticPairs.length,
+    severity: report.severity,
+    buckets: bucketCounts,
+  }));
   if (report.high) process.exitCode = 2;
 }
 
