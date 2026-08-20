@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Помощник сделки MVP
 status: executing
-stopped_at: Wave 3 complete (01-03, 01-04); Wave 4 (01-05) is ready to execute.
+stopped_at: Wave 4 complete; only 01-06 (live apply, non-autonomous) remains.
 last_updated: "2026-08-20T00:00:00.000Z"
-last_activity: 2026-08-20 -- 01-03 completed (production inventory, unresolved-row dispositions)
+last_activity: 2026-08-20 -- 01-05 completed (read flag, startup allowlist, release runbook)
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 6
-  completed_plans: 4
-  percent: 67
+  completed_plans: 5
+  percent: 83
 ---
 
 # Project State
@@ -26,17 +26,17 @@ See: .planning/PROJECT.md (updated 2026-08-14)
 ## Current Position
 
 Phase: 1 (escrow-integrity-and-safe-migration) — EXECUTING
-Plan: 01-05 (Wave 4)
-Status: Waves 1-3 complete; 01-05 not started
-Last activity: 2026-08-20 -- 01-03 completed
+Plan: 01-06 (Wave 5, non-autonomous)
+Status: Waves 1-4 complete; 01-06 requires operator checkpoints
+Last activity: 2026-08-20 -- 01-05 completed
 
-Progress: [███████░░░] 67%
+Progress: [████████░░] 83%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 4
+- Total plans completed: 5
 - Average duration: not tracked
 - Total execution time: not tracked
 
@@ -44,9 +44,9 @@ Progress: [███████░░░] 67%
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 1 | 4/6 | — | — |
+| 1 | 5/6 | — | — |
 
-**Recent Trend:** Waves 1-3 complete; only rollout and the live apply remain.
+**Recent Trend:** Waves 1-4 complete; only the live apply remains.
 
 ## Accumulated Context
 
@@ -68,6 +68,10 @@ Decisions are logged in PROJECT.md. Current milestone decisions:
   требует поимённых решений оператора по каждой неразрешённой строке (01-03).
 - Живой инвентарь: один контейнер, том dayberry_dayberry-data, окно —
   docker stop dayberry; репетиция идёт на машине оператора (01-03).
+- Флаг DEAL_ESCROW_EXPANDED_READS управляет только чтением; исправленное ядро
+  эскроу флагом не выключается (01-05).
+- Откат — это артефакт с исправленным ядром, а не возврат схемы; откат на
+  до-интеграционный образ запрещён (01-05).
 - Server rules remain authoritative; AI is advisory and every consequential action requires explicit user confirmation.
 - Economic terms are frozen after offer creation; only logistics are versioned in v1.1.
 - The complete manual path must work before advisory AI and remain available during AI failure.
@@ -80,7 +84,7 @@ Decisions are logged in PROJECT.md. Current milestone decisions:
 - BK-01 (01-05): backup_dayberry.sh на сервере вызывает backup-snapshot.mjs
   позиционным аргументом — после 01-01 CLI fail-closed, ночной бэкап сломается
   при первом деплое нового образа.
-- BK-02 (01-05): CMD контейнера делает prisma db push при каждом старте.
+- BK-02 закрыт в 01-05: CMD теперь только запускает сервер (проверяется allowlist-тестом).
 - BK-03 (01-06): порядок выката несущий — снимок, migrate deploy, бэкфилл,
   затем новый образ.
 - 01-04: remove the `latest-held` lookup in `completeDeal` and deal cancellation
@@ -106,5 +110,5 @@ Decisions are logged in PROJECT.md. Current milestone decisions:
 ## Session Continuity
 
 Last session: 2026-08-20 +03:00
-Stopped at: 01-03 complete (inventory approved, 38 tests green).
-Resume file: .planning/phases/01-escrow-integrity-and-safe-migration/01-05-PLAN.md
+Stopped at: 01-05 complete (42 tests green, build clean).
+Resume file: .planning/phases/01-escrow-integrity-and-safe-migration/01-06-PLAN.md

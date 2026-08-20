@@ -45,7 +45,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 01-05-PLAN.md — Compatibility rollout, exact startup allowlist and executable runbook
+- [x] 01-05-PLAN.md — Compatibility rollout, exact startup allowlist and executable runbook
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
@@ -136,7 +136,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Escrow Integrity and Safe Migration | 4/6 | In progress | - |
+| 1. Escrow Integrity and Safe Migration | 5/6 | In progress | - |
 | 2. Deterministic Deal Core and Scoped Workspace | 0/TBD | Not started | - |
 | 3. Manual Versioned Agreement | 0/TBD | Not started | - |
 | 4. Manual Fulfillment and Existing Terminal Paths | 0/TBD | Not started | - |
