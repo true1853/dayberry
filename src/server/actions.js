@@ -12,6 +12,14 @@ import { randomUUID, randomBytes } from 'node:crypto';
 import * as rateLimit from '../../lib/rate-limit';
 import { REPORT_REASONS, reasonLabel } from '../reports.js';
 import {
+  cancelDealWithEscrow,
+  confirmDealSide,
+  createDealWithEscrow,
+  EscrowError,
+  openDealDispute,
+  resolveDealDispute,
+} from '../../lib/deals/escrow.js';
+import {
   createSession,
   destroySession,
   getCurrentUser,
@@ -605,7 +613,6 @@ const DEAL_STAGE_ORDER = ['created', 'meet', 'confirm', 'done'];
 class InsufficientFunds extends Error {
   constructor(userId) { super('insufficient funds'); this.userId = userId; }
 }
-class DealClosed extends Error {}
 
 function dealWith() {
   return {
@@ -641,35 +648,31 @@ async function serializeDeal(d, currentUserId) {
   };
 }
 
-// Расчёт по сделке: разморозка эскроу, начисление владельцу и счётчики.
-// Всё одной транзакцией — иначе сбой в середине оставляет баллы висеть
-// в эскроу, а у получателя их уже нет.
-async function completeDeal(deal) {
-  const held = await prisma.transaction.findFirst({
-    where: { userId: deal.userId, kind: 'escrow-in', status: 'held' },
-    orderBy: { createdAt: 'desc' },
-  });
+// Ошибки домена переводятся в сообщения пользователю здесь и только здесь;
+// неизвестные пробрасываются наверх как есть.
+const ESCROW_MESSAGES = {
+  INSUFFICIENT_FUNDS: 'Недостаточно баллов — пополните кошелёк',
+  LOT_UNAVAILABLE: 'Объявление недоступно',
+  OWN_LOT: 'Это ваше объявление',
+  DEAL_NOT_FOUND: 'Сделка не найдена',
+  DEAL_CLOSED: 'Сделка уже закрыта',
+  ALREADY_CONFIRMED: 'Вы уже подтвердили получение',
+  DISPUTE_OPEN: 'По сделке открыт спор — дождитесь решения',
+  DISPUTE_NOT_FOUND: 'Спор не найден',
+  STATE_CHANGED: 'Статус сделки изменился — обновите страницу',
+  COMMAND_CONFLICT: 'Условия предложения изменились — откройте сделку заново',
+  // Точная связь сделки с эскроу нарушена или отсутствует. Автоматически
+  // такое не чинится: деньги трогает только оператор после разбора.
+  ESCROW_MISMATCH: 'Сделка требует проверки оператором — баллы остаются в эскроу',
+  ESCROW_ALREADY_SETTLED: 'Сделка требует проверки оператором — баллы остаются в эскроу',
+  CHAIN_HOLD_REFUSED: 'Сделка требует проверки оператором — баллы остаются в эскроу',
+};
 
-  const ops = [];
-  if (held) {
-    ops.push(prisma.transaction.update({ where: { id: held.id }, data: { status: 'done' } }));
+function escrowFailure(error) {
+  if (error instanceof EscrowError) {
+    return { ok: false, error: ESCROW_MESSAGES[error.code] || 'Не удалось выполнить действие' };
   }
-  if (deal.credits > 0) {
-    ops.push(prisma.transaction.create({
-      data: {
-        userId: deal.lot.ownerId,
-        kind: 'earn',
-        title: `Обмен: «${deal.lot.title.split(',')[0]}»`,
-        sub: 'Переведено из эскроу',
-        amt: deal.credits,
-        status: 'done',
-      },
-    }));
-  }
-  ops.push(prisma.user.update({ where: { id: deal.lot.ownerId }, data: { balance: { increment: deal.credits }, dealsCount: { increment: 1 } } }));
-  ops.push(prisma.user.update({ where: { id: deal.userId }, data: { dealsCount: { increment: 1 } } }));
-
-  await prisma.$transaction(ops);
+  throw error;
 }
 
 export async function createDealAction(input) {
@@ -677,7 +680,7 @@ export async function createDealAction(input) {
   if (!user) return { ok: false, error: 'Требуется вход' };
   if (user.status === 'blocked') return { ok: false, error: 'Аккаунт заблокирован — открывать сделки нельзя' };
 
-  const { lotId, credits, myLotId } = input || {};
+  const { lotId, credits, myLotId, clientCommandId } = input || {};
   const lot = await prisma.lot.findUnique({ where: { id: lotId } });
   if (!lot || lot.status !== 'active') return { ok: false, error: 'Объявление недоступно' };
   if (lot.ownerId === user.id) return { ok: false, error: 'Это ваше объявление' };
@@ -687,79 +690,57 @@ export async function createDealAction(input) {
     return { ok: false, error: 'Недостаточно баллов — пополните кошелёк' };
   }
 
-  // Списание, сделка и чат — одной транзакцией. Списываем условным UPDATE
-  // (balance >= num), а не по ранее прочитанному значению: иначе два
-  // параллельных запроса проходят одну и ту же проверку и уводят баланс в минус.
   let result;
   try {
-    result = await prisma.$transaction(async (tx) => {
-      if (num > 0) {
-        const debited = await tx.user.updateMany({
-          where: { id: user.id, balance: { gte: num } },
-          data: { balance: { decrement: num } },
-        });
-        if (debited.count !== 1) throw new InsufficientFunds();
-
-        await tx.transaction.create({
+    result = await createDealWithEscrow(prisma, {
+      actorId: user.id,
+      lotId: lot.id,
+      credits: num,
+      myLotId: myLotId || null,
+      // Без клиентского идентификатора повтор запроса открыл бы вторую
+      // сделку и заморозил баллы дважды.
+      clientCommandId: String(clientCommandId || randomUUID()),
+      attach: async (tx, deal) => {
+        const chat = await tx.chat.create({
           data: {
+            kind: 'direct',
             userId: user.id,
-            kind: 'escrow-in',
-            title: `Эскроу · ${lot.title.split(',')[0]}`,
-            sub: 'Доплата заморожена до подтверждения',
-            amt: num,
-            status: 'held',
+            partnerId: lot.ownerId,
+            dealId: deal.id,
+            members: { create: [{ userId: user.id }, { userId: lot.ownerId }] },
           },
         });
-      }
-
-      const deal = await tx.deal.create({
-        data: {
-          userId: user.id,
-          lotId: lot.id,
-          myLotId: myLotId || null,
-          credits: num,
-          stage: 'created',
-          status: 'active',
-        },
-      });
-
-      // chat with the lot owner
-      const chat = await tx.chat.create({
-        data: {
-          kind: 'direct',
-          userId: user.id,
-          partnerId: lot.ownerId,
-          dealId: deal.id,
-          members: { create: [{ userId: user.id }, { userId: lot.ownerId }] },
-        },
-      });
-      await tx.message.create({
-        data: { chatId: chat.id, text: `Открыл(а) сделку на «${lot.title}» — ${num} Б в эскроу.` },
-      });
-
-      return { dealId: deal.id, chatId: chat.id };
+        await tx.message.create({
+          data: { chatId: chat.id, text: `Открыл(а) сделку на «${lot.title}» — ${num} Б в эскроу.` },
+        });
+        return { chatId: chat.id };
+      },
     });
   } catch (e) {
-    if (e instanceof InsufficientFunds) return { ok: false, error: 'Недостаточно баллов — пополните кошелёк' };
-    throw e;
+    return escrowFailure(e);
   }
 
   const created = await prisma.deal.findUnique({ where: { id: result.dealId }, include: dealWith() });
+  const chatId = result.attached?.chatId
+    || (await prisma.chat.findFirst({ where: { dealId: result.dealId }, select: { id: true } }))?.id
+    || null;
 
-  // Владелец лота узнаёт о предложении, даже если не открывал приложение:
-  // сделка без ответа второй стороны просто висит и портит впечатление у обоих.
-  await notify({
-    userId: lot.ownerId,
-    type: 'deal_offer',
-    title: `${user.name} предлагает обмен`,
-    body: num > 0
-      ? `За «${lot.title}» — вещь и ${num} Б в эскроу.`
-      : `За «${lot.title}» — обмен вещь на вещь.`,
-    entityType: 'deal',
-    entityId: created.id,
-  });
+  // Уведомление уходит только за настоящее создание и только после коммита:
+  // на повторе запроса владелец лота не получает второе предложение.
+  if (!result.replayed) {
+    await notify({
+      userId: lot.ownerId,
+      type: 'deal_offer',
+      title: `${user.name} предлагает обмен`,
+      body: num > 0
+        ? `За «${lot.title}» — вещь и ${num} Б в эскроу.`
+        : `За «${lot.title}» — обмен вещь на вещь.`,
+      entityType: 'deal',
+      entityId: created.id,
+    });
+  }
 
-  return { ok: true, deal: await serializeDeal(created, user.id), chatId: result.chatId };
+  return { ok: true, deal: await serializeDeal(created, user.id), chatId };
 }
 
 export async function listDealsAction() {
@@ -776,32 +757,23 @@ async function dealsOf(user) {
   return Promise.all(deals.map(d => serializeDeal(d, user.id)));
 }
 
-// Общая часть обоих подтверждений. Флаг ставится условным UPDATE (по ещё
-// не выставленному флагу), поэтому две одновременные попытки не могут обе
-// увидеть «второй уже подтвердил» и дважды провести расчёт по сделке.
+// Общая часть обоих подтверждений. Заявка на переход и денежный расчёт
+// живут внутри одной транзакции домена; здесь остаётся только определение
+// стороны, перевод ошибок и уведомления после коммита.
 async function confirmSide(dealId, user, side) {
-  const mine = side === 'initiator' ? 'initiatorConfirmed' : 'partnerConfirmed';
-  const other = side === 'initiator' ? 'partnerConfirmed' : 'initiatorConfirmed';
-
   const deal = await prisma.deal.findUnique({ where: { id: dealId }, include: dealWith() });
   const owns = side === 'initiator' ? deal?.userId === user.id : deal?.lot?.ownerId === user.id;
   if (!deal || !owns) return { ok: false, error: 'Сделка не найдена' };
-  if (deal.stage === 'done') return { ok: false, error: 'Сделка уже завершена' };
-  if (deal.disputedAt) return { ok: false, error: 'По сделке открыт спор — дождитесь решения' };
-  if (deal[mine]) return { ok: false, error: 'Вы уже подтвердили получение' };
-  if (deal.status !== 'active') return { ok: false, error: 'Сделка уже закрыта' };
 
-  const both = deal[other];
-  const claimed = await prisma.deal.updateMany({
-    where: { id: deal.id, status: 'active', [mine]: false, [other]: both },
-    data: both
-      ? { stage: 'done', status: 'done', [mine]: true }
-      : { stage: 'confirm', [mine]: true },
-  });
-  if (claimed.count !== 1) return { ok: false, error: 'Статус сделки изменился — обновите страницу' };
+  let outcome;
+  try {
+    outcome = await confirmDealSide(prisma, { dealId: deal.id, actorId: user.id });
+  } catch (e) {
+    return escrowFailure(e);
+  }
 
   const updated = await prisma.deal.findUnique({ where: { id: deal.id }, include: dealWith() });
-  if (both) await completeDeal(updated);
+  const both = outcome.settled;
 
   // Второй стороне: либо «дождались, обмен закрыт», либо «ваш ход».
   const otherId = side === 'initiator' ? updated.lot?.ownerId : updated.userId;
@@ -846,33 +818,11 @@ export async function cancelDealAction(dealId) {
   if (!user) return { ok: false, error: 'Требуется вход' };
   const deal = await prisma.deal.findUnique({ where: { id: dealId }, include: dealWith() });
   if (!deal || (deal.userId !== user.id && deal.lot?.ownerId !== user.id)) return { ok: false, error: 'Сделка не найдена' };
-  if (deal.status !== 'active') return { ok: false, error: 'Сделка уже закрыта' };
-  if (deal.disputedAt) return { ok: false, error: 'По сделке открыт спор — решение за поддержкой' };
-  if (deal.initiatorConfirmed || deal.partnerConfirmed) return { ok: false, error: 'Сделка подтверждена — отменить нельзя' };
 
-  // Отмена и возврат из эскроу — атомарно. Сначала закрываем сделку условным
-  // UPDATE: если её уже отменил параллельный запрос, count = 0 и вся
-  // транзакция откатывается, поэтому баллы не вернутся дважды.
   try {
-    await prisma.$transaction(async (tx) => {
-      const closed = await tx.deal.updateMany({
-        where: { id: deal.id, status: 'active' },
-        data: { status: 'cancelled' },
-      });
-      if (closed.count !== 1) throw new DealClosed();
-
-      if (deal.credits > 0) {
-        await tx.user.update({ where: { id: deal.userId }, data: { balance: { increment: deal.credits } } });
-        const held = await tx.transaction.findFirst({
-          where: { userId: deal.userId, kind: 'escrow-in', status: 'held' },
-          orderBy: { createdAt: 'desc' },
-        });
-        if (held) await tx.transaction.update({ where: { id: held.id }, data: { status: 'refunded' } });
-      }
-    });
+    await cancelDealWithEscrow(prisma, { dealId: deal.id, actorId: user.id });
   } catch (e) {
-    if (e instanceof DealClosed) return { ok: false, error: 'Сделка уже закрыта' };
-    throw e;
+    return escrowFailure(e);
   }
 
   const updated = await prisma.deal.findUnique({ where: { id: deal.id }, include: dealWith() });
@@ -2143,15 +2093,13 @@ export async function openDisputeAction(dealId, text) {
   if (!deal || (deal.userId !== user.id && deal.lot?.ownerId !== user.id)) {
     return { ok: false, error: 'Сделка не найдена' };
   }
-  if (deal.status !== 'active') return { ok: false, error: 'Сделка уже закрыта' };
-  if (deal.disputedAt) return { ok: false, error: 'Спор уже открыт' };
 
   const note = String(text || '').trim().slice(0, MAX_DISPUTE_NOTE);
-  const claimed = await prisma.deal.updateMany({
-    where: { id: deal.id, status: 'active', disputedAt: null },
-    data: { disputedAt: new Date(), disputeById: user.id, disputeNote: note },
-  });
-  if (claimed.count !== 1) return { ok: false, error: 'Статус сделки изменился — обновите страницу' };
+  try {
+    await openDealDispute(prisma, { dealId: deal.id, actorId: user.id, note, maxNote: MAX_DISPUTE_NOTE });
+  } catch (e) {
+    return escrowFailure(e);
+  }
 
   const otherId = deal.userId === user.id ? deal.lot?.ownerId : deal.userId;
   const title = (deal.lot?.title || '').split(',')[0];
@@ -2225,38 +2173,15 @@ export async function resolveDisputeAction(dealId, outcome) {
 
   const deal = await prisma.deal.findUnique({ where: { id: dealId }, include: dealWith() });
   if (!deal || !deal.disputedAt) return { ok: false, error: 'Спор не найден' };
-  if (deal.status !== 'active') return { ok: false, error: 'Сделка уже закрыта' };
 
   const title = (deal.lot?.title || '').split(',')[0];
 
-  if (outcome === 'refund') {
-    try {
-      await prisma.$transaction(async (tx) => {
-        const closed = await tx.deal.updateMany({
-          where: { id: deal.id, status: 'active' },
-          data: { status: 'cancelled', disputedAt: null },
-        });
-        if (closed.count !== 1) throw new DealClosed();
-        if (deal.credits > 0) {
-          await tx.user.update({ where: { id: deal.userId }, data: { balance: { increment: deal.credits } } });
-          const held = await tx.transaction.findFirst({
-            where: { userId: deal.userId, kind: 'escrow-in', status: 'held' },
-            orderBy: { createdAt: 'desc' },
-          });
-          if (held) await tx.transaction.update({ where: { id: held.id }, data: { status: 'refunded' } });
-        }
-      });
-    } catch (e) {
-      if (e instanceof DealClosed) return { ok: false, error: 'Сделка уже закрыта' };
-      throw e;
-    }
-  } else {
-    await prisma.deal.updateMany({
-      where: { id: deal.id, status: 'active' },
-      data: { stage: 'done', status: 'done', initiatorConfirmed: true, partnerConfirmed: true, disputedAt: null },
-    });
-    const fresh = await prisma.deal.findUnique({ where: { id: deal.id }, include: dealWith() });
-    await completeDeal(fresh);
+  // Модерация ходит тем же доменным путём, что и участники: отдельной
+  // дороги к деньгам у администратора нет.
+  try {
+    await resolveDealDispute(prisma, { dealId: deal.id, outcome, actorId: user.id });
+  } catch (e) {
+    return escrowFailure(e);
   }
 
   const both = [deal.userId, deal.lot?.ownerId].filter(Boolean);

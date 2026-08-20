@@ -77,6 +77,10 @@ export default function App() {
   const [authMsg, setAuthMsg] = React.useState('');
   const pendingActionRef = React.useRef(null);
   const [offerLot, setOfferLot] = React.useState(null);
+  // Идентификатор команды создания сделки. Он остаётся тем же, пока не
+  // изменились условия предложения: повтор после обрыва связи не должен
+  // открыть вторую сделку и заморозить баллы дважды.
+  const createCommandRef = React.useRef({ key: '', id: '' });
   const [deal, setDeal] = React.useState(null);
   const [creating, setCreating] = React.useState(false);
   const [editingLot, setEditingLot] = React.useState(null);
@@ -878,7 +882,20 @@ export default function App() {
       <OfferSheet L={offerLot} myLots={myLots || []} balance={wallet ? wallet.balance : 0} open={!!offerLot} onClose={() => setOfferLot(null)} onConfirm={async (L, credits, myLotId) => {
         setOfferLot(null);
         try {
-          const res = await createDealAction({ lotId: L.id, credits, myLotId });
+          const payloadKey = `${L.id}:${credits}:${myLotId || ''}`;
+          if (createCommandRef.current.key !== payloadKey) {
+            createCommandRef.current = {
+              key: payloadKey,
+              id: (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`),
+            };
+          }
+          const res = await createDealAction({
+            lotId: L.id,
+            credits,
+            myLotId,
+            clientCommandId: createCommandRef.current.id,
+          });
+          if (res?.ok) createCommandRef.current = { key: '', id: '' };
           if (res?.ok) trackGoal('deal_created', { credits });
           if (!res.ok) { showSnack(res.error || 'Не удалось создать сделку'); return; }
           const de = await listDealsAction();
