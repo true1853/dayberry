@@ -15,6 +15,22 @@ import {
   stableReleaseKey,
   validateEscrowInvariant,
 } from '../lib/deals/escrow-invariants.js';
+import {
+  BASELINE_MIGRATION,
+  createBaselineOnlyMigrations,
+  createPreChangeDatabase,
+  createTempDir,
+  foreignKeyList,
+  healthChecks,
+  indexNames,
+  migrateDeploy,
+  removeTempDir,
+  resolveApplied,
+  schemaDiffExitCode,
+  seedLegacyRows,
+  tableColumnNames,
+  withClient,
+} from './fixtures/escrow-db.mjs';
 
 const cleanDeal = {
   id: 'deal-a',
@@ -402,4 +418,99 @@ test('restore verification proves a clean snapshot and rejects checksum mismatch
   ]);
   assert.notEqual(tampered.status, 0);
   assert.match(`${tampered.stdout}\n${tampered.stderr}`, /checksum mismatch/i);
+});
+
+test('fresh database migrate deploy creates the expanded schema', async (t) => {
+  const dir = await createTempDir('fresh');
+  t.after(() => removeTempDir(dir));
+  const database = path.join(dir, 'fresh.db');
+
+  const deployed = migrateDeploy(database);
+  assert.equal(deployed.status, 0, `${deployed.stdout}\n${deployed.stderr}`);
+
+  const dealColumns = await tableColumnNames(database, 'Deal');
+  assert.ok(dealColumns.includes('escrowTransactionId'), 'Deal.escrowTransactionId');
+  assert.ok(dealColumns.includes('createCommandKey'), 'Deal.createCommandKey');
+  assert.ok((await tableColumnNames(database, 'Transaction')).includes('businessKey'), 'Transaction.businessKey');
+
+  const escrowFk = (await foreignKeyList(database, 'Deal')).find(fk => fk.from === 'escrowTransactionId');
+  assert.deepEqual(escrowFk, { table: 'Transaction', from: 'escrowTransactionId', to: 'id', onDelete: 'RESTRICT' });
+
+  const dealIndexes = await indexNames(database, 'Deal');
+  for (const name of [
+    'Deal_createCommandKey_key',
+    'Deal_escrowTransactionId_key',
+    'Deal_status_idx',
+    'Deal_userId_idx',
+    'Deal_lotId_idx',
+    'Deal_createdAt_idx',
+    'Deal_disputedAt_idx',
+  ]) {
+    assert.ok(dealIndexes.includes(name), `index ${name}`);
+  }
+  assert.ok((await indexNames(database, 'Transaction')).includes('Transaction_businessKey_key'));
+});
+
+test('baseline resolve is blocked when the database is not schema-equivalent', async (t) => {
+  const dir = await createTempDir('diff-gate');
+  t.after(() => removeTempDir(dir));
+  const baselineOnly = await createBaselineOnlyMigrations(dir);
+
+  const equivalent = await createPreChangeDatabase(dir, 'equivalent.db');
+  assert.equal(schemaDiffExitCode(equivalent, baselineOnly).code, 0, 'pre-change database must equal the baseline');
+
+  const drifted = await createPreChangeDatabase(dir, 'drifted.db');
+  await withClient(drifted, prisma => prisma.$executeRawUnsafe('ALTER TABLE "Deal" ADD COLUMN "operatorNote" TEXT'));
+  assert.equal(schemaDiffExitCode(drifted, baselineOnly).code, 2, 'drifted database must not be resolvable');
+});
+
+test('pre-change database resolves baseline and deploys preserving every row', async (t) => {
+  const dir = await createTempDir('pre-change');
+  t.after(() => removeTempDir(dir));
+  const database = await createPreChangeDatabase(dir);
+  await seedLegacyRows(database);
+
+  const baselineOnly = await createBaselineOnlyMigrations(dir);
+  assert.equal(schemaDiffExitCode(database, baselineOnly).code, 0, 'schema equivalence is the gate for resolve');
+
+  const resolved = resolveApplied(database, BASELINE_MIGRATION);
+  assert.equal(resolved.status, 0, `${resolved.stdout}\n${resolved.stderr}`);
+
+  const deployed = migrateDeploy(database);
+  assert.equal(deployed.status, 0, `${deployed.stdout}\n${deployed.stderr}`);
+
+  const after = await withClient(database, async (prisma) => ({
+    deal: (await prisma.$queryRawUnsafe('SELECT * FROM "Deal" WHERE "id" = \'deal-live\''))[0],
+    transactions: await prisma.$queryRawUnsafe('SELECT "id","amt","status","refType","refId","businessKey" FROM "Transaction" ORDER BY "id"'),
+    chat: (await prisma.$queryRawUnsafe('SELECT "id","dealId" FROM "Chat"'))[0],
+    review: (await prisma.$queryRawUnsafe('SELECT "id","dealId" FROM "Review"'))[0],
+    chainSteps: await prisma.$queryRawUnsafe('SELECT "id","chainId","topup" FROM "ChainStep" ORDER BY "id"'),
+    users: await prisma.$queryRawUnsafe('SELECT "id","balance" FROM "User" ORDER BY "id"'),
+  }));
+
+  assert.equal(after.deal.id, 'deal-live');
+  assert.equal(after.deal.credits, 40);
+  assert.equal(after.deal.status, 'active');
+  assert.equal(after.deal.escrowTransactionId, null, 'migration must not guess a link');
+  assert.equal(after.deal.createCommandKey, null);
+
+  // Пересборка Deal не должна оборвать ссылки на неё: у Chat и Review
+  // dealId объявлен как ON DELETE SET NULL, и DROP TABLE при включённых
+  // внешних ключах обнулил бы их молча.
+  assert.equal(after.chat.dealId, 'deal-live');
+  assert.equal(after.review.dealId, 'deal-live');
+
+  assert.deepEqual(after.transactions, [
+    { id: 'tx-chain-hold', amt: 25, status: 'held', refType: 'chain', refId: 'chain-live', businessKey: null },
+    { id: 'tx-direct-hold', amt: 40, status: 'held', refType: '', refId: '', businessKey: null },
+  ]);
+  assert.deepEqual(after.chainSteps, [{ id: 'step-1', chainId: 'chain-live', topup: 25 }]);
+  assert.deepEqual(after.users.map(user => user.balance), [60, 0, 25]);
+
+  const health = await healthChecks(database);
+  assert.deepEqual(health.integrityCheck, ['ok']);
+  assert.deepEqual(health.foreignKeyCheck, []);
+
+  const rerun = migrateDeploy(database);
+  assert.equal(rerun.status, 0, `${rerun.stdout}\n${rerun.stderr}`);
 });
