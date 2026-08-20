@@ -758,26 +758,77 @@ test('production apply contract fails closed and consumes its token once', async
   assert.match(`${reused.stdout}\n${reused.stderr}`, /already consumed/i);
 });
 
-test('ambiguous rows produce an empty manifest and stay untouched', async (t) => {
-  const dir = await createTempDir('ambiguous');
+test('rows the backfill cannot fix are listed and block apply until they are dispositioned', async (t) => {
+  const dir = await createTempDir('unresolved');
   t.after(() => removeTempDir(dir));
-  const database = await migratedDatabaseWithLegacyRows(dir, 'ambiguous.db');
+  const database = await migratedDatabaseWithLegacyRows(dir, 'unresolved.db');
+  // Живой случай с продакшена: холд, которому не соответствует ни одна
+  // сделка. Чинить его бэкфилл не имеет права, но и связать здоровую пару
+  // рядом он обязан.
   await withClient(database, prisma => prisma.$executeRawUnsafe(
-    `INSERT INTO "Transaction" ("id","userId","kind","title","amt","status","refType","refId") VALUES ('tx-twin','u-buyer','escrow-in','Эскроу',40,'held','','')`,
+    `INSERT INTO "Transaction" ("id","userId","kind","title","amt","status","refType","refId") VALUES ('tx-orphan','u-buyer','escrow-in','Эскроу',15,'held','','')`,
   ));
 
   const livePath = path.join(dir, 'live.db');
   const auditFile = path.join(dir, 'audit.json');
   const manifest = path.join(dir, 'manifest.json');
+  const dispositions = path.join(dir, 'dispositions.json');
   auditSnapshot(database, livePath, auditFile);
 
   const emitted = backfill([
     '--emit-manifest', '--database', database, '--live-path', livePath,
     '--audit', auditFile, '--manifest', manifest,
   ]);
-  assert.notEqual(emitted.status, 0, 'ambiguity must block the manifest');
-  assert.match(`${emitted.stdout}\n${emitted.stderr}`, /blocking findings/i);
+  assert.equal(emitted.status, 0, `${emitted.stdout}\n${emitted.stderr}`);
+  const hash = manifestHashOf(emitted.stdout);
+
+  const written = JSON.parse(await readFile(manifest, 'utf8'));
+  assert.equal(written.rows.length, 1, 'the healthy pair is still planned');
+  assert.deepEqual(written.unresolved.map(entry => `${entry.bucket}:${entry.id}`), ['orphanDirectHolds:tx-orphan']);
+
+  const withoutDispositions = backfill([
+    '--rehearsal-apply', '--database', database, '--live-path', livePath,
+    '--audit', auditFile, '--manifest', manifest, '--manifest-sha256', hash,
+  ]);
+  assert.notEqual(withoutDispositions.status, 0);
+  assert.match(`${withoutDispositions.stdout}\n${withoutDispositions.stderr}`, /require --dispositions/i);
+  assert.equal((await escrowState(database)).deal.escrowTransactionId, null, 'nothing was written');
+
+  await writeFile(dispositions, JSON.stringify({
+    kind: 'escrow-backfill-dispositions',
+    rows: [{ bucket: 'orphanDirectHolds', id: 'tx-wrong-id', decision: 'leave-as-is' }],
+  }, null, 2));
+  const mismatched = backfill([
+    '--rehearsal-apply', '--database', database, '--live-path', livePath,
+    '--audit', auditFile, '--manifest', manifest, '--manifest-sha256', hash,
+    '--dispositions', dispositions,
+  ]);
+  assert.notEqual(mismatched.status, 0);
+  assert.match(`${mismatched.stdout}\n${mismatched.stderr}`, /do not match unresolved rows/i);
+
+  await writeFile(dispositions, JSON.stringify({
+    kind: 'escrow-backfill-dispositions',
+    rows: [{
+      bucket: 'orphanDirectHolds',
+      id: 'tx-orphan',
+      decision: 'leave-as-is',
+      note: 'проверено оператором, деньги остаются замороженными до ручного разбора',
+    }],
+  }, null, 2));
+  const applied = backfill([
+    '--rehearsal-apply', '--database', database, '--live-path', livePath,
+    '--audit', auditFile, '--manifest', manifest, '--manifest-sha256', hash,
+    '--dispositions', dispositions,
+  ]);
+  assert.equal(applied.status, 0, `${applied.stdout}\n${applied.stderr}`);
+  assert.match(applied.stdout, /"mutations":1/);
 
   const state = await escrowState(database);
-  assert.equal(state.deal.escrowTransactionId, null);
+  assert.equal(state.deal.escrowTransactionId, 'tx-direct-hold', 'the healthy pair is linked');
+  const orphan = state.transactions.find(tx => tx.id === 'tx-orphan');
+  assert.deepEqual(
+    { refType: orphan.refType, refId: orphan.refId, businessKey: orphan.businessKey },
+    { refType: '', refId: '', businessKey: null },
+    'a dispositioned row is still never written',
+  );
 });
