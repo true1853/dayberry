@@ -103,6 +103,30 @@ export async function createPreChangeDatabase(dir, name = 'pre-change.db') {
   return databasePath;
 }
 
+// База в текущем целевом состоянии: baseline отмечен применённым, forward
+// раскатан. Для тестов ядра эскроу, которым нужна уже расширенная схема.
+export async function createMigratedDatabase(dir, name = 'core.db') {
+  const databasePath = await createPreChangeDatabase(dir, name);
+  const resolved = resolveApplied(databasePath, BASELINE_MIGRATION);
+  if (resolved.status !== 0) throw new Error(`baseline resolve failed: ${resolved.stdout}\n${resolved.stderr}`);
+  const deployed = migrateDeploy(databasePath);
+  if (deployed.status !== 0) throw new Error(`migrate deploy failed: ${deployed.stdout}\n${deployed.stderr}`);
+  return databasePath;
+}
+
+// Участники и лоты без единой сделки: команды ядра создают их сами.
+export async function seedParticipants(databasePath, { buyerBalance = 100 } = {}) {
+  await withClient(databasePath, async (prisma) => {
+    await prisma.$executeRawUnsafe(`INSERT INTO "User" ("id","name","email","passwordHash","balance") VALUES
+      ('u-buyer','Покупатель','buyer@example.test','x',${Number(buyerBalance)}),
+      ('u-seller','Продавец','seller@example.test','x',0),
+      ('u-third','Третий','third@example.test','x',50)`);
+    await prisma.$executeRawUnsafe(`INSERT INTO "Lot" ("id","ownerId","cat","title","value","aiLow","aiHigh") VALUES
+      ('lot-a','u-seller','sport','Велосипед',100,90,110),
+      ('lot-b','u-buyer','music','Гитара',80,70,90)`);
+  });
+}
+
 export async function withClient(databasePath, handler) {
   const prisma = new PrismaClient({ datasourceUrl: databaseUrl(databasePath) });
   try {
